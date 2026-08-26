@@ -22,3 +22,5 @@ models.json
 raw_models.json
 raw_models_v1beta.json
 v1_models.json
+
+debug.keystore
