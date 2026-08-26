@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -27,9 +28,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.aidrivencompetencyplatform.AstraApp
 import com.example.aidrivencompetencyplatform.model.User
-import com.example.aidrivencompetencyplatform.ui.components.GlassCard
+import com.example.aidrivencompetencyplatform.ui.components.AstraCard
 import com.example.aidrivencompetencyplatform.ui.components.PremiumButton
 import com.example.aidrivencompetencyplatform.ui.navigation.Screen
+import com.example.aidrivencompetencyplatform.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -46,18 +48,18 @@ fun SplashScreen(navController: NavController) {
 
     LaunchedEffect(key1 = true) {
         scale.animateTo(
-            targetValue = 1.2f,
+            targetValue = 1.1f,
             animationSpec = tween(
-                durationMillis = 1000,
+                durationMillis = 900,
                 easing = { OvershootInterpolator(2f).getInterpolation(it) }
             )
         )
-        delay(1500L)
+        delay(1200L)
         
         val hasCompletedTour = try {
             preferenceManager.hasCompletedAppTour.first()
         } catch (e: Exception) {
-            true // Default to true on error to avoid being stuck
+            true
         }
         
         if (sessionManager.isLoggedIn()) {
@@ -81,42 +83,44 @@ fun SplashScreen(navController: NavController) {
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Background)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
-                    .size(120.dp)
+                    .size(110.dp)
                     .scale(scale.value)
-                    .clip(CircleShape)
+                    .clip(RoundedCornerShape(32.dp))
                     .background(
-                        brush = Brush.linearGradient(
+                        brush = Brush.verticalGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary
+                                Primary,
+                                PrimaryLight
                             )
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "A",
-                    fontSize = 64.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(54.dp)
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "AstraMind",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
+                text = "AstraAI",
+                style = MaterialTheme.typography.headlineLarge,
+                color = PrimaryDark,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Elevate Your Career with AI",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                text = "Career Intelligence & Competency Platform",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
             )
         }
     }
@@ -145,7 +149,7 @@ fun LoginScreen(navController: NavController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(Background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -154,20 +158,36 @@ fun LoginScreen(navController: NavController) {
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Surface(
+                shape = CircleShape,
+                color = SoftGreen,
+                modifier = Modifier.size(64.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Welcome Back",
-                style = MaterialTheme.typography.headlineLarge,
+                text = "Welcome to AstraAI",
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                color = TextPrimary
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Sign in to continue your growth",
+                text = "Sign in to elevate your career intelligence",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                color = TextSecondary
             )
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             
-            GlassCard {
+            AstraCard {
                 AuthTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -187,7 +207,9 @@ fun LoginScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp), color = Primary)
+                    }
                 } else {
                     PremiumButton(
                         text = "Sign In",
@@ -238,12 +260,12 @@ fun LoginScreen(navController: NavController) {
                 }
             }
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             TextButton(
                 onClick = { navController.navigate(Screen.Signup.route) },
                 enabled = !isLoading
             ) {
-                Text("Don't have an account? Sign Up", color = MaterialTheme.colorScheme.primary)
+                Text("Don't have an account? Sign Up", color = PrimaryDark, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -264,7 +286,7 @@ fun SignupScreen(navController: NavController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(Background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -273,20 +295,36 @@ fun SignupScreen(navController: NavController) {
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Surface(
+                shape = CircleShape,
+                color = SoftGreen,
+                modifier = Modifier.size(64.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Create Account",
-                style = MaterialTheme.typography.headlineLarge,
+                text = "Create AstraAI Account",
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                color = TextPrimary
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Start your AI-driven career journey",
+                text = "Join your intelligent career companion",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                color = TextSecondary
             )
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             
-            GlassCard {
+            AstraCard {
                 AuthTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -294,7 +332,7 @@ fun SignupScreen(navController: NavController) {
                     icon = Icons.Default.Person,
                     enabled = !isLoading
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -302,7 +340,7 @@ fun SignupScreen(navController: NavController) {
                     icon = Icons.Default.Email,
                     enabled = !isLoading
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -311,7 +349,7 @@ fun SignupScreen(navController: NavController) {
                     isPassword = true,
                     enabled = !isLoading
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = confirmPassword,
                     onValueChange = { confirmPassword = it },
@@ -320,10 +358,12 @@ fun SignupScreen(navController: NavController) {
                     isPassword = true,
                     enabled = !isLoading
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp), color = Primary)
+                    }
                 } else {
                     PremiumButton(
                         text = "Sign Up",
@@ -354,7 +394,6 @@ fun SignupScreen(navController: NavController) {
                             if (sessionManager.register(newUser)) {
                                 Toast.makeText(context, "Account created successfully.", Toast.LENGTH_SHORT).show()
                                 sessionManager.login(email, isNewUser = true)
-                                // Always show tour for signup
                                 navController.navigate(Screen.AppTour.route) {
                                     popUpTo(Screen.Signup.route) { inclusive = true }
                                 }
@@ -367,12 +406,12 @@ fun SignupScreen(navController: NavController) {
                 }
             }
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             TextButton(
                 onClick = { navController.popBackStack() },
                 enabled = !isLoading
             ) {
-                Text("Already have an account? Login", color = MaterialTheme.colorScheme.primary)
+                Text("Already have an account? Login", color = PrimaryDark, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -392,14 +431,16 @@ fun AuthTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        leadingIcon = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = Primary) },
         visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         enabled = enabled,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+            focusedBorderColor = Primary,
+            unfocusedBorderColor = BorderColor,
+            focusedContainerColor = SurfaceVariant,
+            unfocusedContainerColor = SurfaceVariant
         )
     )
 }

@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aidrivencompetencyplatform.data.AtsScoringEngine
 import com.example.aidrivencompetencyplatform.data.GeminiService
 import com.example.aidrivencompetencyplatform.data.PreferenceManager
 import com.example.aidrivencompetencyplatform.data.ResumeParser
@@ -105,10 +106,14 @@ class DashboardViewModel(
 }
 
 class AtsViewModel(
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val scoringEngine: AtsScoringEngine = AtsScoringEngine()
 ) : ViewModel() {
     private val _analysisResult = MutableStateFlow<ResumeAnalysisResult?>(sessionManager.getLatestAnalysis())
     val analysisResult: StateFlow<ResumeAnalysisResult?> = _analysisResult
+
+    private val _scoreResult = MutableStateFlow<AtsScoreResult?>(null)
+    val scoreResult: StateFlow<AtsScoreResult?> = _scoreResult.asStateFlow()
 
     private val _atsBreakdownState = MutableStateFlow(AtsBreakdown())
     val atsBreakdownState: StateFlow<AtsBreakdown> = _atsBreakdownState.asStateFlow()
@@ -117,7 +122,7 @@ class AtsViewModel(
     val overallAtsScore: StateFlow<Int> = _overallAtsScore.asStateFlow()
 
     val targetRole: String
-        get() = sessionManager.getTargetRole() ?: "Not Specified"
+        get() = sessionManager.getTargetRole() ?: "Android Developer"
 
     init {
         calculateAtsScores()
@@ -130,45 +135,15 @@ class AtsViewModel(
 
     private fun calculateAtsScores() {
         val analysis = _analysisResult.value ?: return
-        
-        // 1. Parsing Accuracy (20%): Based on ParsingAccuracyDetails
-        val parsingDetails = analysis.parsingAccuracyDetails
-        val parsingScore = if (parsingDetails != null) {
-            val checks = listOf(
-                parsingDetails.nameDetected,
-                parsingDetails.contactDetected,
-                parsingDetails.educationDetected,
-                parsingDetails.skillsDetected,
-                parsingDetails.experienceDetected,
-                parsingDetails.projectsDetected
-            )
-            (checks.count { it }.toFloat() / checks.size * 100).toInt()
-        } else analysis.atsBreakdown?.parsingAccuracy ?: 0
-
-        // 2. Resume Structure (25%): Based on section presence
-        val missing = analysis.missingSections ?: emptyList()
-        val totalExpected = 6.0f
-        val structureScore = ((totalExpected - missing.size.coerceAtMost(totalExpected.toInt())) / totalExpected * 100).toInt()
-
-        // 3. Formatting Safety (20%): Based on risks found
-        val risks = analysis.formattingRisks ?: emptyList()
-        val formattingScore = (100 - (risks.size * 15)).coerceIn(0, 100)
-
-        // 4. Keyword Coverage (35%): AI derived but used deterministically
-        val keywordScore = analysis.atsBreakdown?.keywordCoverage ?: 0
-
-        val breakdown = AtsBreakdown(
-            keywordCoverage = keywordScore,
-            resumeStructure = structureScore,
-            formattingSafety = formattingScore,
-            parsingAccuracy = parsingScore
+        val calculated = scoringEngine.calculateScore(analysis, targetRole)
+        _scoreResult.value = calculated
+        _overallAtsScore.value = calculated.overallScore
+        _atsBreakdownState.value = AtsBreakdown(
+            keywordCoverage = calculated.keywordCoverage.score,
+            resumeStructure = calculated.resumeStructure.score,
+            formattingSafety = calculated.formattingSafety.score,
+            parsingAccuracy = calculated.parsingAccuracy.score
         )
-        
-        _atsBreakdownState.value = breakdown
-        
-        // Deterministic Score = Keyword(35%) + Structure(25%) + Formatting(20%) + Parsing(20%)
-        val total = (keywordScore * 0.35 + structureScore * 0.25 + formattingScore * 0.20 + parsingScore * 0.20).toInt()
-        _overallAtsScore.value = total
     }
 }
 
@@ -228,6 +203,7 @@ class ResumeViewModel(
                 _loadingStage.value = "Parsing Resume..."
                 Log.d(TAG, "RESUME_PARSING_STARTED")
                 val text = resumeParser.extractText(uri)
+                val candidateInfo = resumeParser.parseCandidateInfo(text)
                 
                 if (text == ResumeParser.ERROR_SCANNED_PDF) {
                     Log.e(TAG, "ANALYSIS_FAILED: Scanned PDF detected")
@@ -243,8 +219,15 @@ class ResumeViewModel(
                         if (result != null) {
                             _loadingStage.value = "Finalizing Results..."
                             Log.d(TAG, "GEMINI_RESPONSE_RECEIVED")
-                            _analysisResult.value = result
-                            sessionManager.saveLatestAnalysis(result)
+                            val enrichedResult = result.copy(
+                                candidateName = candidateInfo.name ?: result.candidateName,
+                                candidateEmail = candidateInfo.email ?: result.candidateEmail,
+                                candidatePhone = candidateInfo.phone ?: result.candidatePhone,
+                                candidateLocation = candidateInfo.location ?: result.candidateLocation,
+                                rawResumeText = text
+                            )
+                            _analysisResult.value = enrichedResult
+                            sessionManager.saveLatestAnalysis(enrichedResult)
                             sessionManager.updateTargetRole(targetRole)
                             Log.d(TAG, "ANALYSIS_COMPLETED")
                         } else {

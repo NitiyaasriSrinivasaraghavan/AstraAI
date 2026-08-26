@@ -148,4 +148,68 @@ class ResumeParser(private val context: Context) {
         }
         return result
     }
+
+    fun parseCandidateInfo(rawText: String): ParsedCandidateInfo {
+        if (rawText.isBlank() || rawText == ERROR_SCANNED_PDF) {
+            return ParsedCandidateInfo()
+        }
+
+        val lines = rawText.lines().map { it.trim() }.filter { it.isNotBlank() }
+
+        // 1. Email extraction
+        val emailRegex = Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
+        val emailMatch = emailRegex.find(rawText)?.value?.trim()
+
+        // 2. Phone extraction
+        val phoneRegex = Regex("(?:\\+?\\d{1,3}[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}")
+        val phoneMatch = phoneRegex.find(rawText)?.value?.trim()
+
+        // 3. Name extraction heuristic from top header
+        var candidateName: String? = null
+        val blacklistWords = setOf("resume", "curriculum", "vitae", "cv", "page", "contact", "summary", "profile", "github", "linkedin", "http", "https", "www", "portfolio", "email", "phone")
+
+        for (i in 0 until minOf(6, lines.size)) {
+            val line = lines[i]
+            val lower = line.lowercase()
+            
+            // Skip lines with emails, phones, urls, or blacklist words
+            if (emailMatch != null && line.contains(emailMatch)) continue
+            if (phoneMatch != null && line.contains(phoneMatch)) continue
+            if (blacklistWords.any { lower.contains(it) }) continue
+            if (line.length > 50 || line.length < 3) continue
+            if (line.any { it.isDigit() }) continue
+
+            val words = line.split(Regex("\\s+")).filter { it.isNotBlank() }
+            if (words.size in 2..4 && words.all { it.first().isUpperCase() }) {
+                candidateName = line
+                break
+            }
+        }
+
+        // 4. Location extraction heuristic
+        var candidateLocation: String? = null
+        val locationRegex = Regex("([A-Za-z\\s]+),\\s*([A-Za-z\\s]{2,}|[A-Z]{2})(?:\\s+\\d{5})?")
+        for (i in 0 until minOf(8, lines.size)) {
+            val line = lines[i]
+            val locMatch = locationRegex.find(line)
+            if (locMatch != null && !line.lowercase().contains("university") && !line.lowercase().contains("college")) {
+                candidateLocation = locMatch.value.trim()
+                break
+            }
+        }
+
+        return ParsedCandidateInfo(
+            name = candidateName,
+            email = emailMatch,
+            phone = phoneMatch,
+            location = candidateLocation
+        )
+    }
 }
+
+data class ParsedCandidateInfo(
+    val name: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val location: String? = null
+)

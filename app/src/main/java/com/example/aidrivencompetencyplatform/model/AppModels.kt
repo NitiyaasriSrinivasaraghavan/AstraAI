@@ -32,7 +32,12 @@ data class ResumeAnalysisResult(
     val formattingRisks: List<String>? = emptyList(),
     val projectAnalysis: List<ProjectAnalysis>? = emptyList(),
     val prioritizedSuggestions: PrioritizedSuggestions? = PrioritizedSuggestions(),
-    val parsingAccuracyDetails: ParsingAccuracyDetails? = ParsingAccuracyDetails()
+    val parsingAccuracyDetails: ParsingAccuracyDetails? = ParsingAccuracyDetails(),
+    val candidateName: String? = null,
+    val candidateEmail: String? = null,
+    val candidatePhone: String? = null,
+    val candidateLocation: String? = null,
+    val rawResumeText: String? = null
 )
 
 data class AtsBreakdown(
