@@ -147,14 +147,219 @@ class AtsViewModel(
     }
 }
 
+enum class SkillFilter {
+    ALL, MATCHED, MISSING
+}
+
+data class SkillItem(
+    val name: String,
+    val isMatched: Boolean,
+    val targetRole: String
+)
+
+data class SkillGapState(
+    val targetRole: String = "Android Developer",
+    val hasAnalysis: Boolean = false,
+    val totalRequired: Int = 0,
+    val matchedCount: Int = 0,
+    val missingCount: Int = 0,
+    val matchedSkills: List<String> = emptyList(),
+    val missingSkills: List<String> = emptyList(),
+    val allSkills: List<SkillItem> = emptyList(),
+    val filter: SkillFilter = SkillFilter.ALL
+)
+
+object RoleSkillsData {
+    val ROLE_SKILLS: Map<String, List<String>> = mapOf(
+        "Android Developer" to listOf(
+            "Kotlin", "Java", "Android SDK", "Jetpack Compose", "XML",
+            "Android Studio", "Gradle", "REST APIs", "JSON", "Firebase",
+            "Git", "SQLite", "Room Database", "Material Design"
+        ),
+        "Java Developer" to listOf(
+            "Java", "OOP", "Collections", "Exception Handling", "Multithreading",
+            "JDBC", "SQL", "Spring", "Spring Boot", "REST APIs",
+            "Hibernate", "Maven", "Git"
+        ),
+        "Full Stack Developer" to listOf(
+            "HTML", "CSS", "JavaScript", "React", "Node.js",
+            "Express.js", "REST APIs", "SQL", "MongoDB", "Git",
+            "Authentication", "Docker"
+        ),
+        "Data Analyst" to listOf(
+            "Python", "SQL", "Excel", "Statistics", "Pandas",
+            "NumPy", "Data Visualization", "Power BI", "Tableau", "Data Cleaning",
+            "Git"
+        ),
+        "Data Scientist" to listOf(
+            "Python", "SQL", "Statistics", "Probability", "Pandas",
+            "NumPy", "Scikit-learn", "Machine Learning", "Data Visualization",
+            "Feature Engineering", "Model Evaluation", "Git"
+        ),
+        "Machine Learning Engineer" to listOf(
+            "Python", "Machine Learning", "Deep Learning", "NumPy", "Pandas",
+            "Scikit-learn", "TensorFlow", "PyTorch", "SQL", "Git",
+            "Model Deployment", "REST APIs"
+        ),
+        "Backend Developer" to listOf(
+            "Java", "Python", "Node.js", "REST APIs", "SQL",
+            "PostgreSQL", "MongoDB", "Spring Boot", "Authentication", "Git",
+            "Docker"
+        ),
+        "Frontend Developer" to listOf(
+            "HTML", "CSS", "JavaScript", "React", "TypeScript",
+            "Responsive Design", "REST APIs", "Git", "UI/UX Principles", "Testing"
+        ),
+        "UI/UX Designer" to listOf(
+            "Figma", "Wireframing", "Prototyping", "User Research", "User Flows",
+            "Interaction Design", "Visual Design", "Typography", "Color Theory",
+            "Usability Testing", "Design Systems"
+        )
+    )
+
+    fun getRequiredSkills(targetRole: String): List<String> {
+        val trimmed = targetRole.trim()
+        ROLE_SKILLS[trimmed]?.let { return it }
+
+        val lower = trimmed.lowercase()
+        for ((role, skills) in ROLE_SKILLS) {
+            val rLower = role.lowercase()
+            if (lower == rLower || lower.contains(rLower) || rLower.contains(lower)) {
+                return skills
+            }
+        }
+        return when {
+            lower.contains("android") -> ROLE_SKILLS["Android Developer"]!!
+            lower.contains("java") -> ROLE_SKILLS["Java Developer"]!!
+            lower.contains("full") || lower.contains("stack") -> ROLE_SKILLS["Full Stack Developer"]!!
+            lower.contains("analyst") -> ROLE_SKILLS["Data Analyst"]!!
+            lower.contains("scientist") -> ROLE_SKILLS["Data Scientist"]!!
+            lower.contains("machine") || lower.contains("ml") -> ROLE_SKILLS["Machine Learning Engineer"]!!
+            lower.contains("backend") -> ROLE_SKILLS["Backend Developer"]!!
+            lower.contains("front") || lower.contains("web") -> ROLE_SKILLS["Frontend Developer"]!!
+            lower.contains("ui") || lower.contains("ux") || lower.contains("design") -> ROLE_SKILLS["UI/UX Designer"]!!
+            else -> ROLE_SKILLS["Android Developer"]!!
+        }
+    }
+
+    fun isSkillMatched(requiredSkill: String, userSkills: List<String>): Boolean {
+        val reqLower = requiredSkill.trim().lowercase()
+        val userLowers = userSkills.map { it.trim().lowercase() }
+        
+        if (userLowers.contains(reqLower)) return true
+        
+        val aliases = getAliases(requiredSkill)
+        if (aliases.any { alias -> userLowers.contains(alias.lowercase()) }) return true
+
+        return userLowers.any { userSkill ->
+            userSkill == reqLower ||
+            (reqLower.length > 3 && userSkill.contains(reqLower)) ||
+            (userSkill.length > 3 && reqLower.contains(userSkill))
+        }
+    }
+
+    private fun getAliases(skill: String): List<String> {
+        val s = skill.lowercase()
+        return when {
+            s.contains("compose") -> listOf("Compose", "Jetpack Compose", "Jetpack-Compose")
+            s.contains("android sdk") -> listOf("Android", "Android Development", "Android SDK", "Android Framework")
+            s.contains("android studio") -> listOf("Android Studio", "Android-Studio", "IDE")
+            s.contains("room") -> listOf("Room", "Room Database", "Room DB", "Android Room")
+            s.contains("material") -> listOf("Material Design", "Material", "Material 3", "M3")
+            s.contains("rest") -> listOf("REST", "REST API", "REST APIs", "RESTful", "RESTful APIs")
+            s.contains("json") -> listOf("JSON", "Gson", "Jackson", "Moshi", "Kotlin Serialization")
+            s.contains("react") -> listOf("React", "React.js", "ReactJS")
+            s.contains("node") -> listOf("Node", "Node.js", "NodeJS")
+            s.contains("express") -> listOf("Express", "Express.js", "ExpressJS")
+            s.contains("spring boot") -> listOf("Spring Boot", "SpringBoot", "Spring-Boot", "Spring")
+            s.contains("scikit") -> listOf("Scikit-learn", "Scikit Learn", "sklearn")
+            s.contains("tensorflow") -> listOf("TensorFlow", "Tensorflow", "TF")
+            s.contains("pytorch") -> listOf("PyTorch", "Pytorch", "Torch")
+            s.contains("docker") -> listOf("Docker", "Containerization", "Containers")
+            s.contains("postgres") -> listOf("PostgreSQL", "Postgres", "PSQL")
+            s.contains("mongo") -> listOf("MongoDB", "Mongo")
+            s.contains("power bi") -> listOf("Power BI", "PowerBI", "Power-BI")
+            s.contains("ui/ux") || s.contains("design systems") -> listOf("UI/UX", "UI Design", "UX Design", "Design System")
+            else -> emptyList()
+        }
+    }
+}
+
 class SkillGapViewModel(
     private val sessionManager: SessionManager
 ) : ViewModel() {
     private val _analysisResult = MutableStateFlow<ResumeAnalysisResult?>(sessionManager.getLatestAnalysis())
     val analysisResult: StateFlow<ResumeAnalysisResult?> = _analysisResult
 
+    private val _state = MutableStateFlow(SkillGapState())
+    val state: StateFlow<SkillGapState> = _state.asStateFlow()
+
+    private val _selectedSkillForDetail = MutableStateFlow<SkillItem?>(null)
+    val selectedSkillForDetail: StateFlow<SkillItem?> = _selectedSkillForDetail.asStateFlow()
+
+    init {
+        refresh()
+    }
+
     fun refresh() {
-        _analysisResult.value = sessionManager.getLatestAnalysis()
+        val analysis = sessionManager.getLatestAnalysis()
+        _analysisResult.value = analysis
+
+        val role = sessionManager.getTargetRole() ?: "Android Developer"
+        
+        if (analysis == null) {
+            _state.value = SkillGapState(
+                targetRole = role,
+                hasAnalysis = false
+            )
+            return
+        }
+
+        val required = RoleSkillsData.getRequiredSkills(role)
+        val userExtracted = (analysis.extractedSkills ?: emptyList()).map { it.name }
+        
+        val matched = mutableListOf<String>()
+        val missing = mutableListOf<String>()
+
+        required.forEach { req ->
+            if (RoleSkillsData.isSkillMatched(req, userExtracted)) {
+                matched.add(req)
+            } else {
+                missing.add(req)
+            }
+        }
+
+        val allItems = required.map { req ->
+            SkillItem(
+                name = req,
+                isMatched = matched.contains(req),
+                targetRole = role
+            )
+        }
+
+        _state.value = SkillGapState(
+            targetRole = role,
+            hasAnalysis = true,
+            totalRequired = required.size,
+            matchedCount = matched.size,
+            missingCount = missing.size,
+            matchedSkills = matched,
+            missingSkills = missing,
+            allSkills = allItems,
+            filter = _state.value.filter
+        )
+    }
+
+    fun setFilter(filter: SkillFilter) {
+        _state.value = _state.value.copy(filter = filter)
+    }
+
+    fun selectSkill(skill: SkillItem) {
+        _selectedSkillForDetail.value = skill
+    }
+
+    fun dismissSkillDetail() {
+        _selectedSkillForDetail.value = null
     }
 }
 

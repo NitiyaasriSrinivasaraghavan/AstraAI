@@ -1441,11 +1441,14 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
     var targetRole by remember { mutableStateOf("Android Developer") }
     val roles = listOf(
         "Android Developer",
-        "Backend Developer",
+        "Java Developer",
         "Full Stack Developer",
+        "Data Analyst",
         "Data Scientist",
-        "DevOps Engineer",
-        "Cloud Solutions Architect",
+        "Machine Learning Engineer",
+        "Backend Developer",
+        "Frontend Developer",
+        "UI/UX Designer",
         "Other"
     )
 
@@ -1838,9 +1841,8 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapViewModel) {
-    val analysis by viewModel.analysisResult.collectAsState()
-    var selectedFilterIndex by remember { mutableStateOf(0) }
-    val filterTabs = listOf("All Skills", "Strong (80%+)", "Developing (40-79%)", "Gaps (<40%)")
+    val state by viewModel.state.collectAsState()
+    val selectedSkillForDetail by viewModel.selectedSkillForDetail.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -1852,7 +1854,11 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
             TopAppBar(
                 title = {
                     Column {
-                        Text("Skill Gap Dashboard", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(
+                            text = "Skill Gap Dashboard",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
                         Text(
                             text = "Target Competency vs Current Profile",
                             style = MaterialTheme.typography.labelSmall,
@@ -1874,19 +1880,9 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (analysis == null) {
-                NoAnalysisState(navController)
+            if (!state.hasAnalysis) {
+                SkillGapEmptyState(navController)
             } else {
-                val skills = analysis!!.extractedSkills ?: emptyList()
-                val matchPercentage = analysis!!.skillMatch
-
-                val filteredSkills = when (selectedFilterIndex) {
-                    1 -> skills.filter { it.level >= 80 }
-                    2 -> skills.filter { it.level in 40..79 }
-                    3 -> skills.filter { it.level < 40 }
-                    else -> skills
-                }
-
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1895,7 +1891,94 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 ) {
                     item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                    // Hero Skill Match Card
+                    // Header & Non-Editable Target Role Card
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Skill Gap",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "See how your skills match your target role.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Non-editable Target Role Info Card
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MintLight,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = Primary.copy(alpha = 0.12f),
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Work,
+                                                    contentDescription = null,
+                                                    tint = Primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = "TARGET ROLE",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextSecondary,
+                                                letterSpacing = 1.sp
+                                            )
+                                            Text(
+                                                text = state.targetRole,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                                    ) {
+                                        Text(
+                                            text = "Active Target",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PrimaryDark,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Hero Skill Match Overview Card
                     item {
                         AstraCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
@@ -1903,139 +1986,355 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = "TARGET ROLE COMPETENCY MATCH",
+                                    text = "SKILL MATCH",
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.labelLarge,
                                     color = TextSecondary,
-                                    letterSpacing = 1.sp
+                                    letterSpacing = 1.2.sp
                                 )
 
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                val animatedProgress by animateFloatAsState(
+                                    targetValue = if (state.totalRequired > 0) state.matchedCount.toFloat() / state.totalRequired.toFloat() else 0f,
+                                    animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+                                    label = "SkillMatchProgress"
+                                )
 
                                 Box(
                                     contentAlignment = Alignment.Center,
-                                    modifier = Modifier.size(130.dp)
+                                    modifier = Modifier.size(140.dp)
                                 ) {
                                     CircularProgressIndicator(
-                                        progress = 1f,
-                                        modifier = Modifier.size(130.dp),
+                                        progress = { 1f },
+                                        modifier = Modifier.size(140.dp),
                                         strokeWidth = 12.dp,
                                         color = SoftGreen,
                                         trackColor = Color.Transparent
                                     )
                                     CircularProgressIndicator(
-                                        progress = matchPercentage / 100f,
-                                        modifier = Modifier.size(130.dp),
+                                        progress = { animatedProgress },
+                                        modifier = Modifier.size(140.dp),
                                         strokeWidth = 12.dp,
                                         color = Primary,
                                         trackColor = Color.Transparent
                                     )
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(
-                                            text = "$matchPercentage%",
-                                            style = MaterialTheme.typography.headlineLarge,
+                                            text = "${state.matchedCount} / ${state.totalRequired}",
+                                            style = MaterialTheme.typography.headlineMedium,
                                             fontWeight = FontWeight.Black,
                                             color = Primary
                                         )
                                         Text(
-                                            text = "Fit Score",
+                                            text = "Skills Detected",
                                             style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium,
                                             color = TextSecondary
                                         )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
 
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MintLight
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "Target: ${(analysis!!.summary ?: "Target Role").take(40)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = PrimaryDark,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = SoftGreen
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "✓",
+                                                color = PrimaryDark,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "${state.matchedCount} Matched",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PrimaryDark
+                                            )
+                                        }
+                                    }
 
-                    // Filter Pills
-                    item {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(filterTabs.size) { idx ->
-                                val isSelected = idx == selectedFilterIndex
-                                Surface(
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (isSelected) Primary else Surface,
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        width = 1.dp,
-                                        color = if (isSelected) Primary else BorderColor
-                                    ),
-                                    modifier = Modifier.clickable { selectedFilterIndex = idx }
-                                ) {
-                                    Text(
-                                        text = filterTabs[idx],
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) Color.White else TextSecondary,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = WarningAmber.copy(alpha = 0.12f)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "○",
+                                                color = WarningAmber,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "${state.missingCount} Missing",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = WarningAmber
+                                            )
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    }
 
-                    // Skills List
-                    item {
-                        if (filteredSkills.isEmpty()) {
-                            AstraCard(modifier = Modifier.fillMaxWidth()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+
                                 Text(
-                                    text = "No skills found in this filter category.",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    text = "${state.matchedCount} of ${state.totalRequired} required skills were detected in your profile.",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth()
+                                    textAlign = TextAlign.Center
                                 )
                             }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                filteredSkills.forEach { skill ->
-                                    ModernSkillCard(skill = skill)
+                        }
+                    }
+
+                    // Interactive Filter Segmented Control
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = MintLight,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val filterOptions = listOf(
+                                    Pair(SkillFilter.ALL, "All (${state.totalRequired})"),
+                                    Pair(SkillFilter.MATCHED, "Matched (${state.matchedCount})"),
+                                    Pair(SkillFilter.MISSING, "Missing (${state.missingCount})")
+                                )
+
+                                filterOptions.forEach { (filterOption, label) ->
+                                    val isSelected = state.filter == filterOption
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = if (isSelected) Primary else Color.Transparent,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .clickable { viewModel.setFilter(filterOption) }
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.padding(vertical = 10.dp)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) Color.White else TextSecondary,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Missing Requirements Section
-                    val missing = analysis!!.missingSections ?: emptyList()
-                    if (missing.isNotEmpty()) {
+                    // Section 1: "Skills You Have"
+                    if (state.filter == SkillFilter.ALL || state.filter == SkillFilter.MATCHED) {
                         item {
-                            AstraCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                containerColor = WarningAmber.copy(alpha = 0.05f),
-                                borderColor = WarningAmber.copy(alpha = 0.3f)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
                             ) {
+                                Text(
+                                    text = "Skills You Have",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Required skills detected in your profile.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        if (state.matchedSkills.isEmpty()) {
+                            item {
+                                AstraCard(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = "No matched skills detected in your profile yet.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        } else {
+                            item {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = WarningAmber, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                    state.matchedSkills.forEach { skillName ->
+                                        SkillStatusCard(
+                                            skillName = skillName,
+                                            isMatched = true,
+                                            targetRole = state.targetRole,
+                                            onClick = {
+                                                viewModel.selectSkill(
+                                                    SkillItem(
+                                                        name = skillName,
+                                                        isMatched = true,
+                                                        targetRole = state.targetRole
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 2: "Skill Gaps"
+                    if (state.filter == SkillFilter.ALL || state.filter == SkillFilter.MISSING) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Skill Gaps",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Required skills not detected in your profile.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        if (state.missingSkills.isEmpty()) {
+                            item {
+                                AstraCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    containerColor = MintLight,
+                                    borderColor = Primary.copy(alpha = 0.3f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Primary
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Text(
-                                            text = "Missing Section Requirements",
+                                            text = "All required skills for this role are detected in your profile!",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PrimaryDark
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            item {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    state.missingSkills.forEach { skillName ->
+                                        SkillStatusCard(
+                                            skillName = skillName,
+                                            isMatched = false,
+                                            targetRole = state.targetRole,
+                                            onClick = {
+                                                viewModel.selectSkill(
+                                                    SkillItem(
+                                                        name = skillName,
+                                                        isMatched = false,
+                                                        targetRole = state.targetRole
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 3: "Required Skills" Collapsible Section
+                    item {
+                        var expanded by remember { mutableStateOf(false) }
+
+                        AstraCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { expanded = !expanded }
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.FormatListBulleted,
+                                            contentDescription = null,
+                                            tint = Primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = "Required Skills · ${state.totalRequired}",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = TextPrimary
                                         )
                                     }
-                                    HorizontalDivider(color = BorderColor)
-                                    missing.forEach { req ->
-                                        Row(modifier = Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {
-                                            Text("•", color = WarningAmber, fontWeight = FontWeight.Bold)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(req, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+
+                                    Icon(
+                                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = if (expanded) "Collapse" else "Expand",
+                                        tint = TextSecondary
+                                    )
+                                }
+
+                                Text(
+                                    text = "Complete benchmark requirement set for ${state.targetRole}.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+
+                                AnimatedVisibility(visible = expanded) {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.padding(top = 6.dp)
+                                    ) {
+                                        HorizontalDivider(color = BorderColor)
+                                        state.allSkills.forEach { skillItem ->
+                                            SkillStatusCard(
+                                                skillName = skillItem.name,
+                                                isMatched = skillItem.isMatched,
+                                                targetRole = state.targetRole,
+                                                onClick = { viewModel.selectSkill(skillItem) }
+                                            )
                                         }
                                     }
                                 }
@@ -2047,74 +2346,253 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 }
             }
 
+            // Interactive Skill Detail Dialog / Bottom Sheet
+            selectedSkillForDetail?.let { skill ->
+                SkillDetailDialog(
+                    skill = skill,
+                    onDismiss = { viewModel.dismissSkillDetail() }
+                )
+            }
+
             FloatingAstraBot(navController, "Skill Gap Dashboard")
         }
     }
 }
 
 @Composable
-fun ModernSkillCard(skill: Skill) {
-    var expanded by remember { mutableStateOf(false) }
+fun SkillStatusCard(
+    skillName: String,
+    isMatched: Boolean,
+    targetRole: String,
+    onClick: () -> Unit
+) {
+    val statusBg = if (isMatched) SoftGreen else Surface
+    val borderColor = if (isMatched) Primary.copy(alpha = 0.35f) else BorderColor
+    val iconColor = if (isMatched) Primary else TextSecondary
 
-    val levelColor = when {
-        skill.level >= 80 -> SuccessGreen
-        skill.level >= 40 -> WarningAmber
-        else -> ErrorRed
-    }
-
-    AstraCard(
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = statusBg,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded },
-        cornerRadius = 16.dp
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = skill.name,
-                    style = MaterialTheme.typography.titleSmall,
+                    text = if (isMatched) "✓" else "○",
+                    color = iconColor,
                     fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = skillName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = TextPrimary
                 )
-
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = levelColor.copy(alpha = 0.12f)
-                ) {
-                    Text(
-                        text = "${skill.level}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = levelColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
             }
 
-            // Progress Bar
-            LinearProgressIndicator(
-                progress = skill.level / 100f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = levelColor,
-                trackColor = SoftGreen
-            )
-
-            if (expanded && !skill.evidence.isNullOrBlank()) {
-                HorizontalDivider(color = BorderColor)
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (isMatched) MintLight else Background,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isMatched) Primary.copy(alpha = 0.3f) else BorderColor
+                )
+            ) {
                 Text(
-                    text = "Resume Evidence: ${skill.evidence}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                    text = if (isMatched) "Matched" else "Missing",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isMatched) PrimaryDark else TextSecondary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }
+    }
+}
+
+@Composable
+fun SkillDetailDialog(
+    skill: SkillItem,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+            shadowElevation = 10.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (skill.isMatched) SoftGreen else WarningAmber.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (skill.isMatched) "✓" else "○",
+                                    color = if (skill.isMatched) Primary else WarningAmber,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = skill.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                }
+
+                HorizontalDivider(color = BorderColor)
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "STATUS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 1.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (skill.isMatched) SoftGreen else WarningAmber.copy(alpha = 0.12f),
+                        modifier = Modifier.wrapContentWidth()
+                    ) {
+                        Text(
+                            text = if (skill.isMatched) "✓ Matched in Profile" else "○ Missing from Profile",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (skill.isMatched) PrimaryDark else WarningAmber,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "ROLE REQUIREMENT",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "Required for ${skill.targetRole}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Background,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (skill.isMatched) {
+                            "This skill is required for ${skill.targetRole} and was detected in your profile data."
+                        } else {
+                            "This skill is required for ${skill.targetRole} and was not detected in your current profile data."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(12.dp),
+                        lineHeight = 18.sp
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Close", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SkillGapEmptyState(navController: NavController) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = SoftGreen,
+            modifier = Modifier.size(80.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Psychology,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = Primary
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(18.dp))
+        Text(
+            text = "No skills detected yet",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Add skills to your profile to see your skill gap.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = TextSecondary
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        PremiumButton(
+            text = "Upload Resume & Setup Profile",
+            onClick = { navController.navigate(Screen.ResumeUpload.route) }
+        )
     }
 }
 
