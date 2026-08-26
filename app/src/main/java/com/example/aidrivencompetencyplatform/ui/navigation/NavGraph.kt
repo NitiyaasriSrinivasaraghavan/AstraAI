@@ -24,8 +24,9 @@ fun AppNavGraph(navController: NavHostController) {
             SplashScreen(navController)
         }
         composable(Screen.AppTour.route) {
-            val viewModel: DashboardViewModel = viewModel(factory = factory)
-            AppTourScreen(navController, viewModel)
+            val assistantViewModel: AiAssistantViewModel = viewModel(factory = factory)
+            val dashboardViewModel: DashboardViewModel = viewModel(factory = factory)
+            AppTourScreen(navController, assistantViewModel, dashboardViewModel)
         }
         composable(Screen.Login.route) {
             LoginScreen(navController)
@@ -34,8 +35,9 @@ fun AppNavGraph(navController: NavHostController) {
             SignupScreen(navController)
         }
         composable(Screen.Dashboard.route) {
-            val viewModel: DashboardViewModel = viewModel(factory = factory)
-            MainDashboardScreen(navController, viewModel)
+            val dashboardViewModel: DashboardViewModel = viewModel(factory = factory)
+            val resumeViewModel: ResumeViewModel = viewModel(factory = factory)
+            MainDashboardScreen(navController, dashboardViewModel, resumeViewModel)
         }
         composable(Screen.ResumeUpload.route) {
             val viewModel: ResumeViewModel = viewModel(factory = factory)

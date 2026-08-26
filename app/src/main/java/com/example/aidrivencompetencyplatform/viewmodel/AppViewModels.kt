@@ -265,17 +265,69 @@ class AiAssistantViewModel(
     private val sessionManager: SessionManager,
     private val geminiService: GeminiService
 ) : ViewModel() {
-    private val _messages = MutableStateFlow(listOf(
-        ChatMessage("Hello! I'm Astra, your AI Career Assistant. How can I help you today?", false)
-    ))
+    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages
 
     private val _isInterviewMode = MutableStateFlow(false)
     val isInterviewMode: StateFlow<Boolean> = _isInterviewMode
 
+    private val _isTourMode = MutableStateFlow(false)
+    val isTourMode: StateFlow<Boolean> = _isTourMode
+
+    private val _quickPrompts = MutableStateFlow<List<String>>(
+        listOf(
+            "How does ATS scoring work?",
+            "How do I analyze my resume?",
+            "What is Skill Gap analysis?",
+            "How does JD Matcher work?"
+        )
+    )
+    val quickPrompts: StateFlow<List<String>> = _quickPrompts
+
+    init {
+        initDefaultChat()
+    }
+
+    private fun initDefaultChat() {
+        val userName = sessionManager.getUserName() ?: "there"
+        _messages.value = listOf(
+            ChatMessage("Hello $userName! I'm Astra, your AI Career Assistant. How can I help you elevate your career today?", false)
+        )
+    }
+
+    fun startTour() {
+        _isTourMode.value = true
+        _isInterviewMode.value = false
+        val userName = sessionManager.getUserName() ?: "there"
+        _messages.value = listOf(
+            ChatMessage(
+                text = "Welcome to AstraAI, $userName! 🌟 I'm your dedicated Career Intelligence Companion.\n\n" +
+                        "Here is what AstraAI does for you:\n" +
+                        "1️⃣ **Analyse Resume**: Upload your resume (PDF/DOCX) and choose your target role to build your competency profile.\n" +
+                        "2️⃣ **ATS Analysis**: Transparent 4-component scoring (Keyword Coverage 35%, Resume Structure 25%, Formatting Safety 20%, Parsing Accuracy 20%) with deep 'Ask Why?' XAI explanations.\n" +
+                        "3️⃣ **Skill Gap Dashboard**: Pinpoint strong competencies, developing capabilities, and critical missing skills.\n" +
+                        "4️⃣ **JD Matcher**: Compare your resume against specific job descriptions for targeted alignment.\n\n" +
+                        "What would you like to explore first?",
+                isFromUser = false
+            )
+        )
+        _quickPrompts.value = listOf(
+            "How do I analyze my resume?",
+            "Explain ATS 4-component scoring",
+            "How does Skill Gap work?",
+            "Ready to upload my resume!"
+        )
+    }
+
     fun startInterview() {
         _isInterviewMode.value = true
+        _isTourMode.value = false
         _messages.value = listOf(ChatMessage("Welcome to your mock interview. Let's start with a basic question: Tell me about yourself and your experience with Kotlin.", false))
+        _quickPrompts.value = listOf(
+            "I have 3+ years experience with Kotlin & Compose",
+            "I have built several production Android applications",
+            "Give me a technical architecture question"
+        )
     }
 
     fun sendMessage(text: String, screenContext: String = "") {
