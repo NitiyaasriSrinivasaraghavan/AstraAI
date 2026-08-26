@@ -247,10 +247,8 @@ fun AppTourScreen(
             }
         }
     }
-}
-
-// ==========================================
-// 2. MAIN DASHBOARD SCREEN (FOCUS: ANALYSE RESUME)
+}// ==========================================
+// 2. CAREER HUB (MAIN DASHBOARD)
 // ==========================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -262,54 +260,36 @@ fun MainDashboardScreen(
 ) {
     val userName by dashboardViewModel.userName.collectAsState()
     val greetingPrefix by dashboardViewModel.greetingPrefix.collectAsState()
+    val isNewUser by dashboardViewModel.isNewUser.collectAsState()
     val hasAnalysis by dashboardViewModel.hasAnalysis.collectAsState()
     val atsScore by dashboardViewModel.atsScore.collectAsState()
     val skillMatch by dashboardViewModel.skillMatch.collectAsState()
-    val hasCompletedTour by dashboardViewModel.hasCompletedTour.collectAsState()
-
-    val selectedFileName by resumeViewModel.selectedFileName.collectAsState()
-    val isLoading by resumeViewModel.isLoading.collectAsState()
-    val loadingStage by resumeViewModel.loadingStage.collectAsState()
-    val errorMessage by resumeViewModel.errorMessage.collectAsState()
-    val analysisResult by resumeViewModel.analysisResult.collectAsState()
-
-    val context = LocalContext.current
-    var targetRole by remember { mutableStateOf("Android Developer") }
-
-    val roles = listOf(
-        "Android Developer",
-        "Backend Developer",
-        "Full Stack Developer",
-        "Data Scientist",
-        "DevOps Engineer",
-        "Cloud Solutions Architect",
-        "Other"
-    )
-
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            val name = getFileName(context, it) ?: "Resume.pdf"
-            if (name.endsWith(".pdf", ignoreCase = true) ||
-                name.endsWith(".doc", ignoreCase = true) ||
-                name.endsWith(".docx", ignoreCase = true)
-            ) {
-                resumeViewModel.onFileSelected(it, name)
-            } else {
-                Toast.makeText(context, "Please select a PDF or DOCX file", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
+    val targetRole by dashboardViewModel.targetRole.collectAsState()
+    val latestAnalysis by dashboardViewModel.latestAnalysis.collectAsState()
+    val showTour by dashboardViewModel.showTour.collectAsState()
+    val tourCurrentStep by dashboardViewModel.tourCurrentStep.collectAsState()
 
     LaunchedEffect(Unit) {
         dashboardViewModel.refreshUser()
     }
 
-    LaunchedEffect(analysisResult) {
-        if (analysisResult != null) {
-            dashboardViewModel.refreshUser()
-        }
+    // Interactive Astra Onboarding Tour Dialog
+    if (showTour) {
+        AstraInteractiveTourDialog(
+            currentStep = tourCurrentStep,
+            onNextStep = { dashboardViewModel.nextTourStep() },
+            onPreviousStep = { dashboardViewModel.previousTourStep() },
+            onSkip = { dashboardViewModel.dismissTour() },
+            onNavigateToStep = { step ->
+                dashboardViewModel.dismissTour()
+                when (step) {
+                    1 -> navController.navigate(Screen.ResumeUpload.route)
+                    2 -> navController.navigate(Screen.AtsAnalysis.route)
+                    3 -> navController.navigate(Screen.SkillGap.route)
+                    4 -> navController.navigate(Screen.JobDescriptionAnalyzer.route)
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -329,7 +309,7 @@ fun MainDashboardScreen(
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. Home (Analyse)
+                    // 1. Career Hub (Active)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(horizontal = 4.dp)
@@ -341,22 +321,44 @@ fun MainDashboardScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    Icons.Default.CloudUpload,
-                                    contentDescription = "Analyse",
+                                    Icons.Default.Home,
+                                    contentDescription = "Career Hub",
                                     tint = Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Analyse",
+                            text = "Hub",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryDark
                         )
                     }
 
-                    // 2. ATS Score
+                    // 2. Upload Resume
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable { navController.navigate(Screen.ResumeUpload.route) }
+                            .padding(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CloudUpload,
+                            contentDescription = "Upload",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Upload",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                    }
+
+                    // 3. ATS Score
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -377,7 +379,7 @@ fun MainDashboardScreen(
                         )
                     }
 
-                    // 3. Skill Gap
+                    // 4. Skill Gap
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -398,7 +400,7 @@ fun MainDashboardScreen(
                         )
                     }
 
-                    // 4. JD Matcher
+                    // 5. JD Matcher
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -419,7 +421,7 @@ fun MainDashboardScreen(
                         )
                     }
 
-                    // 5. AI Assistant
+                    // 6. Assistant
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -434,7 +436,7 @@ fun MainDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Assistant",
+                            text = "Astra",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
@@ -449,488 +451,753 @@ fun MainDashboardScreen(
                 .padding(padding),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Curved Sage/Mint Header
+            // 1. Curved Sage/Mint Header with Personalized Greeting
             item {
+                val displayName = if (userName.isNotBlank()) userName else "User"
+                val greeting = if (isNewUser || greetingPrefix.equals("Welcome", ignoreCase = true)) {
+                    "Welcome, $displayName 👋"
+                } else {
+                    "Welcome back, $displayName 👋"
+                }
+                val subGreeting = if (isNewUser) {
+                    "Your AI career companion is ready to guide you"
+                } else {
+                    "Central career intelligence & competency hub"
+                }
+
                 AstraDashboardHeader(
-                    greeting = if (greetingPrefix.contains("back", ignoreCase = true)) {
-                        "Welcome back, $userName 👋"
-                    } else {
-                        "Welcome to AstraAI 👋"
-                    },
-                    subGreeting = "Elevate your career intelligence & competencies",
+                    greeting = greeting,
+                    subGreeting = subGreeting,
                     onProfileClick = { navController.navigate(Screen.Profile.route) }
                 )
             }
 
-            // Overview Status & Real State Card
+            // 2. Astra Chatbot Introduction Card
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    AstraRealStatusCard(
+                    AstraWelcomeIntroCard(
+                        isNewUser = isNewUser,
+                        onStartTourClick = { dashboardViewModel.startTour() }
+                    )
+                }
+            }
+
+            // 3. Primary Hero Action: ANALYZE RESUME
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    AnalyzeResumeHeroCard(
                         hasAnalysis = hasAnalysis,
-                        atsScore = atsScore,
-                        skillMatch = skillMatch,
-                        onTakeTourClick = {
-                            navController.navigate(Screen.AppTour.route)
+                        onAnalyzeClick = {
+                            navController.navigate(Screen.ResumeUpload.route)
                         }
                     )
                 }
             }
 
-            // Active Analysis Summary Card (If analysis already exists)
+            // 4. Section: Major Career Features
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Career Intelligence Modules",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+
+                    // ATS Compatibility Card
+                    MainFeatureCard(
+                        number = "01",
+                        title = "ATS Analysis",
+                        subtitle = "Deterministic parser evaluation, keyword density, section structure & 4-dimension scoring.",
+                        icon = Icons.Default.Assessment,
+                        actionText = if (hasAnalysis) "View ATS Diagnostics →" else "Explore ATS Parser →",
+                        statusTag = if (hasAnalysis && atsScore != null) "$atsScore/100 Score" else "Ready to analyze",
+                        isHighlighted = false,
+                        onClick = { navController.navigate(Screen.AtsAnalysis.route) }
+                    )
+
+                    // Skill Gap Card
+                    MainFeatureCard(
+                        number = "02",
+                        title = "Skill Gap",
+                        subtitle = "Identify missing competencies for your target role and follow an actionable 4-phase learning roadmap.",
+                        icon = Icons.Default.Psychology,
+                        actionText = if (hasAnalysis) "Explore Learning Roadmap →" else "Discover Missing Skills →",
+                        statusTag = if (hasAnalysis && skillMatch != null) "$skillMatch% Role Alignment" else "Role Benchmarking",
+                        isHighlighted = false,
+                        onClick = { navController.navigate(Screen.SkillGap.route) }
+                    )
+
+                    // JD Matcher Card
+                    MainFeatureCard(
+                        number = "03",
+                        title = "JD Matcher",
+                        subtitle = "Compare your resume against any target job description to pinpoint matching qualifications.",
+                        icon = Icons.Default.Work,
+                        actionText = "Match Job Description →",
+                        statusTag = "Live Matcher",
+                        isHighlighted = false,
+                        onClick = { navController.navigate(Screen.JobDescriptionAnalyzer.route) }
+                    )
+
+                    // AI Interview Prep Card
+                    MainFeatureCard(
+                        number = "04",
+                        title = "AI Interview Prep",
+                        subtitle = "Practice behavioral and technical interview questions dynamically tailored to your profile.",
+                        icon = Icons.Default.RecordVoiceOver,
+                        actionText = "Start Practice Session →",
+                        statusTag = "Interactive Prep",
+                        isHighlighted = false,
+                        onClick = { navController.navigate(Screen.InterviewPrep.route) }
+                    )
+                }
+            }
+
+            // 5. Lightweight Progress Summary (ONLY shown if user has performed analysis)
             if (hasAnalysis) {
                 item {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AstraCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            containerColor = MintLight,
-                            borderColor = Primary.copy(alpha = 0.3f)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = Primary,
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Active Competency Profile",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = SoftGreen
-                                    ) {
-                                        Text(
-                                            text = "Analyzed",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-
-                                Text(
-                                    text = "Your resume has been analyzed. Explore deep ATS diagnostics, skill gap insights, or compare against target job descriptions:",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    lineHeight = 18.sp
-                                )
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { navController.navigate(Screen.AtsAnalysis.route) }
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(10.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text(
-                                                text = if (atsScore != null) "$atsScore" else "--",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Black,
-                                                color = Primary
-                                            )
-                                            Text(
-                                                text = "ATS Score (Why?)",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
-                                            )
-                                        }
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { navController.navigate(Screen.SkillGap.route) }
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(10.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text(
-                                                text = if (skillMatch != null) "$skillMatch%" else "--",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Black,
-                                                color = Primary
-                                            )
-                                            Text(
-                                                text = "Skill Match",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
-                                            )
-                                        }
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { navController.navigate(Screen.JobDescriptionAnalyzer.route) }
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(10.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Work,
-                                                contentDescription = null,
-                                                tint = Primary,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = "JD Matcher",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        AstraProgressSummaryCard(
+                            atsScore = atsScore,
+                            skillMatch = skillMatch,
+                            targetRole = targetRole,
+                            latestAnalysis = latestAnalysis,
+                            onViewAtsClick = { navController.navigate(Screen.AtsAnalysis.route) },
+                            onViewSkillGapClick = { navController.navigate(Screen.SkillGap.route) }
+                        )
+                    }
+                }
+            } else {
+                // Onboarding guidance steps for new users (NO fake progress data)
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        AstraNewUserGuideCard(
+                            onStartClick = { navController.navigate(Screen.ResumeUpload.route) }
+                        )
                     }
                 }
             }
 
-            // PRIMARY FOCUSED SECTION: ANALYSE RESUME WORKSPACE
             item {
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    AstraCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 20.dp
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPONENT: ASTRA WELCOME INTRO CARD
+// ==========================================
+
+@Composable
+fun AstraWelcomeIntroCard(
+    isNewUser: Boolean,
+    onStartTourClick: () -> Unit
+) {
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        containerColor = Surface,
+        borderColor = Primary.copy(alpha = 0.25f)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = SoftGreen,
+                        modifier = Modifier.size(42.dp)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = SoftGreen,
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                Icons.Default.CloudUpload,
-                                                contentDescription = null,
-                                                tint = Primary,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "Analyse Resume",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
-                                        )
-                                        Text(
-                                            text = "Upload PDF/DOCX & pick target role",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MintLight
-                                ) {
-                                    Text(
-                                        text = "Core Engine",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PrimaryDark,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(color = BorderColor.copy(alpha = 0.7f))
-
-                            // Step A: File Selection Dropzone
-                            Text(
-                                text = "1. Select Resume Document",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = "Astra AI",
+                                tint = Primary,
+                                modifier = Modifier.size(24.dp)
                             )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Hi, I'm Astra",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Your AI Career Copilot",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Primary
+                        )
+                    }
+                }
 
-                            if (selectedFileName != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MintLight,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.4f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Description,
-                                                contentDescription = null,
-                                                tint = Primary,
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = selectedFileName ?: "Resume",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = TextPrimary,
-                                                    maxLines = 1
-                                                )
-                                                Text(
-                                                    text = "Ready for Gemini AI parsing",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = SuccessGreen
-                                                )
-                                            }
-                                        }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    modifier = Modifier.clickable { onStartTourClick() }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Tour,
+                            contentDescription = null,
+                            tint = Primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isNewUser) "App Tour" else "Take Tour",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark
+                        )
+                    }
+                }
+            }
 
-                                        TextButton(
-                                            onClick = { filePickerLauncher.launch("*/*") }
-                                        ) {
-                                            Text("Change", color = PrimaryDark, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            } else {
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = SurfaceVariant,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { filePickerLauncher.launch("*/*") }
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(20.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CloudUpload,
-                                            contentDescription = null,
-                                            tint = Primary,
-                                            modifier = Modifier.size(40.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "Tap to browse Resume (PDF / DOCX)",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = TextPrimary
-                                        )
-                                        Text(
-                                            text = "Supports standard PDF and Word formats",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                }
-                            }
+            Text(
+                text = "I'll help you understand your resume, identify skill gaps, and find better job matches.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
 
-                            // Step B: Target Career Role Selection
-                            Text(
-                                text = "2. Select Target Career Role",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+// ==========================================
+// COMPONENT: HERO ACTION - ANALYZE RESUME
+// ==========================================
+
+@Composable
+fun AnalyzeResumeHeroCard(
+    hasAnalysis: Boolean,
+    onAnalyzeClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(22.dp),
+                ambientColor = Color.Black.copy(alpha = 0.05f),
+                spotColor = Color.Black.copy(alpha = 0.05f)
+            )
+            .clip(RoundedCornerShape(22.dp))
+            .background(MintLight)
+            .border(2.dp, Primary.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+            .padding(20.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Primary,
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.CloudUpload,
+                                contentDescription = "Analyze Resume",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
                             )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Analyze Resume",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = if (hasAnalysis) "Re-upload or switch target role" else "Primary step to get started",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
 
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                items(roles) { role ->
-                                    val isSelected = role == targetRole
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = if (isSelected) Primary else SurfaceVariant,
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            1.dp,
-                                            if (isSelected) Primary else BorderColor
-                                        ),
-                                        modifier = Modifier.clickable { targetRole = role }
-                                    ) {
-                                        Text(
-                                            text = role,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color.White else TextPrimary,
-                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                                        )
-                                    }
-                                }
-                            }
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Primary
+                ) {
+                    Text(
+                        text = "START HERE",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
 
-                            // Error Message Banner
-                            if (!errorMessage.isNullOrBlank()) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = ErrorRed.copy(alpha = 0.08f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRed.copy(alpha = 0.3f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Error, contentDescription = null, tint = ErrorRed)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = errorMessage ?: "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = ErrorRed
-                                        )
-                                    }
-                                }
-                            }
+            Text(
+                text = "Upload your resume and select your target role to begin your career analysis.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                lineHeight = 20.sp
+            )
 
-                            // Loading Progress Indicator
-                            if (isLoading) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(36.dp),
-                                        color = Primary
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = loadingStage.ifBlank { "Analyzing resume with AI..." },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = PrimaryDark
-                                    )
-                                }
-                            } else {
-                                PremiumButton(
-                                    text = if (selectedFileName == null) "Select Resume to Start" else "Analyse Resume for $targetRole",
-                                    enabled = selectedFileName != null,
-                                    onClick = {
-                                        resumeViewModel.analyzeResume(targetRole)
-                                    }
+            Button(
+                onClick = onAnalyzeClick,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = if (hasAnalysis) "Upload New Resume / Change Role" else "Upload Resume & Start Analysis",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPONENT: ASTRA INTERACTIVE TOUR DIALOG
+// ==========================================
+
+@Composable
+fun AstraInteractiveTourDialog(
+    currentStep: Int,
+    onNextStep: () -> Unit,
+    onPreviousStep: () -> Unit,
+    onSkip: () -> Unit,
+    onNavigateToStep: (Int) -> Unit
+) {
+    val steps = listOf(
+        Triple(
+            "Analyze Resume",
+            "This is where you upload your resume and select your target role before starting analysis.",
+            Icons.Default.CloudUpload
+        ),
+        Triple(
+            "ATS Analysis",
+            "Evaluates how well your resume is optimized for applicant tracking systems with transparent scoring.",
+            Icons.Default.Assessment
+        ),
+        Triple(
+            "Skill Gap",
+            "Identifies missing or improvable skills for your selected target role with guided learning paths.",
+            Icons.Default.Psychology
+        ),
+        Triple(
+            "JD Matcher",
+            "Compares your resume against a specific job description to benchmark role-specific alignment.",
+            Icons.Default.Work
+        )
+    )
+
+    val stepIndex = (currentStep - 1).coerceIn(0, steps.size - 1)
+    val step = steps[stepIndex]
+
+    Dialog(onDismissRequest = onSkip) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Surface,
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Primary.copy(alpha = 0.3f)),
+            shadowElevation = 16.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header with Astra Avatar and Step Indicator
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = SoftGreen,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = "Astra",
+                                    tint = Primary,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Astra Tour Guide",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SoftGreen
+                    ) {
+                        Text(
+                            text = "Step $currentStep of 4",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
-            }
 
-            // Quick Mock Interview Action Card
-            item {
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    AstraCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        containerColor = SurfaceVariant
+                // Feature Icon Display
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    modifier = Modifier.size(84.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = step.third,
+                            contentDescription = null,
+                            tint = Primary,
+                            modifier = Modifier.size(42.dp)
+                        )
+                    }
+                }
+
+                // Step Title & 2-line Description
+                Text(
+                    text = step.first,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = step.second,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 22.sp
+                )
+
+                // Step Progress Dots
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(4) { i ->
+                        val isCurrent = i + 1 == currentStep
+                        Box(
+                            modifier = Modifier
+                                .height(6.dp)
+                                .width(if (isCurrent) 24.dp else 8.dp)
+                                .clip(CircleShape)
+                                .background(if (isCurrent) Primary else BorderColor)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = BorderColor.copy(alpha = 0.7f))
+
+                // Navigation Controls (Skip / Previous / Next)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onSkip,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = SoftGreen,
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.RecordVoiceOver,
-                                            contentDescription = null,
-                                            tint = Primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "AI Mock Interview Prep",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "Practice questions tailored to your profile",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
+                        Text("Skip", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                    }
 
-                            TextButton(
-                                onClick = { navController.navigate(Screen.InterviewPrep.route) }
-                            ) {
-                                Text("Practice →", color = PrimaryDark, fontWeight = FontWeight.Bold)
-                            }
+                    if (currentStep > 1) {
+                        OutlinedButton(
+                            onClick = onPreviousStep,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Text("Back", color = TextPrimary, style = MaterialTheme.typography.labelMedium)
                         }
                     }
+
+                    Button(
+                        onClick = onNextStep,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        modifier = Modifier.weight(1.3f)
+                    ) {
+                        Text(
+                            text = if (currentStep < 4) "Next" else "Finish",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+
+                // Quick jump link
+                TextButton(
+                    onClick = { onNavigateToStep(currentStep) },
+                    modifier = Modifier.padding(top = 0.dp)
+                ) {
+                    Text(
+                        text = "Open ${step.first} now →",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = PrimaryDark,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPONENT: PROGRESS SUMMARY (RETURNING USERS)
+// ==========================================
+
+@Composable
+fun AstraProgressSummaryCard(
+    atsScore: Int?,
+    skillMatch: Int?,
+    targetRole: String,
+    latestAnalysis: com.example.aidrivencompetencyplatform.model.ResumeAnalysisResult?,
+    onViewAtsClick: () -> Unit,
+    onViewSkillGapClick: () -> Unit
+) {
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        containerColor = Surface,
+        borderColor = BorderColor
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = SoftGreen,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Recent Analysis Overview",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Target Role: $targetRole",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = PrimaryDark,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SoftGreen
+                ) {
+                    Text(
+                        text = "Active Profile",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDark,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
                 }
             }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider(color = BorderColor.copy(alpha = 0.7f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // ATS Metric Pill
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.2f)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onViewAtsClick() }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = if (atsScore != null) "$atsScore/100" else "--",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            color = Primary
+                        )
+                        Text(
+                            text = "ATS Compatibility",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+                }
+
+                // Skill Match Metric Pill
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.2f)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onViewSkillGapClick() }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = if (skillMatch != null) "$skillMatch%" else "--",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            color = Primary
+                        )
+                        Text(
+                            text = "Skill Coverage",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPONENT: NEW USER GETTING STARTED CARD
+// ==========================================
+
+@Composable
+fun AstraNewUserGuideCard(
+    onStartClick: () -> Unit
+) {
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        containerColor = Surface,
+        borderColor = BorderColor
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "Getting Started in 2 Easy Steps",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = SoftGreen,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("1", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryDark)
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Upload your resume & select target role",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextPrimary
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = SoftGreen,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("2", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryDark)
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Unlock deep ATS diagnostics & tailored skill gaps",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextPrimary
+                )
+            }
+
+            TextButton(
+                onClick = onStartClick,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Get Started →", color = Primary, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1023,121 +1290,6 @@ fun AstraDashboardHeader(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.9f)
             )
-        }
-    }
-}
-
-// ==========================================
-// COMPONENT: REAL STATUS OVERVIEW CARD
-// ==========================================
-
-@Composable
-fun AstraRealStatusCard(
-    hasAnalysis: Boolean,
-    atsScore: Int?,
-    skillMatch: Int?,
-    onTakeTourClick: () -> Unit
-) {
-    AstraCard(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 20.dp,
-        containerColor = Surface,
-        borderColor = BorderColor
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Career Intelligence Status",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MintLight,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier.clickable { onTakeTourClick() }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = Primary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Take a Tour",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryDark
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider(color = BorderColor)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Resume Status
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Resume",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (hasAnalysis) "Uploaded" else "Not Uploaded",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (hasAnalysis) SuccessGreen else WarningAmber
-                    )
-                }
-
-                // ATS Score Status
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "ATS Score",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (atsScore != null) "$atsScore/100" else "Pending",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (atsScore != null) Primary else TextSecondary
-                    )
-                }
-
-                // Skill Match Status
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "Skill Match",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (skillMatch != null) "$skillMatch%" else "Pending",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (skillMatch != null) Primary else TextSecondary
-                    )
-                }
-            }
         }
     }
 }
@@ -1246,176 +1398,7 @@ fun MainFeatureCard(
 }
 
 // ==========================================
-// COMPONENT: INTERACTIVE PRODUCT TOUR MODAL
-// ==========================================
-
-@Composable
-fun InteractiveTourBottomSheet(
-    currentStep: Int,
-    onNextStep: () -> Unit,
-    onSkip: () -> Unit,
-    onNavigateToStep: (Int) -> Unit
-) {
-    val stepsInfo = listOf(
-        Triple(
-            "Step 1: Resume & Role Setup",
-            "Upload your resume and choose the role you're targeting to establish your competency baseline.",
-            Icons.Default.CloudUpload
-        ),
-        Triple(
-            "Step 2: ATS Analysis",
-            "See how well your resume performs against ATS systems with transparent 4-dimension scoring.",
-            Icons.Default.Assessment
-        ),
-        Triple(
-            "Step 3: Skill Gap Analysis",
-            "Discover the skills you are missing for your target role and actionable learning paths.",
-            Icons.Default.Psychology
-        ),
-        Triple(
-            "Step 4: JD Matcher",
-            "Compare your resume with a specific job description to evaluate role-specific match.",
-            Icons.Default.Work
-        )
-    )
-
-    val current = stepsInfo[currentStep - 1]
-
-    Dialog(onDismissRequest = onSkip) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-            shadowElevation = 12.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(22.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SoftGreen,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = Primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "AstraAI Guide",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-
-                    Text(
-                        text = "Step $currentStep of 4",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Primary
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MintLight,
-                    modifier = Modifier.size(80.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = current.third,
-                            contentDescription = null,
-                            tint = Primary,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                }
-
-                Text(
-                    text = current.first,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = current.second,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    repeat(4) { i ->
-                        Box(
-                            modifier = Modifier
-                                .height(6.dp)
-                                .width(if (i + 1 == currentStep) 20.dp else 6.dp)
-                                .clip(CircleShape)
-                                .background(if (i + 1 == currentStep) Primary else BorderColor)
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onSkip,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                    ) {
-                        Text("Skip", color = TextSecondary)
-                    }
-
-                    Button(
-                        onClick = onNextStep,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                        modifier = Modifier.weight(1.5f)
-                    ) {
-                        Text(if (currentStep < 4) "Next Step" else "Finish")
-                    }
-                }
-
-                TextButton(
-                    onClick = { onNavigateToStep(currentStep) }
-                ) {
-                    Text(
-                        text = "Open this module now →",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = PrimaryDark,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ==========================================
-// 3. RESUME UPLOAD + ROLE SELECTION DASHBOARD
+// 3. DEDICATED UPLOAD RESUME DASHBOARD
 // ==========================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1428,27 +1411,20 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
     val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
-        viewModel.reset()
-    }
-
-    LaunchedEffect(analysisResult) {
-        if (analysisResult != null) {
-            navController.navigate(Screen.AtsAnalysis.route)
-        }
-    }
-
+    // Target Role selection
     var targetRole by remember { mutableStateOf("Android Developer") }
     val roles = listOf(
         "Android Developer",
         "Java Developer",
         "Full Stack Developer",
+        "Backend Developer",
+        "Frontend Developer",
         "Data Analyst",
         "Data Scientist",
         "Machine Learning Engineer",
-        "Backend Developer",
-        "Frontend Developer",
         "UI/UX Designer",
+        "DevOps Engineer",
+        "Cloud Architect",
         "Other"
     )
 
@@ -1468,16 +1444,32 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
         }
     }
 
+    // AUTOMATIC NAVIGATION TO ATS DASHBOARD ON ANALYSIS COMPLETION
+    LaunchedEffect(analysisResult) {
+        if (analysisResult != null) {
+            navController.navigate(Screen.AtsAnalysis.route) {
+                popUpTo(Screen.ResumeUpload.route) { inclusive = false }
+            }
+        }
+    }
+
     Scaffold(
         containerColor = Background,
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Resume & Role Setup",
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
+                    Column {
+                        Text(
+                            text = "Upload Resume",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Step 1 of your Career Intelligence analysis",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -1494,24 +1486,55 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                 .padding(padding)
         ) {
             if (isLoading) {
+                // Progressive Loading View
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = Primary, strokeWidth = 5.dp)
+                    Surface(
+                        shape = CircleShape,
+                        color = SoftGreen,
+                        modifier = Modifier.size(80.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    CircularProgressIndicator(
+                        color = Primary,
+                        strokeWidth = 4.dp,
+                        modifier = Modifier.size(44.dp)
+                    )
+
                     Spacer(modifier = Modifier.height(20.dp))
+
                     Text(
-                        text = loadingStage,
+                        text = loadingStage.ifBlank { "Processing through AstraAI..." },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = TextPrimary,
+                        textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Text(
-                        text = "Processing through AstraAI career intelligence engine...",
+                        text = "Astra is extracting skills, evaluating ATS formats, and benchmarking against $targetRole standards.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
                     )
                 }
             } else {
@@ -1521,103 +1544,320 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // 1. Screen Subtitle & Description Header
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Upload your latest resume and select the role you're targeting.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+
+                    // 2. Astra Contextual Tip Banner
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MintLight,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.25f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = SoftGreen,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = Primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Astra Tip",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryDark
+                                    )
+                                    Text(
+                                        text = "Select your exact target role so our parser can benchmark your skill matches and ATS compatibility accurately.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Error Banner (if any)
                     if (errorMessage != null) {
                         item {
                             AstraCard(
                                 containerColor = ErrorRed.copy(alpha = 0.08f),
                                 borderColor = ErrorRed.copy(alpha = 0.3f)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Error, contentDescription = null, tint = ErrorRed)
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(errorMessage!!, color = ErrorRed, style = MaterialTheme.typography.bodyMedium)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Error, contentDescription = null, tint = ErrorRed)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = errorMessage!!,
+                                            color = ErrorRed,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    IconButton(onClick = { viewModel.clearError() }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = ErrorRed, modifier = Modifier.size(18.dp))
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Step 1: Upload Resume Card
+                    // 4. STEP 1: RESUME UPLOAD CARD
                     item {
-                        AstraCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (selectedFileName != null) SoftGreen else MintLight,
-                                    modifier = Modifier.size(72.dp)
+                        AstraCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 20.dp
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.CloudUpload,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(36.dp),
-                                            tint = if (selectedFileName != null) Primary else TextSecondary
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = if (selectedFileName != null) SoftGreen else MintLight,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.CloudUpload,
+                                                    contentDescription = null,
+                                                    tint = if (selectedFileName != null) Primary else TextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "1. Resume Document",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary
+                                            )
+                                            Text(
+                                                text = if (selectedFileName != null) "File attached" else "PDF, DOC, or DOCX",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    if (selectedFileName != null) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = SoftGreen
+                                        ) {
+                                            Text(
+                                                text = "Ready",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PrimaryDark,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                HorizontalDivider(color = BorderColor.copy(alpha = 0.7f))
+
+                                if (selectedFileName != null) {
+                                    // File uploaded preview & action controls
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MintLight,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.4f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Description,
+                                                        contentDescription = null,
+                                                        tint = Primary,
+                                                        modifier = Modifier.size(32.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = selectedFileName ?: "Resume",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = TextPrimary,
+                                                            maxLines = 1
+                                                        )
+                                                        Text(
+                                                            text = if (selectedFileName?.endsWith(".pdf", ignoreCase = true) == true) "PDF Document" else "Word Document",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = TextSecondary
+                                                        )
+                                                    }
+                                                }
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = SoftGreen
+                                                ) {
+                                                    Text(
+                                                        text = "✓ Ready for AI",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = PrimaryDark,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                TextButton(onClick = { viewModel.removeFile() }) {
+                                                    Text("Remove", color = ErrorRed, style = MaterialTheme.typography.labelSmall)
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                OutlinedButton(
+                                                    onClick = { filePickerLauncher.launch("*/*") },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                                                ) {
+                                                    Text("Replace Resume", color = Primary, style = MaterialTheme.typography.labelSmall)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Empty Dropzone
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = SurfaceVariant,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { filePickerLauncher.launch("*/*") }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(22.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = SoftGreen,
+                                                modifier = Modifier.size(54.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        Icons.Default.CloudUpload,
+                                                        contentDescription = null,
+                                                        tint = Primary,
+                                                        modifier = Modifier.size(28.dp)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Text(
+                                                text = "Tap to browse Resume (PDF / DOCX)",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = TextPrimary
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Supports standard PDF, Word (.doc, .docx) formats",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. STEP 2: TARGET ROLE SELECTION CARD
+                    item {
+                        AstraCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 20.dp
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = SoftGreen,
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.Work,
+                                                contentDescription = null,
+                                                tint = Primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "2. Target Career Role",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                        Text(
+                                            text = "Select your target role to benchmark competencies",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary
                                         )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Text(
-                                    text = if (selectedFileName != null) "Resume Uploaded" else "Upload Your Resume",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                    text = if (selectedFileName != null) selectedFileName!! else "Supported formats: PDF, DOC, DOCX",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (selectedFileName != null) PrimaryDark else TextSecondary,
-                                    fontWeight = if (selectedFileName != null) FontWeight.SemiBold else FontWeight.Normal
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                if (selectedFileName != null) {
-                                    OutlinedButton(
-                                        onClick = { filePickerLauncher.launch("*/*") },
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                                    ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = Primary)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Replace Resume", color = Primary)
-                                    }
-                                } else {
-                                    PremiumButton(
-                                        text = "Select Resume File",
-                                        onClick = { filePickerLauncher.launch("*/*") }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Step 2: Target Role Selection Card
-                    item {
-                        AstraCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Work, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Target Career Role",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                }
-
-                                Text(
-                                    text = "Select the role you're targeting for tailored ATS matching and competency benchmarks:",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
+                                HorizontalDivider(color = BorderColor.copy(alpha = 0.7f))
 
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     roles.forEach { role ->
@@ -1660,22 +1900,35 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                         }
                     }
 
-                    // Action Button: Start AI Analysis
+                    // 6. ANALYZE BUTTON (PROMINENT ACTION)
                     item {
-                        PremiumButton(
-                            text = "Start AI Analysis",
-                            enabled = selectedFileName != null && !isLoading,
-                            onClick = {
-                                if (selectedFileName == null) {
-                                    Toast.makeText(context, "Please select a resume file first.", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    viewModel.analyzeResume(targetRole)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            PremiumButton(
+                                text = if (selectedFileName == null) "Upload Resume to Start Analysis" else "Analyze Resume for $targetRole",
+                                enabled = selectedFileName != null && targetRole.isNotBlank() && !isLoading,
+                                onClick = {
+                                    if (selectedFileName == null) {
+                                        Toast.makeText(context, "Please select a resume file first.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        viewModel.analyzeResume(targetRole)
+                                    }
                                 }
+                            )
+
+                            if (selectedFileName == null) {
+                                Text(
+                                    text = "Please upload a resume above to enable analysis",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                                )
                             }
-                        )
+                        }
                     }
 
-                    item { Spacer(modifier = Modifier.height(40.dp)) }
+                    item {
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
                 }
             }
         }
@@ -1692,6 +1945,9 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
     val analysis by viewModel.analysisResult.collectAsState()
     val scoreResult by viewModel.scoreResult.collectAsState()
 
+    var selectedPriorityForDetail by remember { mutableStateOf<String?>(null) }
+    var showInfoDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         viewModel.refresh()
     }
@@ -1702,9 +1958,9 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
             TopAppBar(
                 title = {
                     Column {
-                        Text("ATS Analytics Dashboard", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("ATS Compatibility Dashboard", fontWeight = FontWeight.Bold, color = TextPrimary)
                         Text(
-                            text = "Deterministic 4-Component Scoring",
+                            text = "Deterministic Multi-Engine Parser Analysis",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
@@ -1713,6 +1969,11 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showInfoDialog = true }) {
+                        Icon(Icons.Default.Info, contentDescription = "ATS Scoring Info", tint = Primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -1728,6 +1989,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                 NoAnalysisState(navController)
             } else {
                 val score = scoreResult!!
+                val analysisData = analysis!!
 
                 LazyColumn(
                     modifier = Modifier
@@ -1737,7 +1999,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                 ) {
                     item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                    // Candidate Profile Header Card
+                    // 1. Header: Profile & Target Role Card
                     item {
                         CandidateProfileCard(
                             targetRole = score.targetRole,
@@ -1748,22 +2010,47 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                         )
                     }
 
-                    // Hero Circular Gauge Overall ATS Score
+                    // 2. Main ATS Score Hero
                     item {
                         AtsOverallScoreHero(score = score)
                     }
 
+                    // 3. ATS Performance Areas Header
                     item {
-                        Text(
-                            text = "4-Component ATS Breakdown",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "ATS Performance Areas",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Tap 'Ask Why?' on any area for formulas & evidence",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SoftGreen
+                            ) {
+                                Text(
+                                    text = "4 Dimensions",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryDark,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
 
-                    // Dimension 1: Keyword Coverage (35%)
+                    // 3a. Dimension 1: Keyword Coverage (35%)
                     item {
                         AtsExpandableCard(
                             calculation = score.keywordCoverage,
@@ -1771,7 +2058,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                         )
                     }
 
-                    // Dimension 2: Resume Structure (25%)
+                    // 3b. Dimension 2: Resume Structure (25%)
                     item {
                         AtsExpandableCard(
                             calculation = score.resumeStructure,
@@ -1779,7 +2066,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                         )
                     }
 
-                    // Dimension 3: Formatting Safety (20%)
+                    // 3c. Dimension 3: Formatting Safety (20%)
                     item {
                         AtsExpandableCard(
                             calculation = score.formattingSafety,
@@ -1787,7 +2074,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                         )
                     }
 
-                    // Dimension 4: Parsing Accuracy (20%)
+                    // 3d. Dimension 4: Parsing Accuracy (20%)
                     item {
                         AtsExpandableCard(
                             calculation = score.parsingAccuracy,
@@ -1795,34 +2082,67 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                         )
                     }
 
-                    // Priority Fixes Booster Plan
-                    if (score.priorityFixes.isNotEmpty()) {
-                        item {
-                            AtsPriorityFixesCard(fixes = score.priorityFixes)
+                    // 4. Canonical Score Reconciliation (Expandable Breakdown)
+                    item {
+                        AtsCanonicalScoreReconciliationCard(score = score)
+                    }
+
+                    // 5. What's Helping Your Resume
+                    item {
+                        AtsHelpingFactorsCard(
+                            score = score,
+                            analysis = analysisData
+                        )
+                    }
+
+                    // 6. What's Holding Your Resume Back
+                    item {
+                        AtsHoldingBackCard(
+                            score = score,
+                            analysis = analysisData
+                        )
+                    }
+
+                    // 7. Top Priorities / Actionable Booster Plan
+                    item {
+                        val fixes = score.priorityFixes.ifEmpty {
+                            analysisData.prioritizedSuggestions?.highPriority ?: emptyList()
+                        }
+                        if (fixes.isNotEmpty()) {
+                            AtsPriorityFixesCard(
+                                fixes = fixes,
+                                onFixClick = { fix ->
+                                    selectedPriorityForDetail = fix
+                                }
+                            )
                         }
                     }
 
-                    // AI Strengths
-                    if (!analysis!!.strengths.isNullOrEmpty()) {
-                        item {
-                            AstraCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.ThumbUp, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("AI Identified Strengths", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-                                    }
-                                    HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 4.dp))
-                                    analysis!!.strengths!!.forEach { s ->
-                                        Row(modifier = Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {
-                                            Text("✓", color = SuccessGreen, fontWeight = FontWeight.Bold)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(s, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-                                        }
-                                    }
-                                }
+                    // 8. Role Alignment & Evidence Snapshot
+                    item {
+                        AtsRoleAlignmentSnapshotCard(
+                            score = score,
+                            analysis = analysisData
+                        )
+                    }
+
+                    // 9. Entity Data Extraction (Collapsible)
+                    item {
+                        AtsEntityExtractionCard(
+                            score = score,
+                            analysis = analysisData
+                        )
+                    }
+
+                    // 10. Key ATS AI Insight
+                    item {
+                        AtsKeyAiInsightCard(
+                            score = score,
+                            analysis = analysisData,
+                            onConsultAiClick = {
+                                navController.navigate(Screen.AiAssistant.route)
                             }
-                        }
+                        )
                     }
 
                     item { Spacer(modifier = Modifier.height(90.dp)) }
@@ -1831,11 +2151,57 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
 
             FloatingAstraBot(navController, "ATS Dashboard")
         }
+
+        // Priority Detail Dialog
+        if (selectedPriorityForDetail != null) {
+            AtsPriorityDetailDialog(
+                priority = selectedPriorityForDetail!!,
+                onDismiss = { selectedPriorityForDetail = null },
+                onAskAi = {
+                    selectedPriorityForDetail = null
+                    navController.navigate(Screen.AiAssistant.route)
+                }
+            )
+        }
+
+        // ATS Info Dialog
+        if (showInfoDialog) {
+            AlertDialog(
+                onDismissRequest = { showInfoDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = Primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("About ATS Scoring", fontWeight = FontWeight.Bold, color = TextPrimary)
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "AstraAI evaluates your resume using deterministic parser emulation algorithms weighted across 4 key dimensions:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary
+                        )
+                        Text("• Keyword Coverage (35%): Role-specific technical terms & competencies", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("• Resume Structure (25%): Standard headings and logical hierarchy", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("• Formatting Safety (20%): Single-column, clean typography, parser safety", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("• Parsing Accuracy (20%): Clean extraction of contact & profile entities", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showInfoDialog = false }) {
+                        Text("Got it", fontWeight = FontWeight.Bold, color = Primary)
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = Surface
+            )
+        }
     }
 }
 
 // ==========================================
-// 5. SKILL GAP DASHBOARD SCREEN (Separate Dashboard)
+// 5. SKILL GAP DASHBOARD SCREEN (Dedicated Career Intelligence Dashboard)
 // ==========================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1843,6 +2209,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
 fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapViewModel) {
     val state by viewModel.state.collectAsState()
     val selectedSkillForDetail by viewModel.selectedSkillForDetail.collectAsState()
+    var showRolePickerDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -1855,7 +2222,7 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 title = {
                     Column {
                         Text(
-                            text = "Skill Gap Dashboard",
+                            text = "Skill Gap Analysis",
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
@@ -1869,6 +2236,35 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    }
+                },
+                actions = {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MintLight,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .clickable { showRolePickerDialog = true }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Change Role",
+                                tint = Primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Switch Role",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -1889,9 +2285,9 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    item { Spacer(modifier = Modifier.height(4.dp)) }
+                    item { Spacer(modifier = Modifier.height(2.dp)) }
 
-                    // Header & Non-Editable Target Role Card
+                    // Header & Target Role Card
                     item {
                         Column(
                             modifier = Modifier
@@ -1899,25 +2295,27 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                                 .padding(vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Skill Gap",
+                                text = "Skill Gap Analysis",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "See how your skills match your target role.",
+                                text = "Compares your verified competencies with industry benchmarks for ${state.targetRole} to prioritize your upskilling.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary
+                                color = TextSecondary,
+                                lineHeight = 20.sp
                             )
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Non-editable Target Role Info Card
+                            // Interactive Target Role Banner Card
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
-                                color = MintLight,
+                                color = Surface,
                                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                shadowElevation = 1.dp,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
@@ -1927,29 +2325,32 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
                                         Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = Primary.copy(alpha = 0.12f),
-                                            modifier = Modifier.size(40.dp)
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = SoftGreen,
+                                            modifier = Modifier.size(42.dp)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Icon(
-                                                    imageVector = Icons.Default.Work,
+                                                    imageVector = Icons.Default.WorkOutline,
                                                     contentDescription = null,
                                                     tint = Primary,
-                                                    modifier = Modifier.size(20.dp)
+                                                    modifier = Modifier.size(22.dp)
                                                 )
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column {
                                             Text(
-                                                text = "TARGET ROLE",
+                                                text = "TARGET BENCHMARK ROLE",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = TextSecondary,
-                                                letterSpacing = 1.sp
+                                                letterSpacing = 0.8.sp
                                             )
                                             Text(
                                                 text = state.targetRole,
@@ -1960,317 +2361,291 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                                         }
                                     }
 
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = Surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                                    OutlinedButton(
+                                        onClick = { showRolePickerDialog = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.5f)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = MintLight
+                                        )
                                     ) {
                                         Text(
-                                            text = "Active Target",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = PrimaryDark,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Hero Skill Match Overview Card
-                    item {
-                        AstraCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = "SKILL MATCH",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = TextSecondary,
-                                    letterSpacing = 1.2.sp
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                val animatedProgress by animateFloatAsState(
-                                    targetValue = if (state.totalRequired > 0) state.matchedCount.toFloat() / state.totalRequired.toFloat() else 0f,
-                                    animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                                    label = "SkillMatchProgress"
-                                )
-
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.size(140.dp)
-                                ) {
-                                    CircularProgressIndicator(
-                                        progress = { 1f },
-                                        modifier = Modifier.size(140.dp),
-                                        strokeWidth = 12.dp,
-                                        color = SoftGreen,
-                                        trackColor = Color.Transparent
-                                    )
-                                    CircularProgressIndicator(
-                                        progress = { animatedProgress },
-                                        modifier = Modifier.size(140.dp),
-                                        strokeWidth = 12.dp,
-                                        color = Primary,
-                                        trackColor = Color.Transparent
-                                    )
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            text = "${state.matchedCount} / ${state.totalRequired}",
-                                            style = MaterialTheme.typography.headlineMedium,
-                                            fontWeight = FontWeight.Black,
-                                            color = Primary
-                                        )
-                                        Text(
-                                            text = "Skills Detected",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = SoftGreen
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Text(
-                                                text = "✓",
-                                                color = PrimaryDark,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "${state.matchedCount} Matched",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = PrimaryDark
-                                            )
-                                        }
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = WarningAmber.copy(alpha = 0.12f)
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Text(
-                                                text = "○",
-                                                color = WarningAmber,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "${state.missingCount} Missing",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = WarningAmber
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Text(
-                                    text = "${state.matchedCount} of ${state.totalRequired} required skills were detected in your profile.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-
-                    // Interactive Filter Segmented Control
-                    item {
-                        Surface(
-                            shape = RoundedCornerShape(24.dp),
-                            color = MintLight,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                val filterOptions = listOf(
-                                    Pair(SkillFilter.ALL, "All (${state.totalRequired})"),
-                                    Pair(SkillFilter.MATCHED, "Matched (${state.matchedCount})"),
-                                    Pair(SkillFilter.MISSING, "Missing (${state.missingCount})")
-                                )
-
-                                filterOptions.forEach { (filterOption, label) ->
-                                    val isSelected = state.filter == filterOption
-                                    Surface(
-                                        shape = RoundedCornerShape(20.dp),
-                                        color = if (isSelected) Primary else Color.Transparent,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .clickable { viewModel.setFilter(filterOption) }
-                                    ) {
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier.padding(vertical = 10.dp)
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) Color.White else TextSecondary,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Section 1: "Skills You Have"
-                    if (state.filter == SkillFilter.ALL || state.filter == SkillFilter.MATCHED) {
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Skills You Have",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "Required skills detected in your profile.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-
-                        if (state.matchedSkills.isEmpty()) {
-                            item {
-                                AstraCard(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = "No matched skills detected in your profile yet.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = TextSecondary,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-                        } else {
-                            item {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    state.matchedSkills.forEach { skillName ->
-                                        SkillStatusCard(
-                                            skillName = skillName,
-                                            isMatched = true,
-                                            targetRole = state.targetRole,
-                                            onClick = {
-                                                viewModel.selectSkill(
-                                                    SkillItem(
-                                                        name = skillName,
-                                                        isMatched = true,
-                                                        targetRole = state.targetRole
-                                                    )
-                                                )
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Section 2: "Skill Gaps"
-                    if (state.filter == SkillFilter.ALL || state.filter == SkillFilter.MISSING) {
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp)
-                            ) {
-                                Text(
-                                    text = "Skill Gaps",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "Required skills not detected in your profile.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-
-                        if (state.missingSkills.isEmpty()) {
-                            item {
-                                AstraCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    containerColor = MintLight,
-                                    borderColor = Primary.copy(alpha = 0.3f)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = Primary
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(
-                                            text = "All required skills for this role are detected in your profile!",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold,
+                                            text = "Change Role ▾",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
                                             color = PrimaryDark
                                         )
                                     }
                                 }
                             }
-                        } else {
-                            item {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    state.missingSkills.forEach { skillName ->
-                                        SkillStatusCard(
-                                            skillName = skillName,
-                                            isMatched = false,
-                                            targetRole = state.targetRole,
-                                            onClick = {
-                                                viewModel.selectSkill(
-                                                    SkillItem(
-                                                        name = skillName,
-                                                        isMatched = false,
-                                                        targetRole = state.targetRole
+                        }
+                    }
+
+                    // Section 2: Overall Skill Readiness (Development-Oriented, NOT ATS Score)
+                    item {
+                        AstraCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "ROLE READINESS INDEX",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextSecondary,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Text(
+                                            text = "Competency Alignment",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                    }
+
+                                    val readinessLevelTag = when {
+                                        state.readinessPercentage >= 80 -> "High Readiness"
+                                        state.readinessPercentage >= 50 -> "Moderate Alignment"
+                                        else -> "Foundational Focus"
+                                    }
+                                    val tagBg = when {
+                                        state.readinessPercentage >= 80 -> SoftGreen
+                                        state.readinessPercentage >= 50 -> MintLight
+                                        else -> WarningAmber.copy(alpha = 0.12f)
+                                    }
+                                    val tagColor = when {
+                                        state.readinessPercentage >= 80 -> PrimaryDark
+                                        state.readinessPercentage >= 50 -> Primary
+                                        else -> WarningAmber
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = tagBg,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, tagColor.copy(alpha = 0.3f))
+                                    ) {
+                                        Text(
+                                            text = readinessLevelTag,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = tagColor,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(18.dp))
+
+                                val animatedReadiness by animateFloatAsState(
+                                    targetValue = state.readinessPercentage / 100f,
+                                    animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                                    label = "ReadinessAnimation"
+                                )
+
+                                // Linear Readiness Progression Bar
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Bottom
+                                    ) {
+                                        Row(verticalAlignment = Alignment.Bottom) {
+                                            Text(
+                                                text = "${state.readinessPercentage}%",
+                                                style = MaterialTheme.typography.headlineLarge,
+                                                fontWeight = FontWeight.Black,
+                                                color = Primary
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "benchmark coverage",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary,
+                                                modifier = Modifier.padding(bottom = 4.dp)
+                                            )
+                                        }
+
+                                        Text(
+                                            text = "${state.matchedCount + state.developingCount} of ${state.totalRequired} Skills Met",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = TextPrimary,
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(14.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MintLight)
+                                            .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(animatedReadiness)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(PrimaryLight, Primary)
                                                     )
                                                 )
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(18.dp))
+
+                                // 3 Key Metric Breakdown Cards
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    // 1. Strong Skills
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = SoftGreen.copy(alpha = 0.7f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.25f)),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { viewModel.setFilter(SkillFilter.MATCHED) }
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("✓", color = PrimaryDark, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Strong",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = PrimaryDark
+                                                )
                                             }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "${state.matchedCount}",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Black,
+                                                color = PrimaryDark
+                                            )
+                                            Text(
+                                                text = "Verified Match",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 10.sp,
+                                                color = PrimaryDark.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+
+                                    // 2. Developing Skills
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MintLight,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { viewModel.setFilter(SkillFilter.TO_IMPROVE) }
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("▲", color = Primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "To Improve",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Primary
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "${state.developingCount}",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Black,
+                                                color = TextPrimary
+                                            )
+                                            Text(
+                                                text = "Partial Evidence",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 10.sp,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    // 3. Missing Skills
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = WarningAmber.copy(alpha = 0.08f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, WarningAmber.copy(alpha = 0.25f)),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { viewModel.setFilter(SkillFilter.MISSING) }
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("○", color = WarningAmber, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Missing",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = WarningAmber
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "${state.missingCount}",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Black,
+                                                color = WarningAmber
+                                            )
+                                            Text(
+                                                text = "Key Role Gaps",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 10.sp,
+                                                color = WarningAmber.copy(alpha = 0.85f)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Background,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = Primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (state.missingCount == 0) {
+                                                "Exceptional alignment! You meet all benchmark skills for ${state.targetRole}."
+                                            } else {
+                                                "Acquiring the top ${state.priorityLearningItems.take(2).joinToString(" and ") { it.name }} skills will elevate you to high role readiness."
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp
                                         )
                                     }
                                 }
@@ -2278,31 +2653,25 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                         }
                     }
 
-                    // Section 3: "Required Skills" Collapsible Section
+                    // Section 4: Skill Gap Visualization (Competency Spectrum & Benchmark Coverage)
                     item {
-                        var expanded by remember { mutableStateOf(false) }
-
-                        AstraCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { expanded = !expanded }
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        AstraCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.FormatListBulleted,
-                                            contentDescription = null,
-                                            tint = Primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
                                         Text(
-                                            text = "Required Skills · ${state.totalRequired}",
+                                            text = "GAP VISUALIZATION",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextSecondary,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Text(
+                                            text = "Competency Area Distribution",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = TextPrimary
@@ -2310,33 +2679,244 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                                     }
 
                                     Icon(
-                                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        contentDescription = if (expanded) "Collapse" else "Expand",
-                                        tint = TextSecondary
+                                        imageVector = Icons.Default.BarChart,
+                                        contentDescription = null,
+                                        tint = Primary,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
 
                                 Text(
-                                    text = "Complete benchmark requirement set for ${state.targetRole}.",
+                                    text = "Shows detected candidate competency versus target role benchmark by technical domain:",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )
 
-                                AnimatedVisibility(visible = expanded) {
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.padding(top = 6.dp)
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    state.categoryCoverage.forEach { coverage ->
+                                        CategoryGapMeterItem(coverage = coverage)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 5: Priority Learning Areas ("What to Learn Next")
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "What to Learn Next",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "Prioritized recommendations based on ${state.targetRole} demand.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MintLight
+                                ) {
+                                    Text(
+                                        text = "${state.priorityLearningItems.size} Priorities",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryDark,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (state.priorityLearningItems.isEmpty()) {
+                                AstraCard(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        HorizontalDivider(color = BorderColor)
-                                        state.allSkills.forEach { skillItem ->
-                                            SkillStatusCard(
-                                                skillName = skillItem.name,
-                                                isMatched = skillItem.isMatched,
-                                                targetRole = state.targetRole,
-                                                onClick = { viewModel.selectSkill(skillItem) }
-                                            )
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Primary)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = "No critical skill gaps detected. You are ready for ${state.targetRole} applications!",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PrimaryDark
+                                        )
+                                    }
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    state.priorityLearningItems.take(3).forEach { skillItem ->
+                                        PriorityLearningCard(
+                                            skill = skillItem,
+                                            onClick = { viewModel.selectDetailedSkill(skillItem) },
+                                            onAskAi = {
+                                                navController.navigate(Screen.AiAssistant.route)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 3: Skill Breakdown (Filterable Competency Registry)
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        ) {
+                            Text(
+                                text = "Skill Breakdown",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Detailed status of all benchmark requirements for ${state.targetRole}.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Filter Segmented Control
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MintLight,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(3.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    val filterList = listOf(
+                                        Triple(SkillFilter.ALL, "All", state.totalRequired),
+                                        Triple(SkillFilter.MATCHED, "Strong", state.matchedCount),
+                                        Triple(SkillFilter.TO_IMPROVE, "Improve", state.developingCount),
+                                        Triple(SkillFilter.MISSING, "Missing", state.missingCount)
+                                    )
+
+                                    filterList.forEach { (fOption, label, count) ->
+                                        val isSelected = state.filter == fOption
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = if (isSelected) Primary else Color.Transparent,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .clickable { viewModel.setFilter(fOption) }
+                                        ) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier.padding(vertical = 8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "$label ($count)",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) Color.White else TextSecondary,
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // Render Filtered Skills List
+                    val displayedSkills = when (state.filter) {
+                        SkillFilter.ALL -> state.allSkillsDetailed
+                        SkillFilter.MATCHED -> state.strongSkills
+                        SkillFilter.TO_IMPROVE -> state.developingSkills
+                        SkillFilter.MISSING -> state.missingSkills
+                    }
+
+                    if (displayedSkills.isEmpty()) {
+                        item {
+                            AstraCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "No skills found under the selected filter.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextSecondary,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    } else {
+                        items(displayedSkills) { skillItem ->
+                            DetailedSkillCard(
+                                skill = skillItem,
+                                onClick = { viewModel.selectDetailedSkill(skillItem) }
+                            )
+                        }
+                    }
+
+                    // Section 6: Recommended Learning Path (Start -> Build -> Practice -> Apply)
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Recommended Learning Path",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "Start → Build → Practice → Apply roadmap for ${state.targetRole}.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SoftGreen
+                                ) {
+                                    Text(
+                                        text = "4 Stages",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryDark,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                state.learningPath.forEach { phase ->
+                                    LearningRoadmapPhaseCard(phase = phase)
                                 }
                             }
                         }
@@ -2346,15 +2926,745 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 }
             }
 
-            // Interactive Skill Detail Dialog / Bottom Sheet
+            // Interactive Skill Detail Dialog
             selectedSkillForDetail?.let { skill ->
                 SkillDetailDialog(
                     skill = skill,
-                    onDismiss = { viewModel.dismissSkillDetail() }
+                    onDismiss = { viewModel.dismissDetailedSkill() },
+                    onAskAi = {
+                        viewModel.dismissDetailedSkill()
+                        navController.navigate(Screen.AiAssistant.route)
+                    }
                 )
             }
 
-            FloatingAstraBot(navController, "Skill Gap Dashboard")
+            // Target Role Picker Dialog
+            if (showRolePickerDialog) {
+                TargetRolePickerDialog(
+                    currentRole = state.targetRole,
+                    availableRoles = RoleSkillsData.ALL_ROLES,
+                    onSelectRole = { newRole ->
+                        viewModel.changeTargetRole(newRole)
+                        showRolePickerDialog = false
+                    },
+                    onDismiss = { showRolePickerDialog = false }
+                )
+            }
+
+            FloatingAstraBot(navController, "Skill Gap Analysis")
+        }
+    }
+}
+
+@Composable
+fun CategoryGapMeterItem(coverage: SkillCategoryCoverage) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = coverage.category,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${coverage.matchedCount}/${coverage.totalCount} Skills",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${coverage.percentage}%",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (coverage.percentage >= 80) PrimaryDark else if (coverage.percentage >= 50) WarningAmber else ErrorRed
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MintLight)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(coverage.percentage / 100f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        if (coverage.percentage >= 80) Primary
+                        else if (coverage.percentage >= 50) WarningAmber
+                        else Primary.copy(alpha = 0.5f)
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+fun PriorityLearningCard(
+    skill: DetailedSkillItem,
+    onClick: () -> Unit,
+    onAskAi: () -> Unit
+) {
+    val priorityBadgeColor = when (skill.priority) {
+        SkillPriority.CRITICAL -> ErrorRed
+        SkillPriority.HIGH -> WarningAmber
+        else -> Primary
+    }
+    val priorityBadgeBg = when (skill.priority) {
+        SkillPriority.CRITICAL -> ErrorRed.copy(alpha = 0.1f)
+        SkillPriority.HIGH -> WarningAmber.copy(alpha = 0.12f)
+        else -> MintLight
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+        shadowElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = priorityBadgeBg,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.TrendingUp,
+                                contentDescription = null,
+                                tint = priorityBadgeColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = skill.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = skill.category,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = priorityBadgeBg,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, priorityBadgeColor.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "${skill.priority} PRIORITY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = priorityBadgeColor,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = skill.whyItMatters,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                lineHeight = 17.sp,
+                maxLines = 2
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Status: ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = if (skill.proficiency == SkillProficiency.MISSING) "Missing Gap" else "Developing",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (skill.proficiency == SkillProficiency.MISSING) WarningAmber else Primary
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = onClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Tips & Guide ▾", style = MaterialTheme.typography.labelSmall, color = Primary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailedSkillCard(
+    skill: DetailedSkillItem,
+    onClick: () -> Unit
+) {
+    val (statusText, statusBg, statusColor, iconSymbol) = when (skill.proficiency) {
+        SkillProficiency.STRONG -> Quadruple("Strong Match", SoftGreen, PrimaryDark, "✓")
+        SkillProficiency.DEVELOPING -> Quadruple("Developing", MintLight, Primary, "▲")
+        SkillProficiency.MISSING -> Quadruple("Missing Gap", WarningAmber.copy(alpha = 0.1f), WarningAmber, "○")
+    }
+
+    val cardBorderColor = if (skill.proficiency == SkillProficiency.STRONG) {
+        Primary.copy(alpha = 0.25f)
+    } else {
+        BorderColor
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, cardBorderColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = statusBg,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = iconSymbol,
+                            color = statusColor,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = skill.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = skill.category,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = statusBg,
+                border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.25f))
+            ) {
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = statusColor,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+@Composable
+fun LearningRoadmapPhaseCard(phase: LearningRoadmapPhase) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+        shadowElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Primary,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "P${phase.phaseNumber}",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Phase ${phase.phaseNumber} · ${phase.phaseTitle}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark,
+                            letterSpacing = 0.5.sp
+                        )
+                        Text(
+                            text = phase.stageName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = phase.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                lineHeight = 18.sp
+            )
+
+            // Focus Skills Chips
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "FOCUS SKILLS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondary
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    phase.focusSkills.forEach { skill ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MintLight,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Text(
+                                text = skill,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryDark,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Capstone Milestone Project Suggestion
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Background,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Code,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "SUGGESTED MILESTONE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = phase.suggestedProject,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextPrimary,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SkillDetailDialog(
+    skill: DetailedSkillItem,
+    onDismiss: () -> Unit,
+    onAskAi: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+            shadowElevation = 10.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        val (icon, color, bg) = when (skill.proficiency) {
+                            SkillProficiency.STRONG -> Triple("✓", PrimaryDark, SoftGreen)
+                            SkillProficiency.DEVELOPING -> Triple("▲", Primary, MintLight)
+                            SkillProficiency.MISSING -> Triple("○", WarningAmber, WarningAmber.copy(alpha = 0.15f))
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = bg,
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = icon,
+                                    color = color,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = skill.name,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = skill.category,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                }
+
+                HorizontalDivider(color = BorderColor)
+
+                // Status & Priority Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = when (skill.proficiency) {
+                            SkillProficiency.STRONG -> SoftGreen
+                            SkillProficiency.DEVELOPING -> MintLight
+                            SkillProficiency.MISSING -> WarningAmber.copy(alpha = 0.12f)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text("STATUS", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                            Text(
+                                text = when (skill.proficiency) {
+                                    SkillProficiency.STRONG -> "Strong Match"
+                                    SkillProficiency.DEVELOPING -> "Developing"
+                                    SkillProficiency.MISSING -> "Missing Gap"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = when (skill.proficiency) {
+                                    SkillProficiency.STRONG -> PrimaryDark
+                                    SkillProficiency.DEVELOPING -> Primary
+                                    SkillProficiency.MISSING -> WarningAmber
+                                }
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Background,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text("ROLE PRIORITY", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                            Text(
+                                text = "${skill.priority}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+                    }
+                }
+
+                // Why it Matters
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "WHY THIS MATTERS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 0.8.sp
+                    )
+                    Text(
+                        text = skill.whyItMatters,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextPrimary,
+                        lineHeight = 18.sp
+                    )
+                }
+
+                // Evidence or Gap Note
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (skill.isMatched) "PROFILE EVIDENCE" else "GAP ANALYSIS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 0.8.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Background,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = skill.evidenceOrReason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(10.dp),
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                // Action Learning Tips
+                if (skill.learningTips.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "HOW TO ACQUIRE / MASTER",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            letterSpacing = 0.8.sp
+                        )
+                        skill.learningTips.forEach { tip ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text("•", color = Primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 6.dp))
+                                Text(
+                                    text = tip,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 12.sp,
+                                    color = TextPrimary,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onAskAi,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Ask Astra AI", color = Primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Done", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TargetRolePickerDialog(
+    currentRole: String,
+    availableRoles: List<String>,
+    onSelectRole: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+            shadowElevation = 12.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Select Target Role",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Recalculates your competency readiness & gaps",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                }
+
+                HorizontalDivider(color = BorderColor)
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    availableRoles.forEach { role ->
+                        val isSelected = role.equals(currentRole, ignoreCase = true)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) MintLight else Background,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) Primary else BorderColor
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectRole(role) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = role,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) PrimaryDark else TextPrimary
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Selected",
+                                        tint = Primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Close", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
@@ -2426,132 +3736,6 @@ fun SkillStatusCard(
 }
 
 @Composable
-fun SkillDetailDialog(
-    skill: SkillItem,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = Surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-            shadowElevation = 10.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (skill.isMatched) SoftGreen else WarningAmber.copy(alpha = 0.15f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = if (skill.isMatched) "✓" else "○",
-                                    color = if (skill.isMatched) Primary else WarningAmber,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 16.sp
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = skill.name,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
-                    }
-                }
-
-                HorizontalDivider(color = BorderColor)
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "STATUS",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary,
-                        letterSpacing = 1.sp
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (skill.isMatched) SoftGreen else WarningAmber.copy(alpha = 0.12f),
-                        modifier = Modifier.wrapContentWidth()
-                    ) {
-                        Text(
-                            text = if (skill.isMatched) "✓ Matched in Profile" else "○ Missing from Profile",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (skill.isMatched) PrimaryDark else WarningAmber,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "ROLE REQUIREMENT",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "Required for ${skill.targetRole}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Background,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = if (skill.isMatched) {
-                            "This skill is required for ${skill.targetRole} and was detected in your profile data."
-                        } else {
-                            "This skill is required for ${skill.targetRole} and was not detected in your current profile data."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(12.dp),
-                        lineHeight = 18.sp
-                    )
-                }
-
-                Button(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Close", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun SkillGapEmptyState(navController: NavController) {
     Column(
         modifier = Modifier
@@ -2576,21 +3760,22 @@ fun SkillGapEmptyState(navController: NavController) {
         }
         Spacer(modifier = Modifier.height(18.dp))
         Text(
-            text = "No skills detected yet",
+            text = "No Skills Analyzed Yet",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = TextPrimary
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Add skills to your profile to see your skill gap.",
+            text = "Upload your resume or enter your background to calculate your role readiness score, identify critical skill gaps, and generate your custom learning path.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
-            color = TextSecondary
+            color = TextSecondary,
+            lineHeight = 20.sp
         )
         Spacer(modifier = Modifier.height(24.dp))
         PremiumButton(
-            text = "Upload Resume & Setup Profile",
+            text = "Upload Resume to Analyze Skills",
             onClick = { navController.navigate(Screen.ResumeUpload.route) }
         )
     }
@@ -3061,7 +4246,7 @@ fun InterviewPrepScreen(navController: NavController, viewModel: AiAssistantView
 }
 
 // ==========================================
-// 9. ATS HELPER COMPOSABLES
+// 9. ATS HELPER COMPOSABLES (REDESIGNED)
 // ==========================================
 
 @Composable
@@ -3072,8 +4257,11 @@ fun CandidateProfileCard(
     candidatePhone: String?,
     candidateLocation: String?
 ) {
-    AstraCard(modifier = Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -3086,20 +4274,33 @@ fun CandidateProfileCard(
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = SoftGreen
                         ) {
                             Text(
-                                text = "Target: $targetRole",
+                                text = "🎯 Target: $targetRole",
                                 style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = PrimaryDark,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Primary.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = "ATS Engine v2.4",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -3108,37 +4309,77 @@ fun CandidateProfileCard(
                     shape = CircleShape,
                     color = MintLight,
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(46.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.Person,
                             contentDescription = null,
                             tint = Primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                 }
             }
 
             if (!candidateEmail.isNullOrBlank() || !candidatePhone.isNullOrBlank() || !candidateLocation.isNullOrBlank()) {
-                HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 4.dp))
-                Row(
+                HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (!candidateEmail.isNullOrBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextSecondary)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(candidateEmail, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SurfaceVariant,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(candidateEmail, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                }
+                            }
                         }
                     }
                     if (!candidatePhone.isNullOrBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextSecondary)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(candidatePhone, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SurfaceVariant,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(candidatePhone, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                }
+                            }
+                        }
+                    }
+                    if (!candidateLocation.isNullOrBlank()) {
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SurfaceVariant,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(candidateLocation, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                }
+                            }
                         }
                     }
                 }
@@ -3151,12 +4392,12 @@ fun CandidateProfileCard(
 fun AtsOverallScoreHero(score: AtsScoreResult) {
     val animatedScoreFloat by animateFloatAsState(
         targetValue = score.overallScore / 100f,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
         label = "scoreFloat"
     )
     val animatedScoreInt by animateIntAsState(
         targetValue = score.overallScore,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
         label = "scoreInt"
     )
 
@@ -3168,42 +4409,70 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
     }
 
     val statusBadge = when {
-        score.overallScore >= 85 -> "ATS Optimized"
+        score.overallScore >= 85 -> "ATS Optimized (Top 10%)"
         score.overallScore >= 70 -> "Competitive Match"
-        score.overallScore >= 50 -> "Moderate Fit"
-        else -> "Needs Revision"
+        score.overallScore >= 50 -> "Moderate ATS Fit"
+        else -> "Action Required"
     }
 
-    AstraCard(modifier = Modifier.fillMaxWidth()) {
+    val passProbability = when {
+        score.overallScore >= 80 -> "92% Estimated ATS Pass Rate"
+        score.overallScore >= 65 -> "74% Estimated ATS Pass Rate"
+        score.overallScore >= 50 -> "51% Estimated ATS Pass Rate"
+        else -> "32% Estimated ATS Pass Rate"
+    }
+
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp
+    ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = "OVERALL ATS SCORE",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary,
-                letterSpacing = 1.2.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "OVERALL ATS COMPATIBILITY",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondary,
+                    letterSpacing = 1.1.sp
+                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = scoreColor.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = statusBadge,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = scoreColor,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Large Circular Score Indicator
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(160.dp)
+                modifier = Modifier.size(164.dp)
             ) {
                 CircularProgressIndicator(
-                    progress = 1f,
-                    modifier = Modifier.size(160.dp),
+                    progress = { 1f },
+                    modifier = Modifier.size(164.dp),
                     strokeWidth = 14.dp,
                     color = SoftGreen,
                     trackColor = Color.Transparent
                 )
                 CircularProgressIndicator(
-                    progress = animatedScoreFloat,
-                    modifier = Modifier.size(160.dp),
+                    progress = { animatedScoreFloat },
+                    modifier = Modifier.size(164.dp),
                     strokeWidth = 14.dp,
                     color = scoreColor,
                     trackColor = Color.Transparent
@@ -3216,8 +4485,8 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
                         color = scoreColor
                     )
                     Text(
-                        text = "/ 100",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = "out of 100",
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary
                     )
@@ -3226,44 +4495,139 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = scoreColor.copy(alpha = 0.12f)
-            ) {
-                Text(
-                    text = statusBadge,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = scoreColor,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
+            // Pass probability pill
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = SurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.padding(horizontal = 8.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = scoreColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Formula: (Keyword × 0.35) + (Structure × 0.25) + (Formatting × 0.20) + (Parsing × 0.20)",
+                        text = passProbability,
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "= (${score.keywordCoverage.score} × 0.35) + (${score.resumeStructure.score} × 0.25) + (${score.formattingSafety.score} × 0.20) + (${score.parsingAccuracy.score} × 0.20) = ${score.overallScore}",
-                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = PrimaryDark,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
+                        color = TextPrimary
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 3 KPI Quick Badges Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // KPI 1: Keywords
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Keyword Match",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                        Text(
+                            text = "${score.keywordCoverage.score}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark
+                        )
+                        Text(
+                            text = "+${String.format("%.1f", score.keywordCoverage.weightedContribution)} pts",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SuccessGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // KPI 2: Structure
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Structure",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                        Text(
+                            text = "${score.resumeStructure.score}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark
+                        )
+                        Text(
+                            text = "+${String.format("%.1f", score.resumeStructure.weightedContribution)} pts",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SuccessGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // KPI 3: Format & Parse
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    val formatAndParseSum = score.formattingSafety.weightedContribution + score.parsingAccuracy.weightedContribution
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Format+Parse",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                        val avgScore = (score.formattingSafety.score + score.parsingAccuracy.score) / 2
+                        Text(
+                            text = "$avgScore%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark
+                        )
+                        Text(
+                            text = "+${String.format("%.1f", formatAndParseSum)} pts",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SuccessGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
@@ -3288,6 +4652,13 @@ fun AtsExpandableCard(
         else -> ErrorRed
     }
 
+    val iconVector = when (calculation.iconType) {
+        AtsCategoryIcon.KEYWORD -> Icons.Default.Key
+        AtsCategoryIcon.STRUCTURE -> Icons.Default.Layers
+        AtsCategoryIcon.FORMATTING -> Icons.Default.Description
+        AtsCategoryIcon.PARSING -> Icons.Default.Code
+    }
+
     AstraCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -3301,43 +4672,62 @@ fun AtsExpandableCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = calculation.categoryName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = SoftGreen
-                        ) {
-                            Text(
-                                text = "${calculation.weightPercentage}% Weight",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = PrimaryDark,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = color.copy(alpha = 0.12f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = iconVector,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-                    Text(
-                        text = "Contributes ${String.format("%.1f", calculation.weightedContribution)} pts to overall score",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = calculation.categoryName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = SoftGreen
+                            ) {
+                                Text(
+                                    text = "${calculation.weightPercentage}% Weight",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = PrimaryDark,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Adds ${String.format("%.1f", calculation.weightedContribution)} pts to overall score",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${calculation.score}/100",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = color
-                    )
-                }
+                Text(
+                    text = "${calculation.score}/100",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = color
+                )
             }
 
             // Progress Bar
@@ -3376,7 +4766,7 @@ fun AtsExpandableCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (expanded) "Hide Explainable AI Breakdown" else "✦ Ask Why? (Explain Calculation)",
+                            text = if (expanded) "Hide Explainable Calculation" else "✦ Ask Why? (Explain Calculation & Evidence)",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryDark
@@ -3398,7 +4788,7 @@ fun AtsExpandableCard(
                 // STEP 1: FORMULA
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "1. FORMULA",
+                        text = "1. DETERMINISTIC FORMULA",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDark,
@@ -3423,7 +4813,7 @@ fun AtsExpandableCard(
                 // STEP 2: ACTUAL CALCULATION
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "2. ACTUAL CALCULATION",
+                        text = "2. ARITHMETIC COMPUTATION",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDark,
@@ -3494,7 +4884,7 @@ fun AtsExpandableCard(
                                         }
                                         if (!ev.suggestion.isNullOrBlank()) {
                                             Text(
-                                                text = "💡 Fix: ${ev.suggestion}",
+                                                text = "💡 Recommendation: ${ev.suggestion}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = WarningAmber
                                             )
@@ -3509,7 +4899,7 @@ fun AtsExpandableCard(
                     if (calculation.matchedList.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Detected Role Competencies (${calculation.matchedList.size}):",
+                            text = "Detected Competencies (${calculation.matchedList.size}):",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = SuccessGreen
@@ -3568,7 +4958,7 @@ fun AtsExpandableCard(
                 // STEP 4: EXPLANATION
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "4. EXPLANATION",
+                        text = "4. DIAGNOSTIC SUMMARY",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDark,
@@ -3581,7 +4971,7 @@ fun AtsExpandableCard(
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                text = calculation.oneLineSummary.ifBlank { "Score based on ${calculation.categoryName} deterministic ATS benchmarks." },
+                                text = calculation.oneLineSummary.ifBlank { "Score calculated against ${calculation.categoryName} parser benchmarks." },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextPrimary,
                                 lineHeight = 18.sp
@@ -3594,7 +4984,7 @@ fun AtsExpandableCard(
                 if (calculation.recommendations.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "5. RECOMMENDATIONS & FIXES",
+                            text = "5. ACTIONABLE OPTIMIZATIONS",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryDark,
@@ -3640,57 +5030,1005 @@ fun AtsExpandableCard(
 }
 
 @Composable
-fun AtsPriorityFixesCard(fixes: List<String>) {
+fun AtsCanonicalScoreReconciliationCard(score: AtsScoreResult) {
+    var expanded by remember { mutableStateOf(false) }
+
     AstraCard(
-        modifier = Modifier.fillMaxWidth(),
-        containerColor = WarningAmber.copy(alpha = 0.06f),
-        borderColor = WarningAmber.copy(alpha = 0.3f)
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        cornerRadius = 18.dp
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Bolt, contentDescription = null, tint = WarningAmber, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "High-Impact ATS Booster Plan",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Canonical Score Reconciliation",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Mathematical sum of all 4 weighted dimensions",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = PrimaryDark
                 )
             }
+
+            // Summary equation banner
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Formula: (Keyword × 0.35) + (Structure × 0.25) + (Formatting × 0.20) + (Parsing × 0.20)",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "= (${score.keywordCoverage.score} × 0.35) + (${score.resumeStructure.score} × 0.25) + (${score.formattingSafety.score} × 0.20) + (${score.parsingAccuracy.score} × 0.20) = ${score.overallScore}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDark,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            if (expanded) {
+                HorizontalDivider(color = BorderColor)
+
+                // 4 Horizontal Contribution Meters
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Keyword
+                    ReconciliationDimensionRow(
+                        title = "Keyword Coverage (35% Max)",
+                        score = score.keywordCoverage.score,
+                        pointsEarned = score.keywordCoverage.weightedContribution,
+                        maxPoints = 35.0,
+                        barColor = Primary
+                    )
+                    // Structure
+                    ReconciliationDimensionRow(
+                        title = "Resume Structure (25% Max)",
+                        score = score.resumeStructure.score,
+                        pointsEarned = score.resumeStructure.weightedContribution,
+                        maxPoints = 25.0,
+                        barColor = Color(0xFF0284C7)
+                    )
+                    // Formatting
+                    ReconciliationDimensionRow(
+                        title = "Formatting Safety (20% Max)",
+                        score = score.formattingSafety.score,
+                        pointsEarned = score.formattingSafety.weightedContribution,
+                        maxPoints = 20.0,
+                        barColor = SuccessGreen
+                    )
+                    // Parsing
+                    ReconciliationDimensionRow(
+                        title = "Parsing Accuracy (20% Max)",
+                        score = score.parsingAccuracy.score,
+                        pointsEarned = score.parsingAccuracy.weightedContribution,
+                        maxPoints = 20.0,
+                        barColor = WarningAmber
+                    )
+
+                    HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Total Final ATS Score",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${score.overallScore} / 100",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = PrimaryDark
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReconciliationDimensionRow(
+    title: String,
+    score: Int,
+    pointsEarned: Double,
+    maxPoints: Double,
+    barColor: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
             Text(
-                text = "Apply these prioritized changes to maximize resume passing rate:",
+                "${String.format("%.1f", pointsEarned)} / ${maxPoints.toInt()} pts ($score%)",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = barColor
+            )
+        }
+        LinearProgressIndicator(
+            progress = { (pointsEarned / maxPoints).toFloat().coerceIn(0f, 1f) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp)),
+            color = barColor,
+            trackColor = SoftGreen
+        )
+    }
+}
+
+@Composable
+fun AtsHelpingFactorsCard(
+    score: AtsScoreResult,
+    analysis: ResumeAnalysisResult
+) {
+    val strengthsList = mutableListOf<String>()
+    analysis.strengths?.filter { it.isNotBlank() }?.let { strengthsList.addAll(it) }
+
+    // Add deterministic positive evidence items
+    if (score.keywordCoverage.score >= 70) {
+        strengthsList.add("Strong target keyword density: ${score.keywordCoverage.matchedList.size} role competencies detected")
+    }
+    if (score.resumeStructure.score >= 80) {
+        strengthsList.add("Standard resume structure with clear recognizable section headings")
+    }
+    if (score.formattingSafety.score >= 80) {
+        strengthsList.add("Clean single-column formatting passing automated layout parsers")
+    }
+    if (score.parsingAccuracy.score >= 80) {
+        strengthsList.add("Header and contact entities correctly parsed into candidate profile")
+    }
+
+    val displayList = strengthsList.distinct().take(6)
+
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = SoftGreen.copy(alpha = 0.5f),
+        borderColor = SuccessGreen.copy(alpha = 0.3f),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.ThumbUp,
+                        contentDescription = null,
+                        tint = SuccessGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "What's Helping Your Resume",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SuccessGreen.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "✓ Parser Advantaged",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SuccessGreen,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = "These verified elements protect your application from automated rejection:",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary
             )
-            HorizontalDivider(color = BorderColor)
 
-            fixes.forEachIndexed { index, fix ->
-                Row(
-                    modifier = Modifier.padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = WarningAmber,
-                        modifier = Modifier.size(18.dp)
+            HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
+
+            if (displayList.isEmpty()) {
+                Text(
+                    text = "No strong ATS advantage factors detected yet. Follow the priority plan below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            } else {
+                displayList.forEach { item ->
+                    Row(
+                        modifier = Modifier.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "${index + 1}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp
-                            )
-                        }
+                        Text(
+                            text = "✓",
+                            color = SuccessGreen,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary
+                        )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtsHoldingBackCard(
+    score: AtsScoreResult,
+    analysis: ResumeAnalysisResult
+) {
+    val bottlenecks = mutableListOf<String>()
+
+    // Missing keywords
+    if (score.keywordCoverage.missingList.isNotEmpty()) {
+        val missingSample = score.keywordCoverage.missingList.take(3).joinToString(", ")
+        bottlenecks.add("Missing high-frequency target keywords: $missingSample")
+    }
+
+    // Weaknesses from AI analysis
+    analysis.weaknesses?.filter { it.isNotBlank() }?.let { bottlenecks.addAll(it) }
+
+    // Formatting risks
+    analysis.formattingRisks?.filter { it.isNotBlank() }?.forEach { risk ->
+        bottlenecks.add("Formatting obstacle: $risk")
+    }
+
+    // Missing standard sections
+    analysis.missingSections?.filter { it.isNotBlank() }?.forEach { sec ->
+        bottlenecks.add("Missing standard section header: $sec")
+    }
+
+    val displayBottlenecks = bottlenecks.distinct().take(6)
+
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = WarningAmber.copy(alpha = 0.05f),
+        borderColor = WarningAmber.copy(alpha = 0.35f),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = WarningAmber,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = fix,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
+                        text = "What's Holding Your Resume Back",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = WarningAmber.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "⚠ Fix Needed",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WarningAmber,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = "Key obstacles causing point deductions in automated ATS parsers:",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+
+            HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
+
+            if (displayBottlenecks.isEmpty()) {
+                Text(
+                    text = "No critical ATS bottlenecks found! Your resume passes standard parsing checks.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SuccessGreen
+                )
+            } else {
+                displayBottlenecks.forEach { item ->
+                    Row(
+                        modifier = Modifier.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "⚠",
+                            color = WarningAmber,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtsPriorityFixesCard(
+    fixes: List<String>,
+    onFixClick: (String) -> Unit = {}
+) {
+    val checkedStates = remember { mutableStateMapOf<Int, Boolean>() }
+
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = WarningAmber.copy(alpha = 0.06f),
+        borderColor = WarningAmber.copy(alpha = 0.35f),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = WarningAmber,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "High-Impact ATS Booster Plan",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = WarningAmber.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "+15-25 pts Potential",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WarningAmber,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = "Apply these ranked steps to maximize resume passing rate (tap any step for details):",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+
+            HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
+
+            fixes.forEachIndexed { index, fix ->
+                val isChecked = checkedStates[index] ?: false
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isChecked) SuccessGreen.copy(alpha = 0.08f) else Surface,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isChecked) SuccessGreen.copy(alpha = 0.3f) else BorderColor
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onFixClick(fix) }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Interactive Checkbox / Number badge
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isChecked) SuccessGreen else WarningAmber,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable { checkedStates[index] = !isChecked }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                if (isChecked) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                } else {
+                                    Text(
+                                        text = "${index + 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text(
+                            text = fix,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isChecked) FontWeight.Normal else FontWeight.Medium,
+                            color = if (isChecked) TextSecondary else TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForwardIos,
+                            contentDescription = "View Details",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtsRoleAlignmentSnapshotCard(
+    score: AtsScoreResult,
+    analysis: ResumeAnalysisResult
+) {
+    var selectedFilter by remember { mutableStateOf("ALL") }
+
+    val matchedKeywords = score.keywordCoverage.matchedList
+    val missingKeywords = score.keywordCoverage.missingList
+    val allKeywords = (matchedKeywords + missingKeywords).distinct()
+
+    val filteredList = when (selectedFilter) {
+        "MATCHED" -> matchedKeywords
+        "MISSING" -> missingKeywords
+        else -> allKeywords
+    }
+
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Role Alignment & Evidence",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SoftGreen
+                ) {
+                    Text(
+                        text = "${matchedKeywords.size}/${allKeywords.size.coerceAtLeast(1)} Matched",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDark,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = "Competency benchmark for ${score.targetRole}:",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+
+            // Filter Tabs
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilterTabPill(
+                    text = "All (${allKeywords.size})",
+                    isSelected = selectedFilter == "ALL",
+                    onClick = { selectedFilter = "ALL" }
+                )
+                FilterTabPill(
+                    text = "Matched (${matchedKeywords.size})",
+                    isSelected = selectedFilter == "MATCHED",
+                    onClick = { selectedFilter = "MATCHED" }
+                )
+                FilterTabPill(
+                    text = "Missing (${missingKeywords.size})",
+                    isSelected = selectedFilter == "MISSING",
+                    onClick = { selectedFilter = "MISSING" }
+                )
+            }
+
+            HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
+
+            // Skills Flow / Grid
+            if (filteredList.isEmpty()) {
+                Text(
+                    text = "No skills in this category.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    items(filteredList) { skill ->
+                        val isMatched = matchedKeywords.contains(skill)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isMatched) SoftGreen else ErrorRed.copy(alpha = 0.08f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isMatched) Primary.copy(alpha = 0.2f) else ErrorRed.copy(alpha = 0.25f)
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (isMatched) "✓" else "+",
+                                    color = if (isMatched) SuccessGreen else ErrorRed,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = skill,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isMatched) PrimaryDark else ErrorRed,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterTabPill(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) Primary else SurfaceVariant,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) Color.White else TextSecondary,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
+}
+
+@Composable
+fun AtsEntityExtractionCard(
+    score: AtsScoreResult,
+    analysis: ResumeAnalysisResult
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    AstraCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Code,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Entity Data Extraction Diagnostics",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Raw parser output & section recognition",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = PrimaryDark
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider(color = BorderColor)
+
+                // 1. Profile Recognition
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "CANDIDATE PROFILE ENTITIES",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDark,
+                        letterSpacing = 1.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            EntityDiagnosticRow("Name", score.candidateName ?: "Not detected", score.candidateName != null)
+                            EntityDiagnosticRow("Email", score.candidateEmail ?: "Not detected", score.candidateEmail != null)
+                            EntityDiagnosticRow("Phone", score.candidatePhone ?: "Not detected", score.candidatePhone != null)
+                            EntityDiagnosticRow("Location", score.candidateLocation ?: "Not detected", score.candidateLocation != null)
+                        }
+                    }
+                }
+
+                // 2. Sections Matrix
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "STANDARD SECTIONS DETECTED",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDark,
+                        letterSpacing = 1.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val missing = analysis.missingSections ?: emptyList()
+                            val sections = listOf("Contact Info", "Work Experience", "Education", "Skills", "Projects", "Summary")
+                            sections.forEach { sec ->
+                                val isDetected = !missing.any { it.contains(sec, ignoreCase = true) }
+                                EntityDiagnosticRow(sec, if (isDetected) "Verified standard header" else "Missing or unrecognized", isDetected)
+                            }
+                        }
+                    }
+                }
+
+                // 3. Parser Text Stats
+                val rawTextLength = analysis.rawResumeText?.length ?: 0
+                val wordCount = if (rawTextLength > 0) analysis.rawResumeText!!.split("\\s+".toRegex()).size else 0
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MintLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Characters", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("$rawTextLength", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = PrimaryDark)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Estimated Words", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("$wordCount", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = PrimaryDark)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Extracted Skills", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("${analysis.extractedSkills?.size ?: 0}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = PrimaryDark)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntityDiagnosticRow(label: String, value: String, isSuccess: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = TextPrimary
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (isSuccess) "✓ " else "⚠ ",
+                color = if (isSuccess) SuccessGreen else ErrorRed,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isSuccess) TextSecondary else ErrorRed
+            )
+        }
+    }
+}
+
+@Composable
+fun AtsKeyAiInsightCard(
+    score: AtsScoreResult,
+    analysis: ResumeAnalysisResult,
+    onConsultAiClick: () -> Unit
+) {
+    AstraCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = Surface,
+        borderColor = Primary.copy(alpha = 0.35f),
+        cornerRadius = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = MintLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.2f)),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "AstraAI Executive Career Insight",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Deterministic parser strategy summary",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    val highestLeverageTweak = when {
+                        score.keywordCoverage.score < 70 -> "Your single highest leverage improvement is adding the ${score.keywordCoverage.missingList.size} missing target role keywords into your Experience and Skills sections."
+                        score.resumeStructure.score < 80 -> "Adding standard header sections will immediately raise your ATS score above 80%."
+                        score.formattingSafety.score < 80 -> "Simplifying your resume into a standard single-column text format eliminates parser drops."
+                        else -> "Your resume is highly optimized for ATS parsers. Focus on quantifying bullet points with impact metrics."
+                    }
+
+                    Text(
+                        text = highestLeverageTweak,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+
+            PremiumButton(
+                text = "✦ Ask AstraAI to Optimize Bullet Points",
+                onClick = onConsultAiClick,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+fun AtsPriorityDetailDialog(
+    priority: String,
+    onDismiss: () -> Unit,
+    onAskAi: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Surface,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = WarningAmber,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Actionable Step",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = WarningAmber.copy(alpha = 0.08f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, WarningAmber.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = priority,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Why this matters for ATS parsers:",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDark
+                    )
+                    Text(
+                        text = "Automated applicant tracking systems evaluate keyword placement, semantic structure, and plain-text entity extraction. Completing this fix increases your pass score.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        lineHeight = 18.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Close", color = TextPrimary)
+                    }
+                    Button(
+                        onClick = onAskAi,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Ask AI to Fix", color = Color.White)
+                    }
                 }
             }
         }

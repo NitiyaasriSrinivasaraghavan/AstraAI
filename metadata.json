@@ -1,0 +1,6 @@
+{
+  "name": "AstraAI Competency Platform",
+  "description": "AI-driven career competency and deterministic ATS compatibility platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

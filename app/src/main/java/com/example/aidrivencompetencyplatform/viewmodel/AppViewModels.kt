@@ -29,8 +29,17 @@ class DashboardViewModel(
     private val _greetingPrefix = MutableStateFlow("Welcome")
     val greetingPrefix: StateFlow<String> = _greetingPrefix
 
+    private val _isNewUser = MutableStateFlow(false)
+    val isNewUser: StateFlow<Boolean> = _isNewUser
+
     private val _hasAnalysis = MutableStateFlow(false)
     val hasAnalysis: StateFlow<Boolean> = _hasAnalysis
+
+    private val _latestAnalysis = MutableStateFlow<ResumeAnalysisResult?>(null)
+    val latestAnalysis: StateFlow<ResumeAnalysisResult?> = _latestAnalysis
+
+    private val _targetRole = MutableStateFlow("Android Developer")
+    val targetRole: StateFlow<String> = _targetRole
 
     private val _resumeScore = MutableStateFlow<Int?>(null)
     val resumeScore: StateFlow<Int?> = _resumeScore
@@ -47,6 +56,12 @@ class DashboardViewModel(
     private val _hasCompletedTour = MutableStateFlow(true)
     val hasCompletedTour: StateFlow<Boolean> = _hasCompletedTour.asStateFlow()
 
+    private val _tourCurrentStep = MutableStateFlow(1)
+    val tourCurrentStep: StateFlow<Int> = _tourCurrentStep.asStateFlow()
+
+    private val _showTour = MutableStateFlow(false)
+    val showTour: StateFlow<Boolean> = _showTour.asStateFlow()
+
     init {
         refreshUser()
         checkTourStatus()
@@ -56,23 +71,74 @@ class DashboardViewModel(
         viewModelScope.launch {
             preferenceManager.hasCompletedAppTour.collectLatest { completed ->
                 _hasCompletedTour.value = completed
+                // Auto-show tour on Career Hub if user has never completed it
+                if (!completed) {
+                    _showTour.value = true
+                }
             }
         }
     }
 
+    fun startTour() {
+        _tourCurrentStep.value = 1
+        _showTour.value = true
+    }
+
+    fun nextTourStep() {
+        if (_tourCurrentStep.value < 4) {
+            _tourCurrentStep.value += 1
+        } else {
+            completeTour()
+        }
+    }
+
+    fun prevTourStep() {
+        if (_tourCurrentStep.value > 1) {
+            _tourCurrentStep.value -= 1
+        }
+    }
+
+    fun previousTourStep() {
+        prevTourStep()
+    }
+
+    fun setTourStep(step: Int) {
+        if (step in 1..4) {
+            _tourCurrentStep.value = step
+        }
+    }
+
     fun completeTour() {
+        _showTour.value = false
         viewModelScope.launch {
             preferenceManager.setHasCompletedAppTour(true)
+            _hasCompletedTour.value = true
         }
+    }
+
+    fun skipTour() {
+        completeTour()
+    }
+
+    fun dismissTour() {
+        _showTour.value = false
     }
 
     fun refreshUser() {
         val name = sessionManager.getUserName()
         _userName.value = name ?: ""
         
-        _greetingPrefix.value = if (sessionManager.isNewUser()) "Welcome" else "Welcome back"
+        val isNew = sessionManager.isNewUser()
+        _isNewUser.value = isNew
+        _greetingPrefix.value = if (isNew) "Welcome" else "Welcome back"
+
+        val storedRole = sessionManager.getTargetRole()
+        if (!storedRole.isNullOrBlank()) {
+            _targetRole.value = storedRole
+        }
 
         val analysis = sessionManager.getLatestAnalysis()
+        _latestAnalysis.value = analysis
         if (analysis != null) {
             _hasAnalysis.value = true
             _resumeScore.value = analysis.overallScore
@@ -148,8 +214,47 @@ class AtsViewModel(
 }
 
 enum class SkillFilter {
-    ALL, MATCHED, MISSING
+    ALL, MATCHED, TO_IMPROVE, MISSING
 }
+
+enum class SkillProficiency {
+    STRONG, DEVELOPING, MISSING
+}
+
+enum class SkillPriority {
+    CRITICAL, HIGH, MEDIUM, NICE_TO_HAVE
+}
+
+data class DetailedSkillItem(
+    val name: String,
+    val proficiency: SkillProficiency,
+    val priority: SkillPriority,
+    val category: String,
+    val currentLevelPercent: Int,
+    val targetLevelPercent: Int = 100,
+    val whyItMatters: String,
+    val evidenceOrReason: String,
+    val learningTips: List<String> = emptyList(),
+    val suggestedMilestone: String = "",
+    val isMatched: Boolean = proficiency == SkillProficiency.STRONG || proficiency == SkillProficiency.DEVELOPING,
+    val targetRole: String = ""
+)
+
+data class LearningRoadmapPhase(
+    val phaseNumber: Int,
+    val phaseTitle: String,
+    val stageName: String,
+    val focusSkills: List<String>,
+    val description: String,
+    val suggestedProject: String
+)
+
+data class SkillCategoryCoverage(
+    val category: String,
+    val matchedCount: Int,
+    val totalCount: Int,
+    val percentage: Int
+)
 
 data class SkillItem(
     val name: String,
@@ -160,11 +265,20 @@ data class SkillItem(
 data class SkillGapState(
     val targetRole: String = "Android Developer",
     val hasAnalysis: Boolean = false,
+    val readinessPercentage: Int = 0,
     val totalRequired: Int = 0,
     val matchedCount: Int = 0,
+    val developingCount: Int = 0,
     val missingCount: Int = 0,
-    val matchedSkills: List<String> = emptyList(),
-    val missingSkills: List<String> = emptyList(),
+    val strongSkills: List<DetailedSkillItem> = emptyList(),
+    val developingSkills: List<DetailedSkillItem> = emptyList(),
+    val missingSkills: List<DetailedSkillItem> = emptyList(),
+    val allSkillsDetailed: List<DetailedSkillItem> = emptyList(),
+    val categoryCoverage: List<SkillCategoryCoverage> = emptyList(),
+    val priorityLearningItems: List<DetailedSkillItem> = emptyList(),
+    val learningPath: List<LearningRoadmapPhase> = emptyList(),
+    val matchedSkillNames: List<String> = emptyList(),
+    val missingSkillNames: List<String> = emptyList(),
     val allSkills: List<SkillItem> = emptyList(),
     val filter: SkillFilter = SkillFilter.ALL
 )
@@ -217,6 +331,18 @@ object RoleSkillsData {
         )
     )
 
+    val ALL_ROLES = listOf(
+        "Android Developer",
+        "Java Developer",
+        "Full Stack Developer",
+        "Backend Developer",
+        "Frontend Developer",
+        "Data Analyst",
+        "Data Scientist",
+        "Machine Learning Engineer",
+        "UI/UX Designer"
+    )
+
     fun getRequiredSkills(targetRole: String): List<String> {
         val trimmed = targetRole.trim()
         ROLE_SKILLS[trimmed]?.let { return it }
@@ -239,6 +365,86 @@ object RoleSkillsData {
             lower.contains("front") || lower.contains("web") -> ROLE_SKILLS["Frontend Developer"]!!
             lower.contains("ui") || lower.contains("ux") || lower.contains("design") -> ROLE_SKILLS["UI/UX Designer"]!!
             else -> ROLE_SKILLS["Android Developer"]!!
+        }
+    }
+
+    fun getSkillCategory(skill: String): String {
+        val s = skill.lowercase()
+        return when {
+            s in listOf("kotlin", "java", "python", "javascript", "typescript", "html", "css", "sql", "oop") -> "Languages & Core"
+            s in listOf("jetpack compose", "xml", "material design", "react", "figma", "wireframing", "prototyping", "responsive design", "design systems", "typography", "color theory", "ui/ux principles") -> "UI & Frameworks"
+            s in listOf("android sdk", "room database", "sqlite", "spring", "spring boot", "hibernate", "node.js", "express.js", "mongodb", "postgresql", "jdbc", "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch") -> "Architecture & Data"
+            else -> "Tools & DevOps"
+        }
+    }
+
+    fun getSkillPriority(skill: String, targetRole: String): SkillPriority {
+        val s = skill.lowercase()
+        val r = targetRole.lowercase()
+        return when {
+            r.contains("android") && s in listOf("kotlin", "jetpack compose", "android sdk", "room database") -> SkillPriority.CRITICAL
+            r.contains("java") && s in listOf("java", "spring boot", "multithreading", "sql") -> SkillPriority.CRITICAL
+            r.contains("full stack") && s in listOf("react", "node.js", "javascript", "sql") -> SkillPriority.CRITICAL
+            r.contains("data analyst") && s in listOf("sql", "python", "excel", "power bi") -> SkillPriority.CRITICAL
+            r.contains("data scientist") && s in listOf("python", "machine learning", "pandas", "statistics") -> SkillPriority.CRITICAL
+            r.contains("machine learning") && s in listOf("python", "machine learning", "deep learning", "pytorch", "tensorflow") -> SkillPriority.CRITICAL
+            r.contains("backend") && s in listOf("rest apis", "sql", "postgresql", "node.js", "spring boot") -> SkillPriority.CRITICAL
+            r.contains("frontend") && s in listOf("react", "typescript", "javascript", "css") -> SkillPriority.CRITICAL
+            r.contains("ui") && s in listOf("figma", "prototyping", "user research", "design systems") -> SkillPriority.CRITICAL
+            s in listOf("git", "rest apis", "json", "docker", "maven", "gradle") -> SkillPriority.HIGH
+            else -> SkillPriority.MEDIUM
+        }
+    }
+
+    fun getSkillWhyItMatters(skill: String, targetRole: String): String {
+        val s = skill.lowercase()
+        return when {
+            s == "kotlin" -> "Official and primary programming language for modern Android applications, ensuring null-safety and concise syntax."
+            s == "jetpack compose" -> "Google's standard declarative UI toolkit for Android, replacing legacy imperative XML layouts."
+            s == "android sdk" -> "Core Android framework foundation governing Activity/Fragment lifecycles, services, and system contracts."
+            s == "room database" -> "Standard SQLite ORM abstraction offering compile-time query verification and Flow-based reactive queries."
+            s == "rest apis" -> "Essential protocol for bidirectional client-server networking, authentication, and remote data synchronization."
+            s == "git" -> "Industry-standard version control system for multi-engineer branching, PR workflows, and codebase tracking."
+            s == "gradle" -> "Official Android build automation system managing dependencies, flavors, build types, and signing configurations."
+            s == "firebase" -> "Cloud backend suite powering real-time database, authentication, push notifications, and crash analytics."
+            s == "material design" -> "Google's canonical design specification ensuring accessible, responsive, and delightful Android UI components."
+            s == "sqlite" -> "Embedded relational database engine underlying local mobile persistence and caching."
+            s == "java" -> "Foundational enterprise and Android language critical for legacy interoperability and JVM fundamentals."
+            s == "spring boot" -> "Industry standard Java microservice framework providing rapid enterprise backend development and dependency injection."
+            s == "react" -> "Leading declarative component-driven UI library for web frontend architectures and state hydration."
+            s == "python" -> "Dominant language for data science, analytics, machine learning pipelines, and scripting automation."
+            s == "sql" -> "Universal relational query language indispensable for performant data retrieval, filtering, and aggregation."
+            s == "docker" -> "Standard container runtime for packaging microservices and ensuring reproducible deployment environments."
+            s == "figma" -> "Industry-standard collaborative design tool for high-fidelity wireframing, component libraries, and interactive prototypes."
+            else -> "Essential competency required to satisfy benchmark production standards for $targetRole positions."
+        }
+    }
+
+    fun getSkillLearningTips(skill: String): List<String> {
+        val s = skill.lowercase()
+        return when {
+            s == "kotlin" -> listOf("Master Coroutines & Kotlin Flows for asynchronous programming", "Explore Extension Functions, Sealed Interfaces, and Data Classes", "Build a small CLI or Kotlin Multiplatform utility")
+            s == "jetpack compose" -> listOf("Study State Hoisting and avoid unwanted recompositions with remember/derivedStateOf", "Implement custom layouts using SubcomposeLayout and LazyColumn", "Adopt Material 3 color schemes, typography, and shape tokens")
+            s == "room database" -> listOf("Write TypeConverters for complex JSON/Date objects", "Implement DAO methods returning reactive Flow<List<Entity>>", "Handle database migrations using Room Migration classes")
+            s == "android sdk" -> listOf("Deep dive into ViewModel, SavedStateHandle, and lifecycle-aware coroutine scopes", "Understand Foreground Services, WorkManager, and Notification channels", "Implement Dependency Injection with Hilt or Koin")
+            s == "rest apis" -> listOf("Build network clients with Retrofit/Ktor and Moshi/Kotlinx Serialization", "Implement Auth Interceptors with JWT bearer tokens", "Add offline caching using OkHttp Cache or Room fallback repository")
+            s == "git" -> listOf("Practice interactive rebasing (git rebase -i) and squash merging", "Configure GitHub Actions CI workflows for automated linting and unit tests", "Learn Git bisect for bug localization")
+            s == "gradle" -> listOf("Convert Groovy build scripts to Kotlin DSL (.gradle.kts)", "Implement Gradle Version Catalogs (libs.versions.toml)", "Configure ProGuard/R8 shrinking and obfuscation rules")
+            s == "firebase" -> listOf("Integrate Firebase Firestore with snapshot listeners", "Configure Firebase Auth with Google Sign-In and email verification", "Set up Firebase Cloud Messaging (FCM) push notifications")
+            else -> listOf("Review official documentation and architecture best practices", "Build an isolated proof-of-concept module in a sample repository", "Add unit and integration tests to validate edge cases")
+        }
+    }
+
+    fun getSkillSuggestedMilestone(skill: String): String {
+        val s = skill.lowercase()
+        return when {
+            s == "kotlin" -> "Implement an asynchronous background worker using Kotlin Coroutines and StateFlow."
+            s == "jetpack compose" -> "Build a reactive multi-screen dashboard with custom animations and Material 3 theme."
+            s == "room database" -> "Create an offline-first cache layer with relational DAOs and observable database queries."
+            s == "android sdk" -> "Architect an MVVM/MVI app with clean architecture separation and lifecycle observation."
+            s == "rest apis" -> "Integrate a public REST API with paging, token interceptors, and error handling."
+            s == "git" -> "Establish a GitHub repository with protected branches, PR templates, and CI test runner."
+            else -> "Develop a functional feature module demonstrating mastery in a production scenario."
         }
     }
 
@@ -294,10 +500,15 @@ class SkillGapViewModel(
     private val _state = MutableStateFlow(SkillGapState())
     val state: StateFlow<SkillGapState> = _state.asStateFlow()
 
-    private val _selectedSkillForDetail = MutableStateFlow<SkillItem?>(null)
-    val selectedSkillForDetail: StateFlow<SkillItem?> = _selectedSkillForDetail.asStateFlow()
+    private val _selectedSkillForDetail = MutableStateFlow<DetailedSkillItem?>(null)
+    val selectedSkillForDetail: StateFlow<DetailedSkillItem?> = _selectedSkillForDetail.asStateFlow()
 
     init {
+        refresh()
+    }
+
+    fun changeTargetRole(newRole: String) {
+        sessionManager.updateTargetRole(newRole)
         refresh()
     }
 
@@ -316,36 +527,177 @@ class SkillGapViewModel(
         }
 
         val required = RoleSkillsData.getRequiredSkills(role)
-        val userExtracted = (analysis.extractedSkills ?: emptyList()).map { it.name }
+        val extractedSkillsList = analysis.extractedSkills ?: emptyList()
+        val userExtractedNames = extractedSkillsList.map { it.name }
         
-        val matched = mutableListOf<String>()
-        val missing = mutableListOf<String>()
+        val strongList = mutableListOf<DetailedSkillItem>()
+        val developingList = mutableListOf<DetailedSkillItem>()
+        val missingList = mutableListOf<DetailedSkillItem>()
+        val allDetailedList = mutableListOf<DetailedSkillItem>()
 
-        required.forEach { req ->
-            if (RoleSkillsData.isSkillMatched(req, userExtracted)) {
-                matched.add(req)
+        val matchedNames = mutableListOf<String>()
+        val missingNames = mutableListOf<String>()
+
+        required.forEach { reqSkill ->
+            val isMatched = RoleSkillsData.isSkillMatched(reqSkill, userExtractedNames)
+            val matchedExtracted = extractedSkillsList.firstOrNull { 
+                RoleSkillsData.isSkillMatched(reqSkill, listOf(it.name)) 
+            }
+
+            val category = RoleSkillsData.getSkillCategory(reqSkill)
+            val priority = RoleSkillsData.getSkillPriority(reqSkill, role)
+            val whyItMatters = RoleSkillsData.getSkillWhyItMatters(reqSkill, role)
+            val tips = RoleSkillsData.getSkillLearningTips(reqSkill)
+            val milestone = RoleSkillsData.getSkillSuggestedMilestone(reqSkill)
+
+            if (isMatched) {
+                matchedNames.add(reqSkill)
+                val skillLevel = matchedExtracted?.level ?: 80
+                val evidence = matchedExtracted?.evidence 
+                    ?: "Detected in candidate profile and projects with verified relevance to $role."
+
+                val item = DetailedSkillItem(
+                    name = reqSkill,
+                    proficiency = if (skillLevel >= 65) SkillProficiency.STRONG else SkillProficiency.DEVELOPING,
+                    priority = priority,
+                    category = category,
+                    currentLevelPercent = skillLevel,
+                    targetLevelPercent = 100,
+                    whyItMatters = whyItMatters,
+                    evidenceOrReason = evidence,
+                    learningTips = tips,
+                    suggestedMilestone = milestone,
+                    isMatched = true,
+                    targetRole = role
+                )
+
+                if (item.proficiency == SkillProficiency.STRONG) {
+                    strongList.add(item)
+                } else {
+                    developingList.add(item)
+                }
+                allDetailedList.add(item)
             } else {
-                missing.add(req)
+                missingNames.add(reqSkill)
+                val item = DetailedSkillItem(
+                    name = reqSkill,
+                    proficiency = SkillProficiency.MISSING,
+                    priority = priority,
+                    category = category,
+                    currentLevelPercent = 0,
+                    targetLevelPercent = 100,
+                    whyItMatters = whyItMatters,
+                    evidenceOrReason = "Not detected in candidate profile. Recommended to acquire for $role competency baseline.",
+                    learningTips = tips,
+                    suggestedMilestone = milestone,
+                    isMatched = false,
+                    targetRole = role
+                )
+                missingList.add(item)
+                allDetailedList.add(item)
             }
         }
 
-        val allItems = required.map { req ->
-            SkillItem(
-                name = req,
-                isMatched = matched.contains(req),
-                targetRole = role
+        // Backward compatibility list
+        val allLegacyItems = allDetailedList.map { 
+            SkillItem(it.name, it.isMatched, role) 
+        }
+
+        // Calculate Category Coverages
+        val categories = listOf("Languages & Core", "UI & Frameworks", "Architecture & Data", "Tools & DevOps")
+        val categoryCoverages = categories.map { cat ->
+            val catSkills = allDetailedList.filter { it.category == cat }
+            val catTotal = catSkills.size
+            val catMatched = catSkills.count { it.isMatched }
+            val catPercent = if (catTotal > 0) (catMatched * 100) / catTotal else 100
+            SkillCategoryCoverage(
+                category = cat,
+                matchedCount = catMatched,
+                totalCount = catTotal,
+                percentage = catPercent
             )
         }
+
+        // Calculate Priority Learning Items (Critical missing first, then High missing, then Developing)
+        val priorityItems = (missingList + developingList).sortedWith(
+            compareBy(
+                { when(it.priority) {
+                    SkillPriority.CRITICAL -> 0
+                    SkillPriority.HIGH -> 1
+                    SkillPriority.MEDIUM -> 2
+                    SkillPriority.NICE_TO_HAVE -> 3
+                }},
+                { when(it.proficiency) {
+                    SkillProficiency.MISSING -> 0
+                    SkillProficiency.DEVELOPING -> 1
+                    SkillProficiency.STRONG -> 2
+                }}
+            )
+        )
+
+        // Generate 4-Phase Learning Roadmap (Start -> Build -> Practice -> Apply)
+        val phase1Skills = allDetailedList.filter { it.category == "Languages & Core" }.map { it.name }.take(3)
+        val phase2Skills = allDetailedList.filter { it.category == "UI & Frameworks" }.map { it.name }.take(3)
+        val phase3Skills = allDetailedList.filter { it.category == "Architecture & Data" }.map { it.name }.take(3)
+        val phase4Skills = allDetailedList.filter { it.category == "Tools & DevOps" || it.priority == SkillPriority.CRITICAL }.map { it.name }.take(3)
+
+        val roadmapPhases = listOf(
+            LearningRoadmapPhase(
+                phaseNumber = 1,
+                phaseTitle = "Start",
+                stageName = "Foundation & Core Syntax",
+                focusSkills = phase1Skills.ifEmpty { listOf("Core Syntax", "Type Safety", "OOP & Fundamentals") },
+                description = "Master fundamental language semantics, asynchronous primitives, and type system conventions.",
+                suggestedProject = "Build a standalone modular algorithm suite and data parser repository."
+            ),
+            LearningRoadmapPhase(
+                phaseNumber = 2,
+                phaseTitle = "Build",
+                stageName = "Frameworks & Modern UI",
+                focusSkills = phase2Skills.ifEmpty { listOf("Declarative UI", "Component Trees", "Responsive Layouts") },
+                description = "Construct reactive user interfaces, component design systems, and responsive screen hierarchy.",
+                suggestedProject = "Create an interactive dashboard with smooth transitions and stateful user interaction flows."
+            ),
+            LearningRoadmapPhase(
+                phaseNumber = 3,
+                phaseTitle = "Practice",
+                stageName = "Architecture & Data Layer",
+                focusSkills = phase3Skills.ifEmpty { listOf("Persistence Layer", "REST Networking", "Clean MVVM") },
+                description = "Implement local persistence caches, background sync workers, and remote REST communication channels.",
+                suggestedProject = "Engineer an offline-first data sync client with relational queries and repository caching."
+            ),
+            LearningRoadmapPhase(
+                phaseNumber = 4,
+                phaseTitle = "Apply",
+                stageName = "Production Readiness & Capstone",
+                focusSkills = phase4Skills.ifEmpty { listOf("CI/CD Pipeline", "Testing Suite", "Portfolio Deployment") },
+                description = "Enforce unit/UI testing suites, automated CI pipelines, and publish an end-to-end portfolio product.",
+                suggestedProject = "Deploy a production-ready end-to-end mobile/web application with automated testing."
+            )
+        )
+
+        val totalSkills = required.size
+        val effectiveMatched = strongList.size + (developingList.size * 0.5f)
+        val readinessScore = if (totalSkills > 0) ((effectiveMatched / totalSkills) * 100).toInt().coerceIn(0, 100) else 0
 
         _state.value = SkillGapState(
             targetRole = role,
             hasAnalysis = true,
-            totalRequired = required.size,
-            matchedCount = matched.size,
-            missingCount = missing.size,
-            matchedSkills = matched,
-            missingSkills = missing,
-            allSkills = allItems,
+            readinessPercentage = readinessScore,
+            totalRequired = totalSkills,
+            matchedCount = strongList.size,
+            developingCount = developingList.size,
+            missingCount = missingList.size,
+            strongSkills = strongList,
+            developingSkills = developingList,
+            missingSkills = missingList,
+            allSkillsDetailed = allDetailedList,
+            categoryCoverage = categoryCoverages,
+            priorityLearningItems = priorityItems,
+            learningPath = roadmapPhases,
+            matchedSkillNames = matchedNames,
+            missingSkillNames = missingNames,
+            allSkills = allLegacyItems,
             filter = _state.value.filter
         )
     }
@@ -354,8 +706,30 @@ class SkillGapViewModel(
         _state.value = _state.value.copy(filter = filter)
     }
 
-    fun selectSkill(skill: SkillItem) {
+    fun selectDetailedSkill(skill: DetailedSkillItem) {
         _selectedSkillForDetail.value = skill
+    }
+
+    fun dismissDetailedSkill() {
+        _selectedSkillForDetail.value = null
+    }
+
+    fun selectSkill(skill: SkillItem) {
+        val found = _state.value.allSkillsDetailed.firstOrNull { it.name == skill.name }
+        if (found != null) {
+            _selectedSkillForDetail.value = found
+        } else {
+            _selectedSkillForDetail.value = DetailedSkillItem(
+                name = skill.name,
+                proficiency = if (skill.isMatched) SkillProficiency.STRONG else SkillProficiency.MISSING,
+                priority = SkillPriority.MEDIUM,
+                category = "General",
+                currentLevelPercent = if (skill.isMatched) 80 else 0,
+                whyItMatters = "Required skill for ${skill.targetRole}",
+                evidenceOrReason = if (skill.isMatched) "Detected in profile." else "Missing from profile.",
+                targetRole = skill.targetRole
+            )
+        }
     }
 
     fun dismissSkillDetail() {
@@ -392,6 +766,16 @@ class ResumeViewModel(
         _errorMessage.value = null
     }
 
+    fun removeFile() {
+        selectedUri = null
+        _selectedFileName.value = null
+        _errorMessage.value = null
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
     fun analyzeResume(targetRole: String) {
         Log.d(TAG, "ANALYZE_BUTTON_CLICKED: TargetRole: $targetRole")
         
@@ -405,7 +789,7 @@ class ResumeViewModel(
             _isLoading.value = true
             _errorMessage.value = null
             try {
-                _loadingStage.value = "Parsing Resume..."
+                _loadingStage.value = "Parsing Resume Document..."
                 Log.d(TAG, "RESUME_PARSING_STARTED")
                 val text = resumeParser.extractText(uri)
                 val candidateInfo = resumeParser.parseCandidateInfo(text)
@@ -416,13 +800,16 @@ class ResumeViewModel(
                 } else if (text.isNotBlank()) {
                     Log.d(TAG, "RESUME_TEXT_EXTRACTED: Length: ${text.length}")
                     
-                    _loadingStage.value = "Analyzing with AstraAI..."
+                    _loadingStage.value = "Extracting Skills & Experience..."
+                    kotlinx.coroutines.delay(300)
+                    _loadingStage.value = "Evaluating ATS Deterministic Rules..."
+                    
                     try {
                         Log.d(TAG, "GEMINI_ANALYSIS_STARTED")
                         val result = geminiService.analyzeResume(text, targetRole)
                         
                         if (result != null) {
-                            _loadingStage.value = "Finalizing Results..."
+                            _loadingStage.value = "Finalizing Career Intelligence Profile..."
                             Log.d(TAG, "GEMINI_RESPONSE_RECEIVED")
                             val enrichedResult = result.copy(
                                 candidateName = candidateInfo.name ?: result.candidateName,
