@@ -214,11 +214,11 @@ class AtsViewModel(
 }
 
 enum class SkillFilter {
-    ALL, MATCHED, TO_IMPROVE, MISSING
+    ALL, PRESENT, MISSING
 }
 
 enum class SkillProficiency {
-    STRONG, DEVELOPING, MISSING
+    PRESENT, MISSING
 }
 
 enum class SkillPriority {
@@ -230,13 +230,13 @@ data class DetailedSkillItem(
     val proficiency: SkillProficiency,
     val priority: SkillPriority,
     val category: String,
-    val currentLevelPercent: Int,
+    val currentLevelPercent: Int = if (proficiency == SkillProficiency.PRESENT) 100 else 0,
     val targetLevelPercent: Int = 100,
     val whyItMatters: String,
     val evidenceOrReason: String,
     val learningTips: List<String> = emptyList(),
     val suggestedMilestone: String = "",
-    val isMatched: Boolean = proficiency == SkillProficiency.STRONG || proficiency == SkillProficiency.DEVELOPING,
+    val isMatched: Boolean = proficiency == SkillProficiency.PRESENT,
     val targetRole: String = ""
 )
 
@@ -270,6 +270,8 @@ data class SkillGapState(
     val matchedCount: Int = 0,
     val developingCount: Int = 0,
     val missingCount: Int = 0,
+    val presentCount: Int = 0,
+    val presentSkills: List<DetailedSkillItem> = emptyList(),
     val strongSkills: List<DetailedSkillItem> = emptyList(),
     val developingSkills: List<DetailedSkillItem> = emptyList(),
     val missingSkills: List<DetailedSkillItem> = emptyList(),
@@ -530,8 +532,7 @@ class SkillGapViewModel(
         val extractedSkillsList = analysis.extractedSkills ?: emptyList()
         val userExtractedNames = extractedSkillsList.map { it.name }
         
-        val strongList = mutableListOf<DetailedSkillItem>()
-        val developingList = mutableListOf<DetailedSkillItem>()
+        val presentList = mutableListOf<DetailedSkillItem>()
         val missingList = mutableListOf<DetailedSkillItem>()
         val allDetailedList = mutableListOf<DetailedSkillItem>()
 
@@ -552,16 +553,15 @@ class SkillGapViewModel(
 
             if (isMatched) {
                 matchedNames.add(reqSkill)
-                val skillLevel = matchedExtracted?.level ?: 80
                 val evidence = matchedExtracted?.evidence 
                     ?: "Detected in candidate profile and projects with verified relevance to $role."
 
                 val item = DetailedSkillItem(
                     name = reqSkill,
-                    proficiency = if (skillLevel >= 65) SkillProficiency.STRONG else SkillProficiency.DEVELOPING,
+                    proficiency = SkillProficiency.PRESENT,
                     priority = priority,
                     category = category,
-                    currentLevelPercent = skillLevel,
+                    currentLevelPercent = 100,
                     targetLevelPercent = 100,
                     whyItMatters = whyItMatters,
                     evidenceOrReason = evidence,
@@ -571,11 +571,7 @@ class SkillGapViewModel(
                     targetRole = role
                 )
 
-                if (item.proficiency == SkillProficiency.STRONG) {
-                    strongList.add(item)
-                } else {
-                    developingList.add(item)
-                }
+                presentList.add(item)
                 allDetailedList.add(item)
             } else {
                 missingNames.add(reqSkill)
@@ -587,7 +583,7 @@ class SkillGapViewModel(
                     currentLevelPercent = 0,
                     targetLevelPercent = 100,
                     whyItMatters = whyItMatters,
-                    evidenceOrReason = "Not detected in candidate profile. Recommended to acquire for $role competency baseline.",
+                    evidenceOrReason = "Not detected in candidate resume. Required for $role competency.",
                     learningTips = tips,
                     suggestedMilestone = milestone,
                     isMatched = false,
@@ -618,21 +614,14 @@ class SkillGapViewModel(
             )
         }
 
-        // Calculate Priority Learning Items (Critical missing first, then High missing, then Developing)
-        val priorityItems = (missingList + developingList).sortedWith(
-            compareBy(
-                { when(it.priority) {
-                    SkillPriority.CRITICAL -> 0
-                    SkillPriority.HIGH -> 1
-                    SkillPriority.MEDIUM -> 2
-                    SkillPriority.NICE_TO_HAVE -> 3
-                }},
-                { when(it.proficiency) {
-                    SkillProficiency.MISSING -> 0
-                    SkillProficiency.DEVELOPING -> 1
-                    SkillProficiency.STRONG -> 2
-                }}
-            )
+        // Calculate Priority Learning Items (Critical missing first, then High missing)
+        val priorityItems = missingList.sortedWith(
+            compareBy { when(it.priority) {
+                SkillPriority.CRITICAL -> 0
+                SkillPriority.HIGH -> 1
+                SkillPriority.MEDIUM -> 2
+                SkillPriority.NICE_TO_HAVE -> 3
+            }}
         )
 
         // Generate 4-Phase Learning Roadmap (Start -> Build -> Practice -> Apply)
@@ -677,19 +666,21 @@ class SkillGapViewModel(
         )
 
         val totalSkills = required.size
-        val effectiveMatched = strongList.size + (developingList.size * 0.5f)
-        val readinessScore = if (totalSkills > 0) ((effectiveMatched / totalSkills) * 100).toInt().coerceIn(0, 100) else 0
+        val matchedCount = presentList.size
+        val readinessScore = if (totalSkills > 0) ((matchedCount * 100) / totalSkills).coerceIn(0, 100) else 0
 
         _state.value = SkillGapState(
             targetRole = role,
             hasAnalysis = true,
             readinessPercentage = readinessScore,
             totalRequired = totalSkills,
-            matchedCount = strongList.size,
-            developingCount = developingList.size,
+            presentCount = presentList.size,
+            matchedCount = presentList.size,
+            developingCount = 0,
             missingCount = missingList.size,
-            strongSkills = strongList,
-            developingSkills = developingList,
+            presentSkills = presentList,
+            strongSkills = presentList,
+            developingSkills = emptyList(),
             missingSkills = missingList,
             allSkillsDetailed = allDetailedList,
             categoryCoverage = categoryCoverages,
@@ -721,10 +712,10 @@ class SkillGapViewModel(
         } else {
             _selectedSkillForDetail.value = DetailedSkillItem(
                 name = skill.name,
-                proficiency = if (skill.isMatched) SkillProficiency.STRONG else SkillProficiency.MISSING,
+                proficiency = if (skill.isMatched) SkillProficiency.PRESENT else SkillProficiency.MISSING,
                 priority = SkillPriority.MEDIUM,
                 category = "General",
-                currentLevelPercent = if (skill.isMatched) 80 else 0,
+                currentLevelPercent = if (skill.isMatched) 100 else 0,
                 whyItMatters = "Required skill for ${skill.targetRole}",
                 evidenceOrReason = if (skill.isMatched) "Detected in profile." else "Missing from profile.",
                 targetRole = skill.targetRole

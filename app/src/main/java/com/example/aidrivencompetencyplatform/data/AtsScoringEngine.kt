@@ -37,13 +37,29 @@ class AtsScoringEngine {
         // 4. Card 4: Parsing Accuracy (20%)
         val parsingCalc = calculateParsingAccuracy(result, candidateName, candidateEmail, candidatePhone, candidateLocation)
 
-        // Final ATS Score Formula: (Keyword × 0.35) + (Structure × 0.25) + (Formatting × 0.20) + (Parsing × 0.20)
-        val finalScore = (
+        // Base weighted sum: (Keyword × 0.35) + (Structure × 0.25) + (Formatting × 0.20) + (Parsing × 0.20)
+        val weightedSum = (
             (keywordCalc.score * WEIGHT_KEYWORD) +
             (structureCalc.score * WEIGHT_STRUCTURE) +
             (formattingCalc.score * WEIGHT_FORMATTING) +
             (parsingCalc.score * WEIGHT_PARSING)
-        ).roundToInt().coerceIn(0, 100)
+        )
+
+        // In real-world ATS screening, a zero score in any fundamental pillar (0% keywords, 0% parsing accuracy, etc.)
+        // represents a fatal disqualification. A resume with 0 keywords or 0 parsing cannot pass ATS screening.
+        val zeroCategoryCount = listOf(keywordCalc.score, structureCalc.score, formattingCalc.score, parsingCalc.score).count { it == 0 }
+
+        val finalScore = when {
+            zeroCategoryCount >= 2 -> 0
+            zeroCategoryCount == 1 -> {
+                // If any single core feature has a score of 0, apply strict disqualification penalty (capped at 20)
+                (weightedSum * 0.30).roundToInt().coerceIn(0, 20)
+            }
+            keywordCalc.score < 25 || parsingCalc.score < 25 -> {
+                (weightedSum * 0.60).roundToInt().coerceIn(0, 45)
+            }
+            else -> weightedSum.roundToInt().coerceIn(0, 100)
+        }
 
         val priorityFixes = mutableListOf<String>()
         if (keywordCalc.score < 70) {
@@ -121,20 +137,22 @@ class AtsScoringEngine {
         }
 
         val weightedContribution = Math.round(score * WEIGHT_KEYWORD * 10.0) / 10.0
-        val formulaText = "(Matched Relevant Keywords / Total Relevant Keywords) × 100"
-        val calculationText = "$matchedCount / $totalKeywords × 100 = $score"
-        val resultText = "$score% keyword match ($matchedCount of $totalKeywords relevant keywords detected)"
+        val formulaText = "(Matched Keywords / Required Role Benchmarks) × 100"
+        val calculationText = "$matchedCount / $totalKeywords × 100 = $score%"
+        val resultText = "$score% keyword match ($matchedCount of $totalKeywords required keywords detected for $role)"
 
         val status = when {
             score >= 80 -> "Strong Match"
             score >= 60 -> "Moderate Match"
-            else -> "Low Match"
+            score > 0 -> "Low Match"
+            else -> "No Match (0%)"
         }
 
         val summary = when {
-            score >= 80 -> "Strong keyword alignment for $role"
-            score >= 60 -> "Good keyword match with a few key gaps"
-            else -> "Low keyword coverage for $role"
+            score == 0 -> "0% keyword match: None of the required $totalKeywords benchmark keywords for $role were found."
+            score < 50 -> "Critical keyword deficit: Only $matchedCount of $totalKeywords target keywords identified."
+            score < 80 -> "Moderate keyword coverage: $matchedCount of $totalKeywords required skills present."
+            else -> "Strong keyword alignment with $matchedCount of $totalKeywords target skills matched."
         }
 
         val recommendations = mutableListOf<String>()
@@ -208,20 +226,22 @@ class AtsScoringEngine {
 
         val score = ((detected.size.toDouble() / totalExpected.toDouble()) * 100).roundToInt().coerceIn(0, 100)
         val weightedContribution = Math.round(score * WEIGHT_STRUCTURE * 10.0) / 10.0
-        val formulaText = "(Detected Required/Relevant Sections / Expected Sections) × 100"
-        val calculationText = "${detected.size} / $totalExpected × 100 = $score"
+        val formulaText = "(Recognized Standard Sections / Total Standard Sections) × 100"
+        val calculationText = "${detected.size} / $totalExpected × 100 = $score%"
         val resultText = "$score% structural completeness (${detected.size} of $totalExpected standard sections detected)"
 
         val status = when {
             score >= 85 -> "Excellent"
             score >= 70 -> "Good"
-            else -> "Incomplete"
+            score > 0 -> "Incomplete"
+            else -> "Missing Structure (0%)"
         }
 
         val summary = when {
-            score >= 85 -> "Complete and well-organized resume structure"
-            score >= 70 -> "Standard structure with minor missing sections"
-            else -> "Missing important standard resume sections"
+            score == 0 -> "0% structure score: No standard ATS section headers were detected in the document."
+            score < 60 -> "Incomplete section layout: Missing ${missing.joinToString(", ")}."
+            score < 85 -> "Standard structure: ${detected.size} of $totalExpected sections identified, with minor gaps."
+            else -> "Well-organized structure: ${detected.size} of $totalExpected standard ATS sections clearly delineated."
         }
 
         val recommendations = mutableListOf<String>()
@@ -255,15 +275,15 @@ class AtsScoringEngine {
     private fun calculateFormattingSafety(result: ResumeAnalysisResult): AtsCardCalculation {
         val risks = (result.formattingRisks ?: emptyList()).distinct()
         
-        // Formatting penalty calculation (15 pts per detected risk)
-        val penalty = (risks.size * 15).coerceAtMost(100)
+        // Formatting penalty calculation (20 pts per detected risk)
+        val penalty = (risks.size * 20).coerceAtMost(100)
         val score = (100 - penalty).coerceIn(0, 100)
         val weightedContribution = Math.round(score * WEIGHT_FORMATTING * 10.0) / 10.0
 
-        val formulaText = "100 − Formatting Penalty"
-        val calculationText = "100 − $penalty = $score"
+        val formulaText = "100 − (Formatting Risks × 20)"
+        val calculationText = if (risks.isEmpty()) "100 − 0 = 100%" else "100 − $penalty = $score%"
         val resultText = if (risks.isEmpty()) {
-            "$score% formatting safety (0 parsing risks detected)"
+            "100% formatting safety (0 parsing risks detected)"
         } else {
             "$score% formatting safety (${risks.size} potential parsing risks detected)"
         }
@@ -282,13 +302,14 @@ class AtsScoringEngine {
         val status = when {
             score >= 85 -> "Safe"
             score >= 70 -> "Moderate Risk"
-            else -> "High Risk"
+            score > 0 -> "High Risk"
+            else -> "Critical Formatting Risk (0%)"
         }
 
         val summary = when {
-            score >= 85 -> "ATS-friendly and safely readable format"
-            score >= 70 -> "Moderate safety with minor formatting risks"
-            else -> "High risk of ATS parsing disruption"
+            risks.isEmpty() -> "100% ATS-safe layout: Single-column text without tables, columns, or graphic blockers."
+            risks.size == 1 -> "1 formatting risk detected: ${risks.first()}."
+            else -> "${risks.size} formatting risks detected: ${risks.take(2).joinToString(", ")}."
         }
 
         val recommendations = mutableListOf<String>()
@@ -329,7 +350,6 @@ class AtsScoringEngine {
     ): AtsCardCalculation {
         val details = result.parsingAccuracyDetails
 
-        // Distinguish available fields vs successfully parsed fields from actual resume data
         val parsedFields = mutableListOf<String>()
         val unparsedFields = mutableListOf<String>()
         val unavailableFields = mutableListOf<String>()
@@ -410,25 +430,26 @@ class AtsScoringEngine {
             evidence.add(AtsDetailItem("Projects", false, "No projects extracted"))
         }
 
-        // Available fields are those that are parsed or expected to be present
         val availableFieldsCount = (parsedFields.size + unparsedFields.size).coerceAtLeast(1)
         val score = ((parsedFields.size.toDouble() / availableFieldsCount.toDouble()) * 100).roundToInt().coerceIn(0, 100)
         val weightedContribution = Math.round(score * WEIGHT_PARSING * 10.0) / 10.0
 
-        val formulaText = "(Successfully Extracted Expected Fields / Expected Fields Available in Resume) × 100"
-        val calculationText = "${parsedFields.size} / $availableFieldsCount × 100 = $score"
-        val resultText = "$score% parsing accuracy (${parsedFields.size} of $availableFieldsCount available fields extracted)"
+        val formulaText = "(Extracted Fields / Total Available Target Fields) × 100"
+        val calculationText = "${parsedFields.size} / $availableFieldsCount × 100 = $score%"
+        val resultText = "$score% parsing accuracy (${parsedFields.size} of $availableFieldsCount target fields extracted)"
 
         val status = when {
             score >= 85 -> "High Accuracy"
             score >= 70 -> "Moderate Accuracy"
-            else -> "Low Accuracy"
+            score > 0 -> "Low Accuracy"
+            else -> "Extraction Failed (0%)"
         }
 
         val summary = when {
-            score >= 85 -> "High-fidelity AI data extraction"
-            score >= 70 -> "Good data extraction with minor field gaps"
-            else -> "Incomplete data extraction from resume text"
+            score == 0 -> "0% parsing accuracy: Crucial fields could not be extracted from the resume text."
+            score < 60 -> "Partial data extraction: Extracted ${parsedFields.size} of $availableFieldsCount fields (${unparsedFields.joinToString(", ")} missing)."
+            score < 85 -> "Good extraction fidelity: ${parsedFields.size} of $availableFieldsCount standard fields recognized."
+            else -> "High-fidelity AI parsing: ${parsedFields.size} of $availableFieldsCount candidate fields extracted with full accuracy."
         }
 
         val recommendations = mutableListOf<String>()
@@ -462,33 +483,63 @@ class AtsScoringEngine {
         return when {
             roleLower.contains("android") -> RoleBenchmark(
                 "Android Developer",
-                listOf("Kotlin", "Java", "Android SDK", "Coroutines"),
-                listOf("Jetpack Compose", "MVVM", "Retrofit", "Hilt", "Room"),
-                listOf("Git", "Android Studio", "JUnit", "Gradle")
+                listOf("Kotlin", "Java", "Android SDK", "Jetpack Compose"),
+                listOf("Room Database", "Material Design", "REST APIs", "JSON"),
+                listOf("Git", "Gradle", "Android Studio", "Firebase", "SQLite")
             )
-            roleLower.contains("frontend") || roleLower.contains("react") || roleLower.contains("web") -> RoleBenchmark(
+            roleLower.contains("full stack") || roleLower.contains("fullstack") || roleLower.contains("mern") -> RoleBenchmark(
+                "Full Stack Developer",
+                listOf("HTML", "CSS", "JavaScript", "React", "Node.js"),
+                listOf("Express.js", "REST APIs", "SQL", "MongoDB"),
+                listOf("Git", "Docker", "Authentication")
+            )
+            roleLower.contains("java") -> RoleBenchmark(
+                "Java Developer",
+                listOf("Java", "OOP", "Collections", "Multithreading"),
+                listOf("Spring", "Spring Boot", "Hibernate", "REST APIs", "JDBC"),
+                listOf("SQL", "Maven", "Git")
+            )
+            roleLower.contains("data analyst") -> RoleBenchmark(
+                "Data Analyst",
+                listOf("Python", "SQL", "Excel", "Statistics"),
+                listOf("Pandas", "NumPy", "Data Visualization", "Data Cleaning"),
+                listOf("Power BI", "Tableau", "Git")
+            )
+            roleLower.contains("data scientist") -> RoleBenchmark(
+                "Data Scientist",
+                listOf("Python", "SQL", "Statistics", "Probability"),
+                listOf("Pandas", "NumPy", "Scikit-learn", "Machine Learning", "Data Visualization"),
+                listOf("Feature Engineering", "Model Evaluation", "Git")
+            )
+            roleLower.contains("machine learning") || roleLower.contains("ml") -> RoleBenchmark(
+                "Machine Learning Engineer",
+                listOf("Python", "Machine Learning", "Deep Learning"),
+                listOf("NumPy", "Pandas", "Scikit-learn", "TensorFlow", "PyTorch"),
+                listOf("SQL", "Git", "Model Deployment", "REST APIs")
+            )
+            roleLower.contains("frontend") || roleLower.contains("web") -> RoleBenchmark(
                 "Frontend Developer",
-                listOf("JavaScript", "TypeScript", "HTML", "CSS"),
-                listOf("React", "Next.js", "Redux", "Tailwind", "REST API"),
-                listOf("Webpack", "Git", "Jest", "Vite")
+                listOf("HTML", "CSS", "JavaScript", "React", "TypeScript"),
+                listOf("Responsive Design", "REST APIs", "UI/UX Principles"),
+                listOf("Git", "Testing")
             )
-            roleLower.contains("backend") || roleLower.contains("node") || roleLower.contains("spring") -> RoleBenchmark(
+            roleLower.contains("backend") -> RoleBenchmark(
                 "Backend Developer",
                 listOf("Java", "Python", "Node.js", "SQL"),
-                listOf("Spring Boot", "Express", "PostgreSQL", "Microservices", "REST API"),
-                listOf("Docker", "AWS", "CI/CD", "Git")
+                listOf("REST APIs", "PostgreSQL", "MongoDB", "Spring Boot"),
+                listOf("Authentication", "Git", "Docker")
             )
-            roleLower.contains("data") || roleLower.contains("ai") || roleLower.contains("ml") || roleLower.contains("machine learning") -> RoleBenchmark(
-                "Data / ML Engineer",
-                listOf("Python", "SQL", "Machine Learning", "Statistics"),
-                listOf("TensorFlow", "PyTorch", "Pandas", "NumPy", "Scikit-Learn"),
-                listOf("Git", "Jupyter", "Docker", "Cloud")
+            roleLower.contains("ui") || roleLower.contains("ux") || roleLower.contains("design") -> RoleBenchmark(
+                "UI/UX Designer",
+                listOf("Figma", "Wireframing", "Prototyping", "User Research"),
+                listOf("User Flows", "Interaction Design", "Visual Design", "Design Systems"),
+                listOf("Typography", "Color Theory", "Usability Testing")
             )
             else -> RoleBenchmark(
-                "Software Professional",
-                listOf("Problem Solving", "Communication", "Software Engineering"),
-                listOf("Agile", "System Design", "Testing"),
-                listOf("Git", "Documentation", "Collaboration")
+                "Software Engineer",
+                listOf("Problem Solving", "Data Structures", "Algorithms", "Software Engineering"),
+                listOf("System Design", "REST APIs", "Database", "Testing"),
+                listOf("Git", "CI/CD", "Docker")
             )
         }
     }
