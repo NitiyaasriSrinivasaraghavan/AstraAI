@@ -4,8 +4,11 @@ import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Email
@@ -22,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +40,11 @@ import com.example.aidrivencompetencyplatform.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+private fun isValidEmail(email: String): Boolean {
+    val trimmed = email.trim()
+    return trimmed.isNotEmpty() && trimmed.contains("@") && trimmed.contains(".") && !trimmed.startsWith("@") && !trimmed.endsWith("@") && trimmed.length >= 5
+}
 
 @Composable
 fun SplashScreen(navController: NavController) {
@@ -116,6 +126,7 @@ fun LoginScreen(navController: NavController) {
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -125,9 +136,11 @@ fun LoginScreen(navController: NavController) {
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Surface(
                 shape = CircleShape,
@@ -158,20 +171,48 @@ fun LoginScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(28.dp))
             
-            AstraCard {
+            AstraCard(modifier = Modifier.fillMaxWidth()) {
+                if (errorMessage != null) {
+                    Surface(
+                        color = ErrorRed.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = ErrorRed,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+
                 AuthTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { 
+                        email = it
+                        if (errorMessage != null) errorMessage = null
+                    },
                     label = "Email Address",
-                    icon = Icons.Default.Email
+                    icon = Icons.Default.Email,
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 AuthTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { 
+                        password = it
+                        if (errorMessage != null) errorMessage = null
+                    },
                     label = "Password",
                     icon = Icons.Default.Lock,
-                    isPassword = true
+                    isPassword = true,
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 
@@ -182,29 +223,35 @@ fun LoginScreen(navController: NavController) {
                         val trimmedPassword = password.trim()
 
                         if (trimmedEmail.isBlank()) {
-                            Toast.makeText(context, "Please enter your email address.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Please enter your email address."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
-                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
-                            Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
+                        if (!isValidEmail(trimmedEmail)) {
+                            errorMessage = "Please enter a valid email address."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
                         if (trimmedPassword.isBlank()) {
-                            Toast.makeText(context, "Please enter your password.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Please enter your password."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
 
                         val user = sessionManager.getUser(trimmedEmail)
                         if (user == null) {
-                            Toast.makeText(context, "No account found with this email. Please sign up.", Toast.LENGTH_LONG).show()
+                            errorMessage = "No account found with this email. Please sign up."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                         } else if (sessionManager.authenticate(trimmedEmail, trimmedPassword)) {
+                            errorMessage = null
                             sessionManager.login(trimmedEmail)
                             Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
                             navController.navigate(Screen.Dashboard.route) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         } else {
-                            Toast.makeText(context, "Incorrect password. Please try again.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Incorrect password. Please try again."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -226,6 +273,7 @@ fun SignupScreen(navController: NavController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
@@ -239,9 +287,11 @@ fun SignupScreen(navController: NavController) {
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Surface(
                 shape = CircleShape,
@@ -272,35 +322,73 @@ fun SignupScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(28.dp))
             
-            AstraCard {
+            AstraCard(modifier = Modifier.fillMaxWidth()) {
+                if (errorMessage != null) {
+                    Surface(
+                        color = ErrorRed.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = ErrorRed,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+
                 AuthTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { 
+                        name = it 
+                        if (errorMessage != null) errorMessage = null
+                    },
                     label = "Full Name",
-                    icon = Icons.Default.Person
+                    icon = Icons.Default.Person,
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Next
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { 
+                        email = it 
+                        if (errorMessage != null) errorMessage = null
+                    },
                     label = "Email Address",
-                    icon = Icons.Default.Email
+                    icon = Icons.Default.Email,
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { 
+                        password = it 
+                        if (errorMessage != null) errorMessage = null
+                    },
                     label = "Password",
                     icon = Icons.Default.Lock,
-                    isPassword = true
+                    isPassword = true,
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Next
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = confirmPassword,
-                    onValueChange = { confirmPassword = it },
+                    onValueChange = { 
+                        confirmPassword = it 
+                        if (errorMessage != null) errorMessage = null
+                    },
                     label = "Confirm Password",
                     icon = Icons.Default.Lock,
-                    isPassword = true
+                    isPassword = true,
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 
@@ -313,29 +401,35 @@ fun SignupScreen(navController: NavController) {
                         val trimmedConfirmPassword = confirmPassword.trim()
                         
                         if (trimmedName.isBlank()) {
-                            Toast.makeText(context, "Please enter your full name.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Please enter your full name."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
                         if (trimmedEmail.isBlank()) {
-                            Toast.makeText(context, "Please enter your email address.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Please enter your email address."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
-                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
-                            Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
+                        if (!isValidEmail(trimmedEmail)) {
+                            errorMessage = "Please enter a valid email address."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
                         if (trimmedPassword.length < 4) {
-                            Toast.makeText(context, "Password must be at least 4 characters.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Password must be at least 4 characters."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
                         if (trimmedPassword != trimmedConfirmPassword) {
-                            Toast.makeText(context, "Passwords do not match.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Passwords do not match."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
 
                         val existingUser = sessionManager.getUser(trimmedEmail)
                         if (existingUser != null) {
-                            Toast.makeText(context, "An account with this email already exists. Please sign in.", Toast.LENGTH_LONG).show()
+                            errorMessage = "An account with this email already exists. Please sign in."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                             return@PremiumButton
                         }
 
@@ -343,12 +437,14 @@ fun SignupScreen(navController: NavController) {
                         val newUser = User(name = trimmedName, email = trimmedEmail, password = trimmedPassword)
                         val success = sessionManager.register(newUser)
                         if (success) {
+                            errorMessage = null
                             Toast.makeText(context, "Account created successfully! Please sign in.", Toast.LENGTH_SHORT).show()
                             navController.navigate(Screen.Login.route) {
                                 popUpTo(Screen.Signup.route) { inclusive = true }
                             }
                         } else {
-                            Toast.makeText(context, "Failed to create account. Please try again.", Toast.LENGTH_SHORT).show()
+                            errorMessage = "Failed to create account. Please try again."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -372,7 +468,9 @@ fun AuthTextField(
     label: String,
     icon: ImageVector,
     isPassword: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    imeAction: ImeAction = ImeAction.Default
 ) {
     OutlinedTextField(
         value = value,
@@ -383,7 +481,14 @@ fun AuthTextField(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         enabled = enabled,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = imeAction
+        ),
         colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
             focusedBorderColor = Primary,
             unfocusedBorderColor = BorderColor,
             focusedContainerColor = SurfaceVariant,
@@ -391,3 +496,4 @@ fun AuthTextField(
         )
     )
 }
+
