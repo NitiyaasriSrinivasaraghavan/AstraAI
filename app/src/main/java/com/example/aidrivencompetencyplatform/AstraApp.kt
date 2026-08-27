@@ -15,7 +15,6 @@ class AstraApp : Application() {
     override fun onCreate() {
         super.onCreate()
         sessionManager = SessionManager(this)
-        sessionManager.clearAllDataIfNeeded()
         preferenceManager = PreferenceManager(this)
         resumeParser = ResumeParser(this)
         geminiService = GeminiService()

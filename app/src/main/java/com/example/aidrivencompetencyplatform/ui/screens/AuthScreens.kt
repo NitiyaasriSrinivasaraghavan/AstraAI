@@ -36,41 +36,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private val EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$".toRegex()
-
 @Composable
 fun SplashScreen(navController: NavController) {
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
     val sessionManager = remember { app.sessionManager }
-    val preferenceManager = remember { app.preferenceManager }
-    val scale = remember { Animatable(0f) }
+    val scale = remember { Animatable(0.8f) }
 
-    LaunchedEffect(key1 = true) {
+    LaunchedEffect(Unit) {
         scale.animateTo(
-            targetValue = 1.1f,
-            animationSpec = tween(
-                durationMillis = 900,
-                easing = { OvershootInterpolator(2f).getInterpolation(it) }
-            )
+            targetValue = 1.0f,
+            animationSpec = tween(durationMillis = 300)
         )
-        delay(1200L)
-        
-        val hasCompletedTour = try {
-            preferenceManager.hasCompletedAppTour.first()
-        } catch (e: Exception) {
-            true
-        }
+        delay(200L)
         
         if (sessionManager.isLoggedIn()) {
-            if (!hasCompletedTour) {
-                navController.navigate(Screen.AppTour.route) {
-                    popUpTo(Screen.Splash.route) { inclusive = true }
-                }
-            } else {
-                navController.navigate(Screen.Dashboard.route) {
-                    popUpTo(Screen.Splash.route) { inclusive = true }
-                }
+            navController.navigate(Screen.Dashboard.route) {
+                popUpTo(Screen.Splash.route) { inclusive = true }
             }
         } else {
             navController.navigate(Screen.Login.route) {
@@ -88,9 +70,9 @@ fun SplashScreen(navController: NavController) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
-                    .size(110.dp)
+                    .size(96.dp)
                     .scale(scale.value)
-                    .clip(RoundedCornerShape(32.dp))
+                    .clip(RoundedCornerShape(28.dp))
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
@@ -105,10 +87,10 @@ fun SplashScreen(navController: NavController) {
                     imageVector = Icons.Default.AutoAwesome,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(54.dp)
+                    modifier = Modifier.size(48.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text = "AstraAI",
                 style = MaterialTheme.typography.headlineLarge,
@@ -126,25 +108,14 @@ fun SplashScreen(navController: NavController) {
     }
 }
 
-class OvershootInterpolator(private val tension: Float = 2f) : android.view.animation.Interpolator {
-    override fun getInterpolation(t: Float): Float {
-        var time = t
-        time -= 1.0f
-        return time * time * ((tension + 1) * time + tension) + 1.0f
-    }
-}
-
 @Composable
 fun LoginScreen(navController: NavController) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val app = context.applicationContext as AstraApp
     val sessionManager = remember { app.sessionManager }
-    val preferenceManager = remember { app.preferenceManager }
+
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -185,15 +156,14 @@ fun LoginScreen(navController: NavController) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             
             AstraCard {
                 AuthTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = "Email Address",
-                    icon = Icons.Default.Email,
-                    enabled = !isLoading
+                    icon = Icons.Default.Email
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 AuthTextField(
@@ -201,69 +171,48 @@ fun LoginScreen(navController: NavController) {
                     onValueChange = { password = it },
                     label = "Password",
                     icon = Icons.Default.Lock,
-                    isPassword = true,
-                    enabled = !isLoading
+                    isPassword = true
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp), color = Primary)
-                    }
-                } else {
-                    PremiumButton(
-                        text = "Sign In",
-                        onClick = {
-                            if (email.isBlank()) {
-                                Toast.makeText(context, "Please enter your email address.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-                            if (!EMAIL_REGEX.matches(email.trim())) {
-                                Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-                            if (password.isBlank()) {
-                                Toast.makeText(context, "Please enter your password.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
+                PremiumButton(
+                    text = "Sign In",
+                    onClick = {
+                        val trimmedEmail = email.trim()
+                        val trimmedPassword = password.trim()
 
-                            isLoading = true
-                            if (sessionManager.getUser(email) == null) {
-                                Toast.makeText(context, "No account found with this email address. Please register first.", Toast.LENGTH_LONG).show()
-                                isLoading = false
-                            } else if (sessionManager.authenticate(email, password)) {
-                                Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
-                                sessionManager.login(email, isNewUser = false)
-                                
-                                scope.launch {
-                                    val hasCompletedTour = try {
-                                        preferenceManager.hasCompletedAppTour.first()
-                                    } catch (e: Exception) {
-                                        true
-                                    }
-                                    if (!hasCompletedTour) {
-                                        navController.navigate(Screen.AppTour.route) {
-                                            popUpTo(Screen.Login.route) { inclusive = true }
-                                        }
-                                    } else {
-                                        navController.navigate(Screen.Dashboard.route) {
-                                            popUpTo(Screen.Login.route) { inclusive = true }
-                                        }
-                                    }
-                                }
-                            } else {
-                                Toast.makeText(context, "Incorrect password. Please try again.", Toast.LENGTH_SHORT).show()
-                                isLoading = false
-                            }
+                        if (trimmedEmail.isBlank()) {
+                            Toast.makeText(context, "Please enter your email address.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
                         }
-                    )
-                }
+                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                            Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+                        if (trimmedPassword.isBlank()) {
+                            Toast.makeText(context, "Please enter your password.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+
+                        val user = sessionManager.getUser(trimmedEmail)
+                        if (user == null) {
+                            Toast.makeText(context, "No account found with this email. Please sign up.", Toast.LENGTH_LONG).show()
+                        } else if (sessionManager.authenticate(trimmedEmail, trimmedPassword)) {
+                            sessionManager.login(trimmedEmail, isNewUser = false)
+                            Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        } else {
+                            Toast.makeText(context, "Incorrect password. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
             
             Spacer(modifier = Modifier.height(20.dp))
             TextButton(
-                onClick = { navController.navigate(Screen.Signup.route) },
-                enabled = !isLoading
+                onClick = { navController.navigate(Screen.Signup.route) }
             ) {
                 Text("Don't have an account? Sign Up", color = PrimaryDark, fontWeight = FontWeight.Bold)
             }
@@ -277,7 +226,6 @@ fun SignupScreen(navController: NavController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
@@ -329,16 +277,14 @@ fun SignupScreen(navController: NavController) {
                     value = name,
                     onValueChange = { name = it },
                     label = "Full Name",
-                    icon = Icons.Default.Person,
-                    enabled = !isLoading
+                    icon = Icons.Default.Person
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = "Email Address",
-                    icon = Icons.Default.Email,
-                    enabled = !isLoading
+                    icon = Icons.Default.Email
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
@@ -346,8 +292,7 @@ fun SignupScreen(navController: NavController) {
                     onValueChange = { password = it },
                     label = "Password",
                     icon = Icons.Default.Lock,
-                    isPassword = true,
-                    enabled = !isLoading
+                    isPassword = true
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 AuthTextField(
@@ -355,61 +300,64 @@ fun SignupScreen(navController: NavController) {
                     onValueChange = { confirmPassword = it },
                     label = "Confirm Password",
                     icon = Icons.Default.Lock,
-                    isPassword = true,
-                    enabled = !isLoading
+                    isPassword = true
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp), color = Primary)
-                    }
-                } else {
-                    PremiumButton(
-                        text = "Sign Up",
-                        onClick = {
-                            if (name.isBlank()) {
-                                Toast.makeText(context, "Please enter your name.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-                            if (email.isBlank()) {
-                                Toast.makeText(context, "Please enter your email address.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-                            if (!EMAIL_REGEX.matches(email.trim())) {
-                                Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-                            if (password.length < 6) {
-                                Toast.makeText(context, "Password must be at least 6 characters.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-                            if (password != confirmPassword) {
-                                Toast.makeText(context, "Passwords do not match.", Toast.LENGTH_SHORT).show()
-                                return@PremiumButton
-                            }
-
-                            isLoading = true
-                            val newUser = User(name = name.trim(), email = email.trim(), password = password)
-                            if (sessionManager.register(newUser)) {
-                                Toast.makeText(context, "Account created successfully.", Toast.LENGTH_SHORT).show()
-                                sessionManager.login(email, isNewUser = true)
-                                navController.navigate(Screen.AppTour.route) {
-                                    popUpTo(Screen.Signup.route) { inclusive = true }
-                                }
-                            } else {
-                                Toast.makeText(context, "An account with this email already exists.", Toast.LENGTH_LONG).show()
-                                isLoading = false
-                            }
+                PremiumButton(
+                    text = "Sign Up",
+                    onClick = {
+                        val trimmedName = name.trim()
+                        val trimmedEmail = email.trim()
+                        val trimmedPassword = password.trim()
+                        val trimmedConfirmPassword = confirmPassword.trim()
+                        
+                        if (trimmedName.isBlank()) {
+                            Toast.makeText(context, "Please enter your full name.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
                         }
-                    )
-                }
+                        if (trimmedEmail.isBlank()) {
+                            Toast.makeText(context, "Please enter your email address.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                            Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+                        if (trimmedPassword.length < 4) {
+                            Toast.makeText(context, "Password must be at least 4 characters.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+                        if (trimmedPassword != trimmedConfirmPassword) {
+                            Toast.makeText(context, "Passwords do not match.", Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+
+                        val existingUser = sessionManager.getUser(trimmedEmail)
+                        if (existingUser != null) {
+                            Toast.makeText(context, "An account with this email already exists. Please sign in.", Toast.LENGTH_LONG).show()
+                            return@PremiumButton
+                        }
+
+                        // Create account and establish session
+                        val newUser = User(name = trimmedName, email = trimmedEmail, password = trimmedPassword)
+                        val success = sessionManager.register(newUser)
+                        if (success) {
+                            sessionManager.login(trimmedEmail, isNewUser = true)
+                            Toast.makeText(context, "Account created successfully!", Toast.LENGTH_SHORT).show()
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Signup.route) { inclusive = true }
+                            }
+                        } else {
+                            Toast.makeText(context, "Failed to create account. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
             
             Spacer(modifier = Modifier.height(20.dp))
             TextButton(
-                onClick = { navController.popBackStack() },
-                enabled = !isLoading
+                onClick = { navController.popBackStack() }
             ) {
                 Text("Already have an account? Login", color = PrimaryDark, fontWeight = FontWeight.Bold)
             }

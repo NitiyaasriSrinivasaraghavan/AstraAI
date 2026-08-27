@@ -21,27 +21,26 @@ class SessionManager(context: Context) {
         private const val KEY_CURRENT_EMAIL = "current_email"
         private const val KEY_IS_NEW_USER = "is_new_user"
         private const val KEY_LATEST_ANALYSIS = "latest_analysis_"
-        private const val KEY_RESET_DONE = "auth_reset_done_v3"
     }
 
     fun saveLatestAnalysis(result: ResumeAnalysisResult) {
-        val email = getCurrentEmail() ?: return
+        val email = getCurrentEmail() ?: "default_user"
         val json = gson.toJson(result)
-        prefs.edit().putString(KEY_LATEST_ANALYSIS + email, json).apply()
+        prefs.edit()
+            .putString(KEY_LATEST_ANALYSIS + email, json)
+            .putString(KEY_LATEST_ANALYSIS + "global", json)
+            .commit()
     }
 
     fun getLatestAnalysis(): ResumeAnalysisResult? {
-        val email = getCurrentEmail() ?: return null
-        val json = prefs.getString(KEY_LATEST_ANALYSIS + email, null) ?: return null
-        return gson.fromJson(json, ResumeAnalysisResult::class.java)
-    }
-
-    /**
-     * One-time reset for development phase to clear corrupted data.
-     */
-    fun clearAllDataIfNeeded() {
-        if (!prefs.getBoolean(KEY_RESET_DONE, false)) {
-            prefs.edit().clear().putBoolean(KEY_RESET_DONE, true).apply()
+        val email = getCurrentEmail() ?: "default_user"
+        val json = prefs.getString(KEY_LATEST_ANALYSIS + email, null)
+            ?: prefs.getString(KEY_LATEST_ANALYSIS + "global", null)
+            ?: return null
+        return try {
+            gson.fromJson(json, ResumeAnalysisResult::class.java)
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -50,7 +49,7 @@ class SessionManager(context: Context) {
     }
 
     /**
-     * Registers a new user if the email doesn't already exist.
+     * Registers a new user. Returns false if user already exists.
      */
     fun register(user: User): Boolean {
         val normalizedEmail = normalizeEmail(user.email)
@@ -60,14 +59,14 @@ class SessionManager(context: Context) {
     }
 
     /**
-     * Internal method to save or overwrite user data.
+     * Internal method to save or overwrite user data synchronously.
      */
     private fun saveUser(user: User) {
         val normalizedEmail = normalizeEmail(user.email)
         val userJson = gson.toJson(user)
         prefs.edit()
             .putString(KEY_USER_DATA_PREFIX + normalizedEmail, userJson)
-            .apply()
+            .commit()
     }
 
     /**
@@ -77,7 +76,11 @@ class SessionManager(context: Context) {
         val normalizedEmail = normalizeEmail(email)
         val userJson = prefs.getString(KEY_USER_DATA_PREFIX + normalizedEmail, null)
         return if (userJson != null) {
-            gson.fromJson(userJson, User::class.java)
+            try {
+                gson.fromJson(userJson, User::class.java)
+            } catch (e: Exception) {
+                null
+            }
         } else null
     }
 
@@ -86,11 +89,11 @@ class SessionManager(context: Context) {
      */
     fun authenticate(email: String, password: String): Boolean {
         val user = getUser(email) ?: return false
-        return user.password == password
+        return user.password.trim() == password.trim()
     }
 
     /**
-     * Establishes the authenticated session.
+     * Establishes the authenticated session immediately.
      */
     fun login(email: String, isNewUser: Boolean = false) {
         val normalizedEmail = normalizeEmail(email)
@@ -98,11 +101,11 @@ class SessionManager(context: Context) {
             .putBoolean(KEY_IS_LOGGED_IN, true)
             .putString(KEY_CURRENT_EMAIL, normalizedEmail)
             .putBoolean(KEY_IS_NEW_USER, isNewUser)
-            .apply()
+            .commit()
     }
 
     fun isLoggedIn(): Boolean {
-        return prefs.getBoolean(KEY_IS_LOGGED_IN, false)
+        return prefs.getBoolean(KEY_IS_LOGGED_IN, false) && !getCurrentEmail().isNullOrBlank()
     }
 
     fun getCurrentEmail(): String? {
@@ -149,6 +152,6 @@ class SessionManager(context: Context) {
             .remove(KEY_IS_LOGGED_IN)
             .remove(KEY_CURRENT_EMAIL)
             .remove(KEY_IS_NEW_USER)
-            .apply()
+            .commit()
     }
 }
