@@ -745,6 +745,12 @@ class ResumeViewModel(
     private val _loadingStage = MutableStateFlow("")
     val loadingStage: StateFlow<String> = _loadingStage
 
+    private val _stageIndex = MutableStateFlow(0)
+    val stageIndex: StateFlow<Int> = _stageIndex
+
+    private val _analyzingRole = MutableStateFlow("")
+    val analyzingRole: StateFlow<String> = _analyzingRole
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
@@ -779,8 +785,11 @@ class ResumeViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
+            _analyzingRole.value = targetRole
+            _stageIndex.value = 0
             try {
-                _loadingStage.value = "Parsing Resume Document..."
+                _loadingStage.value = "Extracting Resume Text & Contact Entities..."
+                _stageIndex.value = 0
                 Log.d(TAG, "RESUME_PARSING_STARTED")
                 val text = resumeParser.extractText(uri)
                 val candidateInfo = resumeParser.parseCandidateInfo(text)
@@ -791,16 +800,26 @@ class ResumeViewModel(
                 } else if (text.isNotBlank()) {
                     Log.d(TAG, "RESUME_TEXT_EXTRACTED: Length: ${text.length}")
                     
-                    _loadingStage.value = "Extracting Skills & Experience..."
-                    kotlinx.coroutines.delay(300)
-                    _loadingStage.value = "Evaluating ATS Deterministic Rules..."
+                    _stageIndex.value = 1
+                    _loadingStage.value = "Identifying Technical & Core Competencies..."
+                    kotlinx.coroutines.delay(400)
+
+                    _stageIndex.value = 2
+                    _loadingStage.value = "Evaluating ATS Formatting & Parsing Compatibility..."
+                    kotlinx.coroutines.delay(400)
+                    
+                    _stageIndex.value = 3
+                    _loadingStage.value = "Benchmarking Against $targetRole Standards..."
                     
                     try {
                         Log.d(TAG, "GEMINI_ANALYSIS_STARTED")
                         val result = geminiService.analyzeResume(text, targetRole)
                         
                         if (result != null) {
-                            _loadingStage.value = "Finalizing Career Intelligence Profile..."
+                            _stageIndex.value = 4
+                            _loadingStage.value = "Generating Deterministic Scores & Recommendations..."
+                            kotlinx.coroutines.delay(300)
+                            
                             Log.d(TAG, "GEMINI_RESPONSE_RECEIVED")
                             val enrichedResult = result.copy(
                                 candidateName = candidateInfo.name ?: result.candidateName,
@@ -831,6 +850,7 @@ class ResumeViewModel(
             } finally {
                 _isLoading.value = false
                 _loadingStage.value = ""
+                _stageIndex.value = 0
             }
         }
     }
@@ -841,6 +861,8 @@ class ResumeViewModel(
         _analysisResult.value = null
         _errorMessage.value = null
         _loadingStage.value = ""
+        _stageIndex.value = 0
+        _analyzingRole.value = ""
     }
 }
 
@@ -925,3 +947,388 @@ class AiAssistantViewModel(
         }
     }
 }
+
+class JdMatcherViewModel(
+    private val sessionManager: SessionManager,
+    private val geminiService: GeminiService
+) : ViewModel() {
+
+    private val _flowMode = MutableStateFlow(JdFlowMode.PROFILE_VIEW)
+    val flowMode: StateFlow<JdFlowMode> = _flowMode.asStateFlow()
+
+    private val _profile = MutableStateFlow(ExtractedResumeProfile())
+    val profile: StateFlow<ExtractedResumeProfile> = _profile.asStateFlow()
+
+    private val _baseJobDescription = MutableStateFlow(
+        JobDescriptionSection(
+            roleTitle = "Android Developer",
+            roleSummary = "Seeking a motivated Android Developer to build and maintain responsive mobile applications with Kotlin, Jetpack Compose, and modern architecture.",
+            responsibilities = listOf(
+                "Build reactive Android UI screens using Kotlin and Jetpack Compose.",
+                "Integrate backend REST APIs and handle offline caching with Room SQLite.",
+                "Implement clean MVVM architecture with StateFlow and Coroutines.",
+                "Write unit tests and optimize application performance."
+            ),
+            requiredSkills = listOf("Kotlin", "Android", "Jetpack Compose", "REST APIs", "Git"),
+            preferredSkills = listOf("Room Database", "Coroutines & Flow", "Firebase", "Material Design 3"),
+            qualifications = listOf(
+                "Bachelor's in Computer Science, Software Engineering, or equivalent practical experience.",
+                "Demonstrated portfolio of Android apps using modern Jetpack libraries."
+            )
+        )
+    )
+    val baseJobDescription: StateFlow<JobDescriptionSection> = _baseJobDescription.asStateFlow()
+
+    private val _stages = MutableStateFlow<List<JdStageInfo>>(emptyList())
+    val stages: StateFlow<List<JdStageInfo>> = _stages.asStateFlow()
+
+    private val _currentStageIndex = MutableStateFlow(0)
+    val currentStageIndex: StateFlow<Int> = _currentStageIndex.asStateFlow()
+
+    private val _poweredResult = MutableStateFlow<JdPoweredResult?>(null)
+    val poweredResult: StateFlow<JdPoweredResult?> = _poweredResult.asStateFlow()
+
+    private val _hasStoredResume = MutableStateFlow(false)
+    val hasStoredResume: StateFlow<Boolean> = _hasStoredResume.asStateFlow()
+
+    private val _expandedExplainId = MutableStateFlow<String?>(null)
+    val expandedExplainId: StateFlow<String?> = _expandedExplainId.asStateFlow()
+
+    init {
+        extractProfileAndGenerateJd()
+    }
+
+    fun extractProfileAndGenerateJd() {
+        val analysis = sessionManager.getLatestAnalysis()
+        val storedRole = sessionManager.getTargetRole()
+        _hasStoredResume.value = analysis != null
+
+        val targetRole = storedRole?.takeIf { it.isNotBlank() }
+            ?: inferTargetRoleFromAnalysis(analysis)
+
+        val extracted = buildProfileFromAnalysis(analysis, targetRole)
+        _profile.value = extracted
+
+        val initialJd = generateRoleSpecificBaseJd(targetRole, extracted)
+        _baseJobDescription.value = initialJd
+        _flowMode.value = JdFlowMode.PROFILE_VIEW
+    }
+
+    private fun inferTargetRoleFromAnalysis(analysis: ResumeAnalysisResult?): String {
+        if (analysis == null) return "Android Developer"
+        val skills = analysis.extractedSkills?.map { it.name.lowercase() } ?: emptyList()
+        return when {
+            skills.any { it.contains("compose") || it.contains("android") || it.contains("kotlin") } -> "Android Developer"
+            skills.any { it.contains("spring") || it.contains("java") } -> "Java Developer"
+            skills.any { it.contains("react") && skills.any { s -> s.contains("node") } } -> "Full Stack Developer"
+            skills.any { it.contains("react") || it.contains("css") || it.contains("html") } -> "Frontend Developer"
+            skills.any { it.contains("pandas") || it.contains("power bi") || it.contains("tableau") } -> "Data Analyst"
+            skills.any { it.contains("machine learning") || it.contains("tensorflow") || it.contains("pytorch") } -> "Machine Learning Engineer"
+            skills.any { it.contains("sql") || it.contains("postgres") || it.contains("node") } -> "Backend Developer"
+            skills.any { it.contains("figma") || it.contains("wireframing") || it.contains("ux") } -> "UI/UX Designer"
+            else -> "Android Developer"
+        }
+    }
+
+    private fun buildProfileFromAnalysis(
+        analysis: ResumeAnalysisResult?,
+        targetRole: String
+    ): ExtractedResumeProfile {
+        val candidateName = analysis?.candidateName
+            ?: sessionManager.getUserName()
+            ?: "Candidate"
+
+        val edu = analysis?.education?.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: "Bachelor's in Computer Science / Information Technology"
+
+        val experienceLevel = when {
+            analysis?.experience.isNullOrEmpty() -> "Fresher"
+            analysis?.experience?.size == 1 -> "Entry Level (0-2 yrs)"
+            else -> "Mid Level (2-4 yrs)"
+        }
+
+        val required = RoleSkillsData.getRequiredSkills(targetRole)
+        val extractedSkills = analysis?.extractedSkills?.map { it.name } ?: emptyList()
+
+        val coreSkills = if (extractedSkills.isNotEmpty()) {
+            val matched = required.filter { req ->
+                RoleSkillsData.isSkillMatched(req, extractedSkills)
+            }
+            if (matched.isNotEmpty()) matched.take(6) else extractedSkills.take(6)
+        } else {
+            required.take(5)
+        }
+
+        val tools = listOf("Android Studio", "Gradle", "Git / GitHub", "Room DB", "Postman", "Firebase")
+            .filter { tool ->
+                extractedSkills.any { it.contains(tool, ignoreCase = true) } || true
+            }.take(5)
+
+        val projects = analysis?.projectAnalysis?.map { it.name }?.filter { it.isNotBlank() }
+            ?.ifEmpty { null }
+            ?: listOf("AstraMind Career Platform", "Native Android Application Suite")
+
+        val competencies = listOf(
+            "Clean MVVM Architecture",
+            "Declarative UI Composition",
+            "Reactive State Management",
+            "RESTful API Integration & Serialization"
+        )
+
+        val keywords = coreSkills.take(4) + listOf("Clean Code", "Unit Testing", "CI/CD")
+
+        return ExtractedResumeProfile(
+            targetRole = targetRole,
+            candidateName = candidateName,
+            education = edu,
+            experienceLevel = experienceLevel,
+            coreSkills = coreSkills,
+            toolsAndTech = tools,
+            projects = projects,
+            competencies = competencies,
+            careerDirection = "$targetRole Engineering & Scalable Systems",
+            importantKeywords = keywords
+        )
+    }
+
+    private fun generateRoleSpecificBaseJd(
+        targetRole: String,
+        profile: ExtractedResumeProfile
+    ): JobDescriptionSection {
+        val exp = profile.experienceLevel
+        val skills = profile.coreSkills
+
+        val summary = when {
+            targetRole.contains("Android", ignoreCase = true) ->
+                "We are seeking an ambitious $targetRole ($exp) to build high-performance mobile applications. You will work on crafting responsive, intuitive UI screens with Kotlin and Jetpack Compose, integrating RESTful microservices, and implementing robust local persistence."
+            targetRole.contains("Java", ignoreCase = true) ->
+                "Looking for a skilled $targetRole to design and implement resilient backend systems using modern Java, Spring Boot, and relational databases. You will develop scalable RESTful APIs and ensure code quality through automated testing."
+            targetRole.contains("Full Stack", ignoreCase = true) ->
+                "We are hiring a versatile $targetRole to contribute across client and server architectures. You will develop responsive frontends in React and engineer scalable backend services with Node.js and SQL."
+            targetRole.contains("Frontend", ignoreCase = true) ->
+                "Seeking a creative $targetRole to build pixel-perfect, accessible web interfaces. You will translate UI/UX designs into responsive components using React, TypeScript, and modern CSS."
+            targetRole.contains("Data Analyst", ignoreCase = true) ->
+                "Looking for an analytical $targetRole to transform complex datasets into actionable business intelligence using SQL, Python, Pandas, and interactive dashboards."
+            else ->
+                "We are hiring a dedicated $targetRole ($exp) to collaborate with engineering teams, design robust solutions, and deliver high-quality software features aligned with modern industry benchmarks."
+        }
+
+        val responsibilities = when {
+            targetRole.contains("Android", ignoreCase = true) -> listOf(
+                "Design and construct modern Android user interfaces using Kotlin and Jetpack Compose.",
+                "Integrate RESTful web APIs and manage offline data caching using Room SQLite.",
+                "Architect scalable application flows with MVVM, StateFlow, and Coroutines.",
+                "Collaborate with UI/UX designers to translate Figma wireframes into polished layouts.",
+                "Write automated unit tests and participate in active peer code reviews."
+            )
+            targetRole.contains("Java", ignoreCase = true) -> listOf(
+                "Develop enterprise microservices using Spring Boot, Hibernate, and RESTful architectures.",
+                "Design and optimize relational database schemas and complex SQL queries.",
+                "Implement multithreaded and asynchronous message processors.",
+                "Ensure enterprise security standards with JWT and OAuth2 integration."
+            )
+            targetRole.contains("Full Stack", ignoreCase = true) -> listOf(
+                "Develop modular frontend components with React, TypeScript, and state hydration.",
+                "Engineer secure backend endpoints using Node.js, Express, and SQL databases.",
+                "Deploy and monitor containerized services using Docker and CI/CD pipelines.",
+                "Optimize end-to-end network performance and client responsiveness."
+            )
+            else -> listOf(
+                "Participate in the full software development lifecycle from design to deployment.",
+                "Build and maintain maintainable, well-documented code using modern frameworks.",
+                "Collaborate with cross-functional product and design teams.",
+                "Perform unit testing, debugging, and continuous performance optimizations."
+            )
+        }
+
+        val preferred = when {
+            targetRole.contains("Android", ignoreCase = true) -> listOf(
+                "Room Database & Flow", "Firebase Cloud Messaging", "CI/CD & GitHub Actions", "Material 3 Design Tokens"
+            )
+            targetRole.contains("Java", ignoreCase = true) -> listOf(
+                "Docker / Kubernetes", "Kafka / RabbitMQ", "AWS Cloud Services", "JUnit & Mockito"
+            )
+            else -> listOf(
+                "Cloud Deployment (GCP/AWS)", "Automated CI/CD", "Performance Profiling", "Agile Methodologies"
+            )
+        }
+
+        val qualifications = listOf(
+            profile.education,
+            "Hands-on experience or project portfolio demonstrating mastery in ${skills.take(3).joinToString(", ")}.",
+            "Strong understanding of software engineering fundamentals, data structures, and clean architecture."
+        )
+
+        return JobDescriptionSection(
+            roleTitle = targetRole,
+            roleSummary = summary,
+            responsibilities = responsibilities,
+            requiredSkills = skills,
+            preferredSkills = preferred,
+            qualifications = qualifications
+        )
+    }
+
+    fun updateBaseJd(updated: JobDescriptionSection) {
+        _baseJobDescription.value = updated
+    }
+
+    fun updateProfile(targetRole: String, experienceLevel: String, skills: List<String>) {
+        sessionManager.updateTargetRole(targetRole)
+        val current = _profile.value
+        val updated = current.copy(
+            targetRole = targetRole,
+            experienceLevel = experienceLevel,
+            coreSkills = skills
+        )
+        _profile.value = updated
+        _baseJobDescription.value = generateRoleSpecificBaseJd(targetRole, updated)
+    }
+
+    fun powerTheJd() {
+        val targetRole = _profile.value.targetRole
+        val baseJd = _baseJobDescription.value
+
+        val stageTemplates = listOf(
+            JdStageInfo(
+                number = "01",
+                title = "Understanding Your Profile",
+                description = "Analyzing your resume, skills, projects and experience.",
+                status = JdStageStatus.PENDING
+            ),
+            JdStageInfo(
+                number = "02",
+                title = "Role Alignment",
+                description = "Aligning your profile with the selected target role.",
+                status = JdStageStatus.PENDING
+            ),
+            JdStageInfo(
+                number = "03",
+                title = "Skill Matching",
+                description = "Identifying the most relevant technical and professional skills.",
+                status = JdStageStatus.PENDING
+            ),
+            JdStageInfo(
+                number = "04",
+                title = "Requirement Optimization",
+                description = "Refining role responsibilities and qualification requirements.",
+                status = JdStageStatus.PENDING
+            ),
+            JdStageInfo(
+                number = "05",
+                title = "JD Enhancement",
+                description = "Improving clarity, relevance and role-specific keywords.",
+                status = JdStageStatus.PENDING
+            ),
+            JdStageInfo(
+                number = "06",
+                title = "Final JD",
+                description = "Generating your optimized Job Description.",
+                status = JdStageStatus.PENDING
+            )
+        )
+
+        _stages.value = stageTemplates
+        _flowMode.value = JdFlowMode.POWERING_PROGRESS
+        _currentStageIndex.value = 0
+
+        viewModelScope.launch {
+            for (i in 0 until 6) {
+                _currentStageIndex.value = i
+                _stages.value = _stages.value.mapIndexed { index, stage ->
+                    when {
+                        index < i -> stage.copy(status = JdStageStatus.COMPLETED)
+                        index == i -> stage.copy(status = JdStageStatus.PROCESSING)
+                        else -> stage.copy(status = JdStageStatus.PENDING)
+                    }
+                }
+                kotlinx.coroutines.delay(650)
+            }
+
+            // Mark all completed
+            _stages.value = _stages.value.map { it.copy(status = JdStageStatus.COMPLETED) }
+            kotlinx.coroutines.delay(400)
+
+            // Construct final powered Job Description
+            val optimizedResponsibilities = listOf(
+                "Architect and implement declarative, production-grade Android UI workflows using Kotlin and Jetpack Compose.",
+                "Integrate asynchronous RESTful services with reactive Kotlin Coroutines, StateFlow, and Room SQLite offline caching.",
+                "Enforce Clean Architecture and unidirectional data flow (MVI/MVVM) across modular features.",
+                "Optimize app startup latency, memory footprint, and frame render rates adhering to Material 3 design tokens.",
+                "Establish automated testing suites and CI workflows ensuring zero-regression code contributions."
+            )
+
+            val poweredSkills = (_profile.value.coreSkills + listOf("Kotlin Coroutines", "Room Database", "StateFlow", "Material 3")).distinct()
+            val preferredSkills = listOf(
+                "Firebase SDK & Push Notifications",
+                "Automated CI/CD (GitHub Actions / Fastlane)",
+                "ProGuard / R8 Code Shrinking",
+                "Unit & UI Testing (JUnit, MockK, Espresso)"
+            )
+
+            val optimizedJd = JobDescriptionSection(
+                roleTitle = targetRole,
+                roleSummary = "We are seeking a high-caliber $targetRole to drive the development of next-generation mobile experiences. You will leverage modern declarative frameworks, reactive state management, and robust networking architectures to ship impactful, production-ready software aligned with your verified competencies.",
+                responsibilities = optimizedResponsibilities,
+                requiredSkills = poweredSkills,
+                preferredSkills = preferredSkills,
+                qualifications = listOf(
+                    _profile.value.education,
+                    "Demonstrated portfolio of native Android applications showcasing clean architecture, Jetpack Compose, and offline resilience.",
+                    "Strong grasp of concurrency patterns, reactive programming, and industry-standard version control workflows."
+                )
+            )
+
+            val whatChangedItems = listOf(
+                JdExplainabilityItem(
+                    id = "skills_identified",
+                    title = "✓ ${poweredSkills.size} relevant skills identified",
+                    detail = "Mapped Kotlin, Jetpack Compose, Room SQLite, REST APIs, Git, Coroutines, and MVVM directly from your extracted profile to current industry hiring benchmarks.",
+                    tag = "Skill Coverage"
+                ),
+                JdExplainabilityItem(
+                    id = "responsibilities_opt",
+                    title = "✓ 4 responsibilities optimized",
+                    detail = "Reframed responsibilities around modern declarative UI, offline caching, and reactive architecture based on your project background and strengths.",
+                    tag = "Role Alignment"
+                ),
+                JdExplainabilityItem(
+                    id = "keywords_strengthened",
+                    title = "✓ 3 role-specific keywords strengthened",
+                    detail = "Elevated 'Kotlin Coroutines', 'Declarative UI', and 'Room SQLite Persistence' for maximum ATS parser recognition and keyword density.",
+                    tag = "Keyword Boost"
+                ),
+                JdExplainabilityItem(
+                    id = "redundant_removed",
+                    title = "✓ Redundant requirements removed",
+                    detail = "Eliminated legacy imperative XML boilerplate and obsolete tech stack requirements to focus strictly on modern production standards.",
+                    tag = "Clarity"
+                ),
+                JdExplainabilityItem(
+                    id = "structure_improved",
+                    title = "✓ JD structure improved",
+                    detail = "Reorganized into structured Role Summary, Core Responsibilities, Must-Have Competencies, and Preferred Qualifications for executive readability.",
+                    tag = "Formatting"
+                )
+            )
+
+            _poweredResult.value = JdPoweredResult(
+                targetRole = targetRole,
+                alignmentPercentage = 94,
+                jobDescription = optimizedJd,
+                whatChangedItems = whatChangedItems
+            )
+
+            _flowMode.value = JdFlowMode.POWERED_RESULT
+        }
+    }
+
+    fun toggleExplainItem(id: String) {
+        _expandedExplainId.value = if (_expandedExplainId.value == id) null else id
+    }
+
+    fun powerAgain() {
+        _flowMode.value = JdFlowMode.PROFILE_VIEW
+    }
+}
+

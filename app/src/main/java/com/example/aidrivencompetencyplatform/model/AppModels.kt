@@ -120,3 +120,59 @@ data class SkillGapData(
     val skillGaps: List<Skill>? = emptyList(),
     val requiredSkills: List<String>? = emptyList()
 )
+
+data class ExtractedResumeProfile(
+    val targetRole: String = "Android Developer",
+    val candidateName: String = "Candidate",
+    val education: String = "Bachelor's in Computer Science / IT",
+    val experienceLevel: String = "Fresher",
+    val coreSkills: List<String> = listOf("Kotlin", "Android", "Jetpack Compose", "REST APIs", "Git"),
+    val toolsAndTech: List<String> = listOf("Android Studio", "Gradle", "Room Database", "Firebase", "Postman"),
+    val projects: List<String> = listOf("Competency Tracking App", "Portfolio Android Client"),
+    val competencies: List<String> = listOf("MVVM Architecture", "Declarative UI", "State Management", "Offline Caching"),
+    val careerDirection: String = "Mobile Application Engineering & Android Ecosystem",
+    val importantKeywords: List<String> = listOf("Kotlin Coroutines", "Jetpack Compose", "REST APIs", "Clean Architecture")
+)
+
+data class JobDescriptionSection(
+    val roleTitle: String,
+    val roleSummary: String,
+    val responsibilities: List<String>,
+    val requiredSkills: List<String>,
+    val preferredSkills: List<String>,
+    val qualifications: List<String>
+)
+
+data class JdStageInfo(
+    val number: String,
+    val title: String,
+    val description: String,
+    val status: JdStageStatus
+)
+
+enum class JdStageStatus {
+    COMPLETED,
+    PROCESSING,
+    PENDING
+}
+
+data class JdExplainabilityItem(
+    val id: String,
+    val title: String,
+    val detail: String,
+    val tag: String = "Optimized"
+)
+
+data class JdPoweredResult(
+    val targetRole: String,
+    val alignmentPercentage: Int,
+    val jobDescription: JobDescriptionSection,
+    val whatChangedItems: List<JdExplainabilityItem>
+)
+
+enum class JdFlowMode {
+    PROFILE_VIEW,
+    POWERING_PROGRESS,
+    POWERED_RESULT
+}
+

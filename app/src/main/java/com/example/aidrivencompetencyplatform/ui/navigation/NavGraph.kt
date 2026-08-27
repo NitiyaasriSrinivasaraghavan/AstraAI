@@ -66,7 +66,7 @@ fun AppNavGraph(navController: NavHostController) {
             InterviewPrepScreen(navController, viewModel)
         }
         composable(Screen.JobDescriptionAnalyzer.route) {
-            val viewModel: ResumeViewModel = viewModel(factory = factory)
+            val viewModel: JdMatcherViewModel = viewModel(factory = factory)
             JobDescriptionAnalyzerScreen(navController, viewModel)
         }
     }

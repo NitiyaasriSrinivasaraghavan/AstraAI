@@ -1,6 +1,7 @@
 package com.example.aidrivencompetencyplatform.ui.screens
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -16,8 +17,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -31,12 +34,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.aidrivencompetencyplatform.AstraApp
 import com.example.aidrivencompetencyplatform.model.*
@@ -1402,8 +1408,215 @@ fun MainFeatureCard(
 }
 
 // ==========================================
-// 3. DEDICATED UPLOAD RESUME DASHBOARD
+// 3. DEDICATED UPLOAD RESUME DASHBOARD & PROGRESS MODAL
 // ==========================================
+
+@Composable
+fun ResumeAnalysisProgressModal(
+    isLoading: Boolean = true,
+    stageIndex: Int,
+    targetRole: String,
+    loadingStage: String
+) {
+    if (!isLoading) return
+
+    val stages = listOf(
+        "Extracting Resume Text & Contact Entities" to "Parsing contact details, profile summary, and raw text",
+        "Identifying Technical & Core Competencies" to "Recognizing programming languages, tools, and frameworks",
+        "Evaluating ATS Formatting & Parsing Compatibility" to "Checking column structure, typography, and machine safety",
+        "Benchmarking Against Target Role Standards" to "Comparing profile depth against $targetRole benchmarks",
+        "Generating Deterministic Scores & Recommendations" to "Synthesizing category metrics and actionable boosters"
+    )
+
+    Dialog(
+        onDismissRequest = { /* Processing is active, keep modal focused */ },
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+            shadowElevation = 20.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(vertical = 20.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Centered Mint-Green Spinner & Icon
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(68.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Primary,
+                        strokeWidth = 3.5.dp,
+                        modifier = Modifier.size(68.dp)
+                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = SoftGreen,
+                        modifier = Modifier.size(50.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Title & Subtitle
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Analyzing Your Resume",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Evaluating profile against $targetRole benchmarks",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                HorizontalDivider(color = BorderColor.copy(alpha = 0.8f))
+
+                // Real-time Checklist of 5 stages
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    stages.forEachIndexed { index, (title, description) ->
+                        val isCompleted = index < stageIndex
+                        val isCurrent = index == stageIndex
+                        val isPending = index > stageIndex
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Stage Status Indicator
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                when {
+                                    isCompleted -> {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = SoftGreen,
+                                            modifier = Modifier.size(26.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = PrimaryDark,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    isCurrent -> {
+                                        CircularProgressIndicator(
+                                            color = Primary,
+                                            strokeWidth = 2.5.dp,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    else -> {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = SurfaceVariant,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = "${index + 1}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 11.sp,
+                                                    color = TextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isCurrent || isCompleted) FontWeight.Bold else FontWeight.Medium,
+                                    color = when {
+                                        isCurrent -> PrimaryDark
+                                        isCompleted -> TextPrimary
+                                        else -> TextSecondary
+                                    }
+                                )
+                                Text(
+                                    text = if (isCurrent) "In progress..." else if (isCompleted) "Completed" else description,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isCurrent) Primary else TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = BorderColor.copy(alpha = 0.8f))
+
+                // Active Stage Note Banner
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MintLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = Primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = loadingStage.ifBlank { "Deterministic ATS analysis in progress..." },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryDark,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1412,6 +1625,8 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
     val selectedFileName by viewModel.selectedFileName.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val loadingStage by viewModel.loadingStage.collectAsState()
+    val stageIndex by viewModel.stageIndex.collectAsState()
+    val analyzingRole by viewModel.analyzingRole.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
 
@@ -1489,76 +1704,23 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (isLoading) {
-                // Progressive Loading View
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = SoftGreen,
-                        modifier = Modifier.size(80.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Primary,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 1. Screen Subtitle & Description Header
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Upload your latest resume and select the role you're targeting.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                            lineHeight = 20.sp
+                        )
                     }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    CircularProgressIndicator(
-                        color = Primary,
-                        strokeWidth = 4.dp,
-                        modifier = Modifier.size(44.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Text(
-                        text = loadingStage.ifBlank { "Processing through AstraAI..." },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Astra is extracting skills, evaluating ATS formats, and benchmarking against $targetRole standards.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 18.sp
-                    )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // 1. Screen Subtitle & Description Header
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Upload your latest resume and select the role you're targeting.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary,
-                                lineHeight = 20.sp
-                            )
-                        }
-                    }
 
                     // 2. Astra Contextual Tip Banner
                     item {
@@ -1934,10 +2096,18 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                         Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
+
+                // Resume Analysis Loading Modal
+                if (isLoading) {
+                    ResumeAnalysisProgressModal(
+                        stageIndex = stageIndex,
+                        loadingStage = loadingStage,
+                        targetRole = analyzingRole.ifBlank { targetRole }
+                    )
+                }
             }
         }
     }
-}
 
 // ==========================================
 // 4. ATS DASHBOARD SCREEN (Separate Dashboard)
@@ -1950,6 +2120,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
     val scoreResult by viewModel.scoreResult.collectAsState()
 
     var selectedPriorityForDetail by remember { mutableStateOf<String?>(null) }
+    var selectedWhyMetric by remember { mutableStateOf<AtsCardCalculation?>(null) }
     var showInfoDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -2016,7 +2187,12 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
 
                     // 2. Main ATS Score Hero
                     item {
-                        AtsOverallScoreHero(score = score)
+                        AtsOverallScoreHero(
+                            score = score,
+                            onMetricClick = { metric ->
+                                selectedWhyMetric = metric
+                            }
+                        )
                     }
 
                     // 3. ATS Performance Areas Header
@@ -2034,7 +2210,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "Tap 'Ask Why?' on any area for formulas & evidence",
+                                    text = "Tap '✦ Why?' on any area for formulas & evidence",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )
@@ -2058,7 +2234,10 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     item {
                         AtsExpandableCard(
                             calculation = score.keywordCoverage,
-                            defaultExpanded = true
+                            defaultExpanded = true,
+                            onAskWhyClick = {
+                                selectedWhyMetric = score.keywordCoverage
+                            }
                         )
                     }
 
@@ -2066,7 +2245,10 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     item {
                         AtsExpandableCard(
                             calculation = score.resumeStructure,
-                            defaultExpanded = false
+                            defaultExpanded = false,
+                            onAskWhyClick = {
+                                selectedWhyMetric = score.resumeStructure
+                            }
                         )
                     }
 
@@ -2074,7 +2256,10 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     item {
                         AtsExpandableCard(
                             calculation = score.formattingSafety,
-                            defaultExpanded = false
+                            defaultExpanded = false,
+                            onAskWhyClick = {
+                                selectedWhyMetric = score.formattingSafety
+                            }
                         )
                     }
 
@@ -2082,7 +2267,10 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     item {
                         AtsExpandableCard(
                             calculation = score.parsingAccuracy,
-                            defaultExpanded = false
+                            defaultExpanded = false,
+                            onAskWhyClick = {
+                                selectedWhyMetric = score.parsingAccuracy
+                            }
                         )
                     }
 
@@ -2163,6 +2351,18 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                 onDismiss = { selectedPriorityForDetail = null },
                 onAskAi = {
                     selectedPriorityForDetail = null
+                    navController.navigate(Screen.AiAssistant.route)
+                }
+            )
+        }
+
+        // Immersive "Why?" Explanation Modal
+        if (selectedWhyMetric != null) {
+            AtsMetricWhyModal(
+                calculation = selectedWhyMetric!!,
+                onDismiss = { selectedWhyMetric = null },
+                onAskAi = {
+                    selectedWhyMetric = null
                     navController.navigate(Screen.AiAssistant.route)
                 }
             )
@@ -4146,7 +4346,10 @@ fun CandidateProfileCard(
 }
 
 @Composable
-fun AtsOverallScoreHero(score: AtsScoreResult) {
+fun AtsOverallScoreHero(
+    score: AtsScoreResult,
+    onMetricClick: ((AtsCardCalculation) -> Unit)? = null
+) {
     val animatedScoreFloat by animateFloatAsState(
         targetValue = score.overallScore / 100f,
         animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
@@ -4281,7 +4484,7 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3 KPI Quick Badges Row
+            // 3 KPI Quick Badges Row (Tappable with Why explanation)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -4291,14 +4494,18 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
                     shape = RoundedCornerShape(12.dp),
                     color = MintLight,
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = onMetricClick != null) {
+                            onMetricClick?.invoke(score.keywordCoverage)
+                        }
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Keyword Match",
+                            text = "Keywords (35%)",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             fontSize = 10.sp
@@ -4324,14 +4531,18 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
                     shape = RoundedCornerShape(12.dp),
                     color = MintLight,
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = onMetricClick != null) {
+                            onMetricClick?.invoke(score.resumeStructure)
+                        }
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Structure",
+                            text = "Structure (25%)",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             fontSize = 10.sp
@@ -4357,7 +4568,11 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
                     shape = RoundedCornerShape(12.dp),
                     color = MintLight,
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = onMetricClick != null) {
+                            onMetricClick?.invoke(score.formattingSafety)
+                        }
                 ) {
                     val formatAndParseSum = score.formattingSafety.weightedContribution + score.parsingAccuracy.weightedContribution
                     Column(
@@ -4365,7 +4580,7 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Format+Parse",
+                            text = "Format & Parse",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             fontSize = 10.sp
@@ -4392,9 +4607,441 @@ fun AtsOverallScoreHero(score: AtsScoreResult) {
 }
 
 @Composable
+fun AtsMetricWhyModal(
+    calculation: AtsCardCalculation,
+    onDismiss: () -> Unit,
+    onAskAi: () -> Unit
+) {
+    val color = when {
+        calculation.score >= 80 -> SuccessGreen
+        calculation.score >= 60 -> Color(0xFF0284C7)
+        calculation.score >= 40 -> WarningAmber
+        else -> ErrorRed
+    }
+
+    val iconVector = when (calculation.iconType) {
+        AtsCategoryIcon.KEYWORD -> Icons.Default.Key
+        AtsCategoryIcon.STRUCTURE -> Icons.Default.Layers
+        AtsCategoryIcon.FORMATTING -> Icons.Default.Description
+        AtsCategoryIcon.PARSING -> Icons.Default.Code
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+            shadowElevation = 24.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.88f)
+                .padding(vertical = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                // Modal Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = color.copy(alpha = 0.12f),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = iconVector,
+                                    contentDescription = null,
+                                    tint = color,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = calculation.categoryName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "ATS Evaluation & Deterministic Breakdown",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = TextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = BorderColor)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Scrollable Content
+                val scrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // 1. Metric Score & Weight Pill Banner
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MintLight,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "CATEGORY EVALUATION",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = PrimaryDark,
+                                    letterSpacing = 0.5.sp
+                                )
+                                Text(
+                                    text = calculation.oneLineSummary.ifBlank {
+                                        "${calculation.categoryName} analysis: Evaluated resume against target parser specifications."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextPrimary,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "${calculation.score}/100",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = color
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = SoftGreen
+                                ) {
+                                    Text(
+                                        text = "${calculation.weightPercentage}% Weight (${String.format("%.1f", calculation.weightedContribution)} pts)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = PrimaryDark,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Deterministic Formula
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "1. ATS EVALUATION FORMULA",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark,
+                            letterSpacing = 1.sp
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = SurfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = calculation.formulaText,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    // 3. Arithmetic Computation & Math
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "2. ARITHMETIC BREAKDOWN & MATH",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark,
+                            letterSpacing = 1.sp
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MintLight,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.25f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = calculation.calculationText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryDark
+                                )
+                                if (calculation.resultText.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = calculation.resultText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Evidence & Recognized Factors
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "3. DETECTED PROFILE EVIDENCE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDark,
+                            letterSpacing = 1.sp
+                        )
+
+                        if (calculation.evidenceItems.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                calculation.evidenceItems.forEach { ev ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = if (ev.isPositive) SoftGreen else ErrorRed.copy(alpha = 0.1f),
+                                            modifier = Modifier.size(20.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = if (ev.isPositive) Icons.Default.Check else Icons.Default.Close,
+                                                    contentDescription = null,
+                                                    tint = if (ev.isPositive) PrimaryDark else ErrorRed,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = ev.label,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary
+                                            )
+                                            if (!ev.detail.isNullOrBlank()) {
+                                                Text(
+                                                    text = ev.detail,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextSecondary,
+                                                    lineHeight = 16.sp
+                                                )
+                                            }
+                                            if (!ev.suggestion.isNullOrBlank()) {
+                                                Text(
+                                                    text = "💡 ${ev.suggestion}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = WarningAmber
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (calculation.matchedList.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Found Match Keywords (${calculation.matchedList.size}):",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = SuccessGreen
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(calculation.matchedList) { kw ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SoftGreen
+                                    ) {
+                                        Text(
+                                            text = kw,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = PrimaryDark,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (calculation.missingList.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Missing High-Impact Keywords (${calculation.missingList.size}):",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ErrorRed
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(calculation.missingList) { kw ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = ErrorRed.copy(alpha = 0.08f)
+                                    ) {
+                                        Text(
+                                            text = "+ $kw",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ErrorRed,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. Actionable Boosters
+                    if (calculation.recommendations.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "4. RECOMMENDED BOOSTERS",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark,
+                                letterSpacing = 1.sp
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = WarningAmber.copy(alpha = 0.08f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, WarningAmber.copy(alpha = 0.25f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    calculation.recommendations.forEach { rec ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Text(
+                                                text = "💡",
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.padding(top = 1.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = rec,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextPrimary,
+                                                fontWeight = FontWeight.Medium,
+                                                lineHeight = 18.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = BorderColor)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Bottom Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onAskAi,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryDark),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Ask Astra AI", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Primary,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Done", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun AtsExpandableCard(
     calculation: AtsCardCalculation,
-    defaultExpanded: Boolean = false
+    defaultExpanded: Boolean = false,
+    onAskWhyClick: (() -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(defaultExpanded) }
 
@@ -4537,47 +5184,70 @@ fun AtsExpandableCard(
                 }
             }
 
-            // 2. ASK WHY ACTION BUTTON (Converts dropdown to full explicit action button)
-            Button(
-                onClick = { expanded = !expanded },
+            // 2. ASK WHY ACTION ROW (Buttons for Immersive Modal & In-place Expand)
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (expanded) Primary else MintLight,
-                    contentColor = if (expanded) Color.White else PrimaryDark
-                ),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (expanded) Primary else BorderColor
-                ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Button(
+                    onClick = {
+                        if (onAskWhyClick != null) {
+                            onAskWhyClick()
+                        } else {
+                            expanded = !expanded
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MintLight,
+                        contentColor = PrimaryDark
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.3f)),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         Icon(
-                            imageVector = if (expanded) Icons.Default.CheckCircle else Icons.Default.AutoAwesome,
+                            imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = if (expanded) Color.White else Primary,
+                            tint = Primary,
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (expanded) "Hide Deeper Explanation" else "✦ Ask Why? (Deeper Explanation & Math)",
+                            text = "✦ Why? (Deep Breakdown)",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
+                }
 
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = if (expanded) Color.White else PrimaryDark,
-                        modifier = Modifier.size(18.dp)
-                    )
+                OutlinedButton(
+                    onClick = { expanded = !expanded },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = TextSecondary
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (expanded) "Collapse" else "Inline Details",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 
