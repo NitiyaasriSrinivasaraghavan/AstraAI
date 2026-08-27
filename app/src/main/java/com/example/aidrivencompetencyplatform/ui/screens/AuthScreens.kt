@@ -198,7 +198,7 @@ fun LoginScreen(navController: NavController) {
                         if (user == null) {
                             Toast.makeText(context, "No account found with this email. Please sign up.", Toast.LENGTH_LONG).show()
                         } else if (sessionManager.authenticate(trimmedEmail, trimmedPassword)) {
-                            sessionManager.login(trimmedEmail, isNewUser = false)
+                            sessionManager.login(trimmedEmail)
                             Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
                             navController.navigate(Screen.Dashboard.route) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
@@ -339,13 +339,12 @@ fun SignupScreen(navController: NavController) {
                             return@PremiumButton
                         }
 
-                        // Create account and establish session
+                        // Create account
                         val newUser = User(name = trimmedName, email = trimmedEmail, password = trimmedPassword)
                         val success = sessionManager.register(newUser)
                         if (success) {
-                            sessionManager.login(trimmedEmail, isNewUser = true)
-                            Toast.makeText(context, "Account created successfully!", Toast.LENGTH_SHORT).show()
-                            navController.navigate(Screen.Dashboard.route) {
+                            Toast.makeText(context, "Account created successfully! Please sign in.", Toast.LENGTH_SHORT).show()
+                            navController.navigate(Screen.Login.route) {
                                 popUpTo(Screen.Signup.route) { inclusive = true }
                             }
                         } else {

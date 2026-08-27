@@ -95,12 +95,17 @@ class SessionManager(context: Context) {
     /**
      * Establishes the authenticated session immediately.
      */
-    fun login(email: String, isNewUser: Boolean = false) {
+    fun login(email: String, isNewUser: Boolean? = null) {
         val normalizedEmail = normalizeEmail(email)
+        val hasLoggedInBeforeKey = "has_logged_in_before_" + normalizedEmail
+        val hasLoggedInBefore = prefs.getBoolean(hasLoggedInBeforeKey, false)
+        val determinedIsNew = isNewUser ?: (!hasLoggedInBefore)
+
         prefs.edit()
             .putBoolean(KEY_IS_LOGGED_IN, true)
             .putString(KEY_CURRENT_EMAIL, normalizedEmail)
-            .putBoolean(KEY_IS_NEW_USER, isNewUser)
+            .putBoolean(KEY_IS_NEW_USER, determinedIsNew)
+            .putBoolean(hasLoggedInBeforeKey, true)
             .commit()
     }
 
