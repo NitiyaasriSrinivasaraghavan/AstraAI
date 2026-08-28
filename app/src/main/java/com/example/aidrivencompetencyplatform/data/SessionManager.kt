@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.aidrivencompetencyplatform.model.User
 import com.example.aidrivencompetencyplatform.model.ResumeAnalysisResult
+import com.example.aidrivencompetencyplatform.model.AnalysisHistoryRecord
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class SessionManager(context: Context) {
 
@@ -21,14 +23,76 @@ class SessionManager(context: Context) {
         private const val KEY_CURRENT_EMAIL = "current_email"
         private const val KEY_IS_NEW_USER = "is_new_user"
         private const val KEY_LATEST_ANALYSIS = "latest_analysis_"
+        private const val KEY_ANALYSIS_HISTORY = "analysis_history_"
     }
 
-    fun saveLatestAnalysis(result: ResumeAnalysisResult) {
+    fun saveLatestAnalysis(result: ResumeAnalysisResult, fileName: String? = null) {
         val email = getCurrentEmail() ?: "default_user"
         val json = gson.toJson(result)
+        
+        // Also create a history record
+        val role = getTargetRole() ?: "Android Developer"
+        val topSkills = (result.extractedSkills ?: emptyList()).map { it.name }.take(4)
+        val historyRecord = AnalysisHistoryRecord(
+            targetRole = role,
+            atsScore = result.atsScore,
+            skillMatch = result.skillMatch,
+            candidateName = result.candidateName ?: getUserName(),
+            fileName = fileName ?: "Resume.pdf",
+            topSkills = topSkills
+        )
+        addAnalysisHistoryRecord(historyRecord, email)
+
         prefs.edit()
             .putString(KEY_LATEST_ANALYSIS + email, json)
             .putString(KEY_LATEST_ANALYSIS + "global", json)
+            .commit()
+    }
+
+    fun getAnalysisHistory(): List<AnalysisHistoryRecord> {
+        val email = getCurrentEmail() ?: "default_user"
+        val json = prefs.getString(KEY_ANALYSIS_HISTORY + email, null)
+            ?: prefs.getString(KEY_ANALYSIS_HISTORY + "global", null)
+        
+        if (json != null) {
+            try {
+                val type = object : TypeToken<List<AnalysisHistoryRecord>>() {}.type
+                val list: List<AnalysisHistoryRecord> = gson.fromJson(json, type) ?: emptyList()
+                if (list.isNotEmpty()) return list
+            } catch (e: Exception) {
+                // fall through
+            }
+        }
+
+        // Synthesize a record from latest analysis if available
+        val latest = getLatestAnalysis()
+        if (latest != null) {
+            val role = getTargetRole() ?: "Android Developer"
+            val topSkills = (latest.extractedSkills ?: emptyList()).map { it.name }.take(4)
+            val initialRecord = AnalysisHistoryRecord(
+                targetRole = role,
+                atsScore = latest.atsScore,
+                skillMatch = latest.skillMatch,
+                candidateName = latest.candidateName ?: getUserName(),
+                fileName = "Resume.pdf",
+                topSkills = topSkills
+            )
+            return listOf(initialRecord)
+        }
+
+        return emptyList()
+    }
+
+    fun addAnalysisHistoryRecord(record: AnalysisHistoryRecord, specificEmail: String? = null) {
+        val email = specificEmail ?: getCurrentEmail() ?: "default_user"
+        val currentHistory = getAnalysisHistory().toMutableList()
+        // Prepend to show latest first
+        currentHistory.add(0, record)
+        val trimmedHistory = currentHistory.distinctBy { it.id }.take(15)
+        val json = gson.toJson(trimmedHistory)
+        prefs.edit()
+            .putString(KEY_ANALYSIS_HISTORY + email, json)
+            .putString(KEY_ANALYSIS_HISTORY + "global", json)
             .commit()
     }
 

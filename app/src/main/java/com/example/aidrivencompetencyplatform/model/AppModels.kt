@@ -37,7 +37,8 @@ data class ResumeAnalysisResult(
     val candidateEmail: String? = null,
     val candidatePhone: String? = null,
     val candidateLocation: String? = null,
-    val rawResumeText: String? = null
+    val rawResumeText: String? = null,
+    val detectedJobDescription: JobDescriptionSection? = null
 )
 
 data class AtsBreakdown(
@@ -171,8 +172,30 @@ data class JdPoweredResult(
 )
 
 enum class JdFlowMode {
+    NO_JD,
+    JD_DETECTED,
     PROFILE_VIEW,
     POWERING_PROGRESS,
     POWERED_RESULT
 }
+
+data class ParsedSectionItem(
+    val sectionName: String,
+    val isFound: Boolean = true,
+    val details: List<String> = emptyList(),
+    val summary: String? = null
+) {
+    val name: String get() = sectionName
+}
+
+data class AnalysisHistoryRecord(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val timestamp: Long = System.currentTimeMillis(),
+    val targetRole: String,
+    val atsScore: Int,
+    val skillMatch: Int,
+    val candidateName: String? = null,
+    val fileName: String? = "Resume.pdf",
+    val topSkills: List<String> = emptyList()
+)
 
