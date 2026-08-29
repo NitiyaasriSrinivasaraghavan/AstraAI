@@ -25,7 +25,7 @@ class GeminiService {
         "AQ.Ab8RN6Jwy3UjrBJoa1mw53fDaioiIqMZGeL_Os6oDkRYCPOxfg"
     }
 
-    private val modelName = "gemini-3.6-flash"
+    private val modelName = "gemini-2.5-flash"
     private val client = createUnsafeOkHttpClient()
 
     private fun createUnsafeOkHttpClient(): OkHttpClient {
@@ -155,7 +155,7 @@ class GeminiService {
     }
 
     private fun makeApiCall(promptText: String): String? {
-        val url = "https://generativelanguage.googleapis.com/v1/models/$modelName:generateContent?key=$apiKey"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey"
         val requestBody = gson.toJson(
             mapOf("contents" to listOf(mapOf("parts" to listOf(mapOf("text" to promptText)))))
         ).toRequestBody(jsonMediaType)

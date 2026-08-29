@@ -2499,26 +2499,26 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                                         }
                                     }
                                 } else {
-                                    // Empty Dropzone
+                                    // Empty Dropzone with Browse and 1-Click Sample options
                                     Surface(
                                         shape = RoundedCornerShape(16.dp),
                                         color = SurfaceVariant,
                                         border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { filePickerLauncher.launch("*/*") }
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(22.dp),
+                                                .padding(20.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.Center
                                         ) {
                                             Surface(
                                                 shape = CircleShape,
                                                 color = SoftGreen,
-                                                modifier = Modifier.size(54.dp)
+                                                modifier = Modifier
+                                                    .size(54.dp)
+                                                    .clickable { filePickerLauncher.launch("*/*") }
                                             ) {
                                                 Box(contentAlignment = Alignment.Center) {
                                                     Icon(
@@ -2531,17 +2531,46 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                                             }
                                             Spacer(modifier = Modifier.height(10.dp))
                                             Text(
-                                                text = "Tap to browse Resume (PDF / DOCX)",
+                                                text = "Upload Your Resume",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = TextPrimary
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
-                                                text = "Supports standard PDF, Word (.doc, .docx) formats",
+                                                text = "Supports PDF & Word (.docx) formats",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = TextSecondary
                                             )
+                                            Spacer(modifier = Modifier.height(14.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                OutlinedButton(
+                                                    onClick = { filePickerLauncher.launch("*/*") },
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary)
+                                                ) {
+                                                    Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Primary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Browse File", color = Primary, style = MaterialTheme.typography.labelSmall)
+                                                }
+                                                Button(
+                                                    onClick = {
+                                                        viewModel.loadSampleResume(targetRole)
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MintLight, contentColor = PrimaryDark),
+                                                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.4f))
+                                                ) {
+                                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Sample Resume", color = PrimaryDark, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2634,25 +2663,25 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             PremiumButton(
-                                text = if (selectedFileName == null) "Upload Resume to Start Analysis" else "Analyze Resume for $targetRole",
-                                enabled = selectedFileName != null && targetRole.isNotBlank() && !isLoading,
+                                text = if (selectedFileName == null) "Analyze Resume (or Sample)" else "Analyze Resume for $targetRole",
+                                enabled = !isLoading,
                                 onClick = {
                                     if (selectedFileName == null) {
-                                        Toast.makeText(context, "Please select a resume file first.", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        viewModel.analyzeResume(targetRole)
+                                        viewModel.loadSampleResume(targetRole)
                                     }
+                                    viewModel.analyzeResume(targetRole)
                                 }
                             )
 
-                            if (selectedFileName == null) {
-                                Text(
-                                    text = "Please upload a resume above to enable analysis",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary,
-                                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                                )
-                            }
+                            Text(
+                                text = if (selectedFileName == null) 
+                                    "Tip: Tap button to analyze with sample resume, or attach your own above"
+                                else
+                                    "Ready to analyze $selectedFileName for $targetRole",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
                         }
                     }
 
@@ -5800,122 +5829,197 @@ fun AtsOverallScoreHero(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3 KPI Quick Badges Row (Tappable with Why explanation)
-            Row(
+            // 4 KPI Quick Badges Grid (Tappable with Why explanation)
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // KPI 1: Keywords
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MintLight,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = onMetricClick != null) {
-                            onMetricClick?.invoke(score.keywordCoverage)
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    // KPI 1: Keywords
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MintLight,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = onMetricClick != null) {
+                                onMetricClick?.invoke(score.keywordCoverage)
+                            }
                     ) {
-                        Text(
-                            text = "Keywords (35%)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
-                            fontSize = 10.sp
-                        )
-                        Text(
-                            text = "${score.keywordCoverage.score}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryDark
-                        )
-                        Text(
-                            text = "+${String.format("%.1f", score.keywordCoverage.weightedContribution)} pts",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SuccessGreen,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Keywords (35%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "${score.keywordCoverage.score}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark
+                            )
+                            Text(
+                                text = "+${String.format("%.1f", score.keywordCoverage.weightedContribution)} pts",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SuccessGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // KPI 2: Structure
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MintLight,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = onMetricClick != null) {
+                                onMetricClick?.invoke(score.resumeStructure)
+                            }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Structure (25%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "${score.resumeStructure.score}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark
+                            )
+                            Text(
+                                text = "+${String.format("%.1f", score.resumeStructure.weightedContribution)} pts",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SuccessGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 
-                // KPI 2: Structure
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MintLight,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = onMetricClick != null) {
-                            onMetricClick?.invoke(score.resumeStructure)
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    // KPI 3: Formatting Safety
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MintLight,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = onMetricClick != null) {
+                                onMetricClick?.invoke(score.formattingSafety)
+                            }
                     ) {
-                        Text(
-                            text = "Structure (25%)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
-                            fontSize = 10.sp
-                        )
-                        Text(
-                            text = "${score.resumeStructure.score}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryDark
-                        )
-                        Text(
-                            text = "+${String.format("%.1f", score.resumeStructure.weightedContribution)} pts",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SuccessGreen,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Formatting (20%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "${score.formattingSafety.score}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark
+                            )
+                            Text(
+                                text = "+${String.format("%.1f", score.formattingSafety.weightedContribution)} pts",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SuccessGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // KPI 4: Parsing Accuracy
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MintLight,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = onMetricClick != null) {
+                                onMetricClick?.invoke(score.parsingAccuracy)
+                            }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Parsing (20%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "${score.parsingAccuracy.score}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark
+                            )
+                            Text(
+                                text = "+${String.format("%.1f", score.parsingAccuracy.weightedContribution)} pts",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SuccessGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
+            }
 
-                // KPI 3: Format & Parse
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MintLight,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = onMetricClick != null) {
-                            onMetricClick?.invoke(score.formattingSafety)
-                        }
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Prominent "Why this Score?" Button
+            Button(
+                onClick = { onMetricClick?.invoke(score.toOverallCalculation()) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MintLight, contentColor = PrimaryDark),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.4f)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    val formatAndParseSum = score.formattingSafety.weightedContribution + score.parsingAccuracy.weightedContribution
-                    Column(
-                        modifier = Modifier.padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Format & Parse",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
-                            fontSize = 10.sp
-                        )
-                        val avgScore = (score.formattingSafety.score + score.parsingAccuracy.score) / 2
-                        Text(
-                            text = "$avgScore%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryDark
-                        )
-                        Text(
-                            text = "+${String.format("%.1f", formatAndParseSum)} pts",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SuccessGreen,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Why this Score? (Formulas & Arithmetic Breakdown)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -5940,6 +6044,7 @@ fun AtsMetricWhyModal(
         AtsCategoryIcon.STRUCTURE -> Icons.Default.Layers
         AtsCategoryIcon.FORMATTING -> Icons.Default.Description
         AtsCategoryIcon.PARSING -> Icons.Default.Code
+        AtsCategoryIcon.OVERALL -> Icons.Default.AutoAwesome
     }
 
     Dialog(
@@ -6407,6 +6512,7 @@ fun AtsExpandableCard(
         AtsCategoryIcon.STRUCTURE -> Icons.Default.Layers
         AtsCategoryIcon.FORMATTING -> Icons.Default.Description
         AtsCategoryIcon.PARSING -> Icons.Default.Code
+        AtsCategoryIcon.OVERALL -> Icons.Default.AutoAwesome
     }
 
     AstraCard(

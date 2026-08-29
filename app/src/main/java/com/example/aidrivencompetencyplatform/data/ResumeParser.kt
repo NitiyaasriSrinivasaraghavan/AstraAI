@@ -57,7 +57,7 @@ class ResumeParser(private val context: Context) {
         Log.d("ResumeParser", "Detected MIME: $mimeType, Extension: $extension")
 
         return try {
-            val text = when {
+            var text = when {
                 mimeType == "application/pdf" || extension.equals("pdf", ignoreCase = true) -> {
                     extractFromPdf(uri)
                 }
@@ -66,12 +66,38 @@ class ResumeParser(private val context: Context) {
                     extractFromDocx(uri)
                 }
                 else -> {
-                    Log.w("ResumeParser", "Unsupported file type: $mimeType / $extension")
-                    ""
+                    // Try PDF first, then DOCX, then plain text
+                    try {
+                        extractFromPdf(uri)
+                    } catch (ePdf: Exception) {
+                        try {
+                            extractFromDocx(uri)
+                        } catch (eDocx: Exception) {
+                            try {
+                                context.contentResolver.openInputStream(uri)?.use { stream ->
+                                    stream.bufferedReader().readText()
+                                } ?: ""
+                            } catch (eStream: Exception) {
+                                Log.w("ResumeParser", "Fallback stream read failed", eStream)
+                                ""
+                            }
+                        }
+                    }
                 }
             }
             
             if (text == ERROR_SCANNED_PDF) return text
+
+            if (text.isBlank()) {
+                // If extraction returned empty, try reading as raw text
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        text = stream.bufferedReader().readText()
+                    }
+                } catch (e: Exception) {
+                    Log.w("ResumeParser", "Secondary raw text read failed", e)
+                }
+            }
 
             val cleanedText = cleanText(text)
             Log.d("ResumeParser", "Extracted text length: ${cleanedText.length}")
@@ -80,6 +106,59 @@ class ResumeParser(private val context: Context) {
             Log.e("ResumeParser", "Text extraction failed", e)
             ""
         }
+    }
+
+    fun getSampleResumeText(targetRole: String = "Android Developer"): String {
+        return """
+            Alex Chen
+            Email: alex.chen.dev@example.com | Phone: (415) 555-0199 | Location: San Francisco, CA
+            GitHub: github.com/alexchen-dev | LinkedIn: linkedin.com/in/alexchen-android
+
+            PROFESSIONAL SUMMARY
+            High-impact Android Software Engineer with 4+ years of experience designing, architecting, and shipping high-performance mobile applications using Kotlin, Jetpack Compose, Coroutines, and clean architecture (MVVM/MVI). Proven track record of optimizing app cold start times by 35% and scaling applications to 500K+ monthly active users.
+
+            WORK EXPERIENCE
+            Senior Android Developer | TechFlow Mobile Solutions
+            June 2022 – Present | San Francisco, CA
+            - Spearheaded the complete migration of legacy Java/XML codebase to 100% Kotlin and Jetpack Compose, reducing UI defect rates by 42%.
+            - Implemented reactive state management using Kotlin StateFlow, SharedFlow, and Coroutines, reducing unhandled crash rates by 65%.
+            - Integrated RESTful APIs and GraphQL services using Retrofit, OkHttp, and Kotlinx Serialization with robust offline caching in Room Database.
+            - Designed modular Gradle multi-module project architecture with Dagger Hilt dependency injection, accelerating team build speeds by 28%.
+            - Maintained 88% unit test coverage using JUnit 5, MockK, and Robolectric, integrated with GitHub Actions CI/CD pipelines.
+
+            Android Software Engineer | Nexus Apps Studio
+            August 2020 – May 2022 | San Jose, CA
+            - Developed and published 3 consumer fintech Android applications on Google Play Store with 4.8-star average ratings.
+            - Engineered custom Compose Canvas visualizers and dynamic animations adhering to Material Design 3 guidelines.
+            - Integrated Firebase Cloud Messaging (FCM), Crashlytics, and WorkManager background job scheduling for efficient battery optimization.
+            - Collaborated with cross-functional product, design, and backend engineering teams in 2-week Agile sprint cycles.
+
+            TECHNICAL SKILLS
+            - Programming Languages: Kotlin, Java, SQL, Python
+            - Android Frameworks: Jetpack Compose, Jetpack Navigation, Android SDK, ViewModels, LiveData, Flow, Coroutines
+            - Architecture & DI: MVVM, MVI, Clean Architecture, Dagger Hilt, Koin
+            - Networking & Data: Retrofit, OkHttp, Room Database, SQLite, GraphQL, Protocol Buffers, DataStore
+            - Tools & DevOps: Git, GitHub Actions, Android Studio, Gradle, CI/CD, Fastlane, Firebase, Docker, Postman
+            - Testing: JUnit, MockK, Espresso, Compose UI Testing, Robolectric
+
+            KEY PROJECTS
+            Astra AI Career Platform | Kotlin, Jetpack Compose, Gemini AI, Room DB
+            - Architected mobile competency analysis engine featuring deterministic ATS scoring and resume parsing.
+            - Integrated Gemini AI generative endpoints for real-time skill gap analysis and automated career trajectory recommendations.
+
+            CryptoTrack Real-Time Portfolio | Kotlin, Compose, WebSocket, Coroutines, Hilt
+            - Built offline-first cryptocurrency portfolio tracker streaming live prices via WebSockets to 50,000+ active users.
+            - Utilized Room DB for transactions and EncryptedSharedPreferences for API key security.
+
+            EDUCATION
+            Bachelor of Science in Computer Science
+            University of California, Berkeley | 2016 – 2020
+            - Relevant Coursework: Data Structures, Algorithms, Mobile Computing, Operating Systems, Database Management.
+
+            CERTIFICATIONS
+            - Google Associate Android Developer Certification (AAD)
+            - Meta Android Professional Developer Specialization
+        """.trimIndent()
     }
 
     private fun extractFromPdf(uri: Uri): String {
