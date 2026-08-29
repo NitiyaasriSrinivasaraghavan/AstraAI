@@ -12,6 +12,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -28,6 +29,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -1639,7 +1641,7 @@ fun MainFeatureCard(
 }
 
 // ==========================================
-// 3. DEDICATED UPLOAD RESUME DASHBOARD & INTERACTIVE 5-STAGE PROGRESS MODAL
+// 3. DEDICATED UPLOAD RESUME REAL-TIME 3-MODULE PROGRESS CARD
 // ==========================================
 
 @OptIn(ExperimentalAnimationApi::class)
@@ -1651,27 +1653,15 @@ fun ResumeAnalysisProgressModal(
 ) {
     if (!isLoading) return
 
-    val stageIndex = interactiveState.stage
-    val currentStage = stageIndex.coerceIn(0, 4)
+    val atsDone = interactiveState.atsComplete
+    val skillGapDone = interactiveState.skillGapComplete
+    val jdMatchingDone = interactiveState.jdMatchingComplete
+    val allComplete = interactiveState.isComplete || (atsDone && skillGapDone && jdMatchingDone)
 
-    val stageHeaders = listOf(
-        "Parsing Your Resume",
-        "Identifying Your Skills",
-        "Evaluating ATS Compatibility",
-        "Matching Your Profile",
-        "Analysis Complete"
-    )
-
-    val stageDescriptions = listOf(
-        "Detecting sections, document structure, and entity blocks",
-        "Extracting programming languages, frameworks, and tools",
-        "Calculating deterministic ATS score and formatting metrics",
-        "Benchmarking profile against $targetRole standards",
-        "Synthesized all 4 intelligence dimensions"
-    )
+    val completedCount = listOf(atsDone, skillGapDone, jdMatchingDone).count { it }
 
     Dialog(
-        onDismissRequest = { /* Modal remains active during processing */ },
+        onDismissRequest = { /* Modal remains active during real-time processing */ },
         properties = DialogProperties(
             dismissOnBackPress = false,
             dismissOnClickOutside = false,
@@ -1694,486 +1684,251 @@ fun ResumeAnalysisProgressModal(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Top 5-Stage Step Indicators
+                // Header: Real-Time Analysis Status
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    for (i in 0..4) {
-                        val isDone = i < currentStage
-                        val isCurrent = i == currentStage
-                        
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Surface(
                             shape = CircleShape,
-                            color = when {
-                                isDone -> SoftGreen
-                                isCurrent -> Primary
-                                else -> SurfaceVariant
-                            },
-                            border = if (!isDone && !isCurrent) androidx.compose.foundation.BorderStroke(1.dp, BorderColor) else null,
-                            modifier = Modifier.size(32.dp)
+                            color = if (allComplete) SoftGreen else MintLight,
+                            modifier = Modifier.size(44.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                when {
-                                    isDone -> Icon(
-                                        Icons.Default.Check,
+                                if (allComplete) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
                                         contentDescription = null,
                                         tint = PrimaryDark,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
-                                    isCurrent -> Text(
-                                        text = "${i + 1}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    else -> Text(
-                                        text = "${i + 1}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = TextSecondary
+                                } else {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = Primary,
+                                        strokeWidth = 2.5.dp
                                     )
                                 }
                             }
                         }
-
-                        if (i < 4) {
-                            HorizontalDivider(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                                color = if (i < currentStage) Primary else BorderColor,
-                                thickness = 2.dp
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = if (allComplete) "Analysis Complete" else "Analyzing Resume...",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Target Role: $targetRole",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
                             )
                         }
                     }
-                }
 
-                // Stage Header with animated title
-                AnimatedContent(
-                    targetState = currentStage,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(200))
-                    },
-                    label = "StageHeader"
-                ) { stage ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (allComplete) SoftGreen else MintLight
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MintLight,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.25f))
-                        ) {
-                            Text(
-                                text = "Stage ${stage + 1} of 5",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryDark,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = stageHeaders[stage],
-                            style = MaterialTheme.typography.titleLarge,
+                            text = if (allComplete) "3 of 3 Complete" else "$completedCount of 3 Modules",
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stageDescriptions[stage],
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            textAlign = TextAlign.Center
+                            color = PrimaryDark,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
 
                 HorizontalDivider(color = BorderColor.copy(alpha = 0.8f))
 
-                // Interactive Dynamic Content per Stage
-                AnimatedContent(
-                    targetState = currentStage,
-                    transitionSpec = {
-                        (slideInVertically { height -> height / 2 } + fadeIn()) togetherWith (slideOutVertically { height -> -height / 2 } + fadeOut())
-                    },
-                    label = "StageContent"
-                ) { stage ->
-                    when (stage) {
-                        0 -> {
-                            // STAGE 1: PARSING YOUR RESUME
-                            val sections = if (interactiveState.sections.isNotEmpty()) {
-                                interactiveState.sections
-                            } else {
-                                listOf(
-                                    ParsedSectionItem("Contact Information", true, listOf("Name, Email, Phone"), "Name, Email, Phone"),
-                                    ParsedSectionItem("Education", true, listOf("Degrees & Institutions"), "Degrees & Institutions"),
-                                    ParsedSectionItem("Work Experience", true, listOf("Employment History"), "Employment History"),
-                                    ParsedSectionItem("Skills", true, listOf("Technical Competencies"), "Technical Competencies"),
-                                    ParsedSectionItem("Projects", true, listOf("Domain Digest, PALM"), "Domain Digest, PALM"),
-                                    ParsedSectionItem("Certifications", true, listOf("Verified Credentials"), "Verified Credentials"),
-                                    ParsedSectionItem("Languages", true, listOf("English"), "English, etc."),
-                                    ParsedSectionItem("Patents & Publications", true, listOf("Academic/Industry"), "Academic/Industry")
-                                )
-                            }
+                // Module 1: ATS Analysis
+                AnalysisModuleProgressItem(
+                    stepNumber = 1,
+                    title = "ATS Analysis",
+                    description = "Analyzing resume for ATS compatibility, keywords, structure, formatting, and parsing.",
+                    isCompleted = atsDone,
+                    resultSummary = if (atsDone) {
+                        val score = if (interactiveState.atsScore > 0) interactiveState.atsScore else 84
+                        "ATS Compatibility Score: $score/100"
+                    } else null
+                )
 
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (interactiveState.candidateName.isNotBlank()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MintLight,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Person,
-                                                contentDescription = null,
-                                                tint = Primary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Candidate: ${interactiveState.candidateName}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = PrimaryDark
-                                            )
-                                        }
-                                    }
-                                }
+                // Module 2: Skill Gap Analysis
+                AnalysisModuleProgressItem(
+                    stepNumber = 2,
+                    title = "Skill Gap Analysis",
+                    description = "Analyzing resume against target role ($targetRole) to identify verified, partial, and missing/no-evidence skills.",
+                    isCompleted = skillGapDone,
+                    resultSummary = if (skillGapDone) {
+                        val matched = if (interactiveState.matchedSkillsCount > 0) interactiveState.matchedSkillsCount else 8
+                        "$matched verified competencies identified"
+                    } else null
+                )
 
-                                sections.take(6).forEach { section ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(SurfaceVariant, RoundedCornerShape(8.dp))
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = Primary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = section.name,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = TextPrimary
-                                            )
-                                        }
-                                        if (!section.summary.isNullOrBlank()) {
-                                            Text(
-                                                text = section.summary,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TextSecondary,
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                // Module 3: JD Matching
+                AnalysisModuleProgressItem(
+                    stepNumber = 3,
+                    title = "JD Matching",
+                    description = "Comparing resume with target job description and generating relevant matching information.",
+                    isCompleted = jdMatchingDone,
+                    resultSummary = if (jdMatchingDone) {
+                        val match = if (interactiveState.skillMatch > 0) interactiveState.skillMatch else 78
+                        "Role Alignment: $match% Match"
+                    } else null
+                )
 
-                        1 -> {
-                            // STAGE 2: IDENTIFYING YOUR SKILLS
-                            val skills = if (interactiveState.extractedSkills.isNotEmpty()) {
-                                interactiveState.extractedSkills
-                            } else {
-                                listOf("Kotlin", "Jetpack Compose", "Java", "Android SDK", "REST APIs", "Git", "Coroutines", "MVVM", "Room DB", "Dagger Hilt")
-                            }
+                HorizontalDivider(color = BorderColor.copy(alpha = 0.8f))
 
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Extracted Competencies",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = SoftGreen
-                                    ) {
-                                        Text(
-                                            text = "${skills.size} Found",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    items(skills.take(12)) { skill ->
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MintLight,
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.3f))
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.AutoAwesome,
-                                                    contentDescription = null,
-                                                    tint = Primary,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = skill,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = PrimaryDark
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (interactiveState.detectedProjects.isNotEmpty()) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(SurfaceVariant, RoundedCornerShape(8.dp))
-                                            .padding(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Projects Identified:",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
-                                        )
-                                        Text(
-                                            text = interactiveState.detectedProjects.joinToString(" • "),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        2 -> {
-                            // STAGE 3: EVALUATING ATS COMPATIBILITY
-                            val targetAts = if (interactiveState.atsScore > 0) interactiveState.atsScore else 84
-                            val targetKeyword = if (interactiveState.keywordScore > 0) interactiveState.keywordScore else 85
-                            val targetStructure = if (interactiveState.structureScore > 0) interactiveState.structureScore else 90
-                            val targetFormatting = if (interactiveState.formattingScore > 0) interactiveState.formattingScore else 85
-                            val targetParsing = if (interactiveState.parsingScore > 0) interactiveState.parsingScore else 88
-
-                            val animatedScore by animateIntAsState(
-                                targetValue = targetAts,
-                                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-                                label = "atsScoreAnim"
+                // Bottom Status Footer
+                if (allComplete) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SoftGreen,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = PrimaryDark,
+                                modifier = Modifier.size(18.dp)
                             )
-
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Overall ATS Compatibility",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "$animatedScore/100",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Black,
-                                        color = Primary
-                                    )
-                                }
-
-                                LinearProgressIndicator(
-                                    progress = { animatedScore / 100f },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    color = Primary,
-                                    trackColor = SurfaceVariant,
-                                )
-
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    listOf(
-                                        "Keyword Coverage" to targetKeyword,
-                                        "Resume Structure" to targetStructure,
-                                        "Formatting Safety" to targetFormatting,
-                                        "Parsing Accuracy" to targetParsing
-                                    ).forEach { (label, value) ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(text = label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                            Text(text = "$value%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryDark)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        3 -> {
-                            // STAGE 4: MATCHING YOUR PROFILE
-                            val targetMatch = if (interactiveState.skillMatch > 0) interactiveState.skillMatch else 78
-                            val animatedMatch by animateIntAsState(
-                                targetValue = targetMatch,
-                                animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-                                label = "matchAnim"
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "All 3 modules complete! Opening ATS Dashboard...",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDark
                             )
-
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    text = "Target Role: $targetRole",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryDark
-                                )
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Role Benchmark Alignment",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "$animatedMatch%",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Black,
-                                        color = Primary
-                                    )
-                                }
-
-                                LinearProgressIndicator(
-                                    progress = { animatedMatch / 100f },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    color = Primary,
-                                    trackColor = SurfaceVariant,
-                                )
-
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MintLight,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Psychology,
-                                            contentDescription = null,
-                                            tint = Primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Synthesizing skill gap benchmarks for $targetRole...",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = PrimaryDark
-                                        )
-                                    }
-                                }
-                            }
                         }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Real-time AI pipeline evaluating competencies...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
-                        4 -> {
-                            // STAGE 5: ANALYSIS COMPLETE
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = SoftGreen,
-                                    modifier = Modifier.size(60.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = Primary,
-                                            modifier = Modifier.size(34.dp)
-                                        )
-                                    }
-                                }
+@Composable
+private fun AnalysisModuleProgressItem(
+    stepNumber: Int,
+    title: String,
+    description: String,
+    isCompleted: Boolean,
+    resultSummary: String? = null
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isCompleted) SoftGreen.copy(alpha = 0.35f) else SurfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isCompleted) Primary.copy(alpha = 0.3f) else BorderColor
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Status Icon: Green Tick when done, Spinning Indicator when in progress
+            Surface(
+                shape = CircleShape,
+                color = if (isCompleted) SoftGreen else MintLight,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (isCompleted) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Completed",
+                            tint = PrimaryDark,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Primary,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+            }
 
-                                Text(
-                                    text = "Analysis Successfully Synthesized",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    textAlign = TextAlign.Center
-                                )
+            Spacer(modifier = Modifier.width(12.dp))
 
-                                Text(
-                                    text = "All 4 intelligence dimensions generated. Opening ATS diagnostics dashboard...",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    textAlign = TextAlign.Center
-                                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isCompleted) SoftGreen else MintLight
+                    ) {
+                        Text(
+                            text = if (isCompleted) "Completed" else "In Progress",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isCompleted) PrimaryDark else Primary,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
 
-                                LinearProgressIndicator(
-                                    color = Primary,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                )
-                            }
-                        }
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+
+                if (isCompleted && resultSummary != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MintLight
+                    ) {
+                        Text(
+                            text = resultSummary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryDark,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
                     }
                 }
             }
@@ -2753,248 +2508,257 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (analysis == null || scoreResult == null) {
-                NoAnalysisState(navController)
-            } else {
-                val score = scoreResult!!
-                val analysisData = analysis!!
+            // Main Dashboard Content Container - Gets blurred when Why Modal is active (without any color tint or dark overlay)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (selectedWhyMetric != null) Modifier.blur(16.dp) else Modifier
+                    )
+            ) {
+                if (analysis == null || scoreResult == null) {
+                    NoAnalysisState(navController)
+                } else {
+                    val score = scoreResult!!
+                    val analysisData = analysis!!
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item { Spacer(modifier = Modifier.height(4.dp)) }
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                    // 1. Entity Data Extraction Diagnostics (MUST BE FIRST AT THE TOP)
-                    item {
-                        AtsEntityExtractionCard(
-                            score = score,
-                            analysis = analysisData
-                        )
-                    }
-
-                    // 2. Candidate Profile & Target Role Header
-                    item {
-                        CandidateProfileCard(
-                            targetRole = score.targetRole,
-                            candidateName = score.candidateName,
-                            candidateEmail = score.candidateEmail,
-                            candidatePhone = score.candidatePhone,
-                            candidateLocation = score.candidateLocation
-                        )
-                    }
-
-                    // 3. Main ATS Compatibility Score Hero
-                    item {
-                        AtsOverallScoreHero(
-                            score = score,
-                            onMetricClick = { metric ->
-                                selectedWhyMetric = metric
-                            }
-                        )
-                    }
-
-                    // 4. Keyword Analysis & ATS Performance Areas Header
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "ATS Performance Areas",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "Tap 'Why?' on any area for formulas & evidence",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SoftGreen
-                            ) {
-                                Text(
-                                    text = "4 Dimensions",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryDark,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
+                        // 1. Entity Data Extraction Diagnostics (MUST BE FIRST AT THE TOP)
+                        item {
+                            AtsEntityExtractionCard(
+                                score = score,
+                                analysis = analysisData
+                            )
                         }
-                    }
 
-                    // 4a. Dimension 1: Keyword Coverage (35%)
-                    item {
-                        AtsExpandableCard(
-                            calculation = score.keywordCoverage,
-                            onAskWhyClick = {
-                                selectedWhyMetric = score.keywordCoverage
-                            }
-                        )
-                    }
-
-                    // 4b. Dimension 2: Resume Structure (25%)
-                    item {
-                        AtsExpandableCard(
-                            calculation = score.resumeStructure,
-                            onAskWhyClick = {
-                                selectedWhyMetric = score.resumeStructure
-                            }
-                        )
-                    }
-
-                    // 4c. Dimension 3: Formatting Safety (20%)
-                    item {
-                        AtsExpandableCard(
-                            calculation = score.formattingSafety,
-                            onAskWhyClick = {
-                                selectedWhyMetric = score.formattingSafety
-                            }
-                        )
-                    }
-
-                    // 4d. Dimension 4: Parsing Accuracy (20%)
-                    item {
-                        AtsExpandableCard(
-                            calculation = score.parsingAccuracy,
-                            onAskWhyClick = {
-                                selectedWhyMetric = score.parsingAccuracy
-                            }
-                        )
-                    }
-
-                    // 5. Canonical Score Reconciliation (Expandable Breakdown)
-                    item {
-                        AtsCanonicalScoreReconciliationCard(score = score)
-                    }
-
-                    // 6. What's Helping Your Resume
-                    item {
-                        AtsHelpingFactorsCard(
-                            score = score,
-                            analysis = analysisData
-                        )
-                    }
-
-                    // 7. What's Holding Your Resume Back
-                    item {
-                        AtsHoldingBackCard(
-                            score = score,
-                            analysis = analysisData
-                        )
-                    }
-
-                    // 8. Top Priorities / Actionable Booster Plan
-                    item {
-                        val fixes = score.priorityFixes.ifEmpty {
-                            analysisData.prioritizedSuggestions?.highPriority ?: emptyList()
+                        // 2. Candidate Profile & Target Role Header
+                        item {
+                            CandidateProfileCard(
+                                targetRole = score.targetRole,
+                                candidateName = score.candidateName,
+                                candidateEmail = score.candidateEmail,
+                                candidatePhone = score.candidatePhone,
+                                candidateLocation = score.candidateLocation
+                            )
                         }
-                        if (fixes.isNotEmpty()) {
-                            AtsPriorityFixesCard(
-                                fixes = fixes,
-                                onFixClick = { fix ->
-                                    selectedPriorityForDetail = fix
+
+                        // 3. Main ATS Compatibility Score Hero
+                        item {
+                            AtsOverallScoreHero(
+                                score = score,
+                                onMetricClick = { metric ->
+                                    selectedWhyMetric = metric
                                 }
                             )
                         }
-                    }
 
-                    // 9. Role Alignment & Evidence Snapshot
-                    item {
-                        AtsRoleAlignmentSnapshotCard(
-                            score = score,
-                            analysis = analysisData
-                        )
-                    }
-
-                    // 10. Key ATS AI Insight
-                    item {
-                        AtsKeyAiInsightCard(
-                            score = score,
-                            analysis = analysisData,
-                            onConsultAiClick = {
-                                navController.navigate(Screen.AiAssistant.route)
-                            }
-                        )
-                    }
-
-                    // 11. NEXT DASHBOARD NAVIGATION: Continue to Skill Gap
-                    item {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = Primary,
-                            shadowElevation = 3.dp
-                        ) {
-                            Button(
-                                onClick = { navController.navigate(Screen.SkillGap.route) },
+                        // 4. Keyword Analysis & ATS Performance Areas Header
+                        item {
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
-                                shape = RoundedCornerShape(16.dp),
-                                contentPadding = PaddingValues(vertical = 16.dp, horizontal = 20.dp)
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column {
+                                    Text(
+                                        text = "ATS Performance Areas",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "Tap 'Why?' on any area for formulas & evidence",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SoftGreen
                                 ) {
                                     Text(
-                                        text = "Continue to Skill Gap",
-                                        style = MaterialTheme.typography.titleMedium,
+                                        text = "4 Dimensions",
+                                        style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
+                                        color = PrimaryDark,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
                             }
                         }
-                    }
 
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                        // 4a. Dimension 1: Keyword Coverage (35%)
+                        item {
+                            AtsExpandableCard(
+                                calculation = score.keywordCoverage,
+                                onAskWhyClick = {
+                                    selectedWhyMetric = score.keywordCoverage
+                                }
+                            )
+                        }
+
+                        // 4b. Dimension 2: Resume Structure (25%)
+                        item {
+                            AtsExpandableCard(
+                                calculation = score.resumeStructure,
+                                onAskWhyClick = {
+                                    selectedWhyMetric = score.resumeStructure
+                                }
+                            )
+                        }
+
+                        // 4c. Dimension 3: Formatting Safety (20%)
+                        item {
+                            AtsExpandableCard(
+                                calculation = score.formattingSafety,
+                                onAskWhyClick = {
+                                    selectedWhyMetric = score.formattingSafety
+                                }
+                            )
+                        }
+
+                        // 4d. Dimension 4: Parsing Accuracy (20%)
+                        item {
+                            AtsExpandableCard(
+                                calculation = score.parsingAccuracy,
+                                onAskWhyClick = {
+                                    selectedWhyMetric = score.parsingAccuracy
+                                }
+                            )
+                        }
+
+                        // 5. Canonical Score Reconciliation (Expandable Breakdown)
+                        item {
+                            AtsCanonicalScoreReconciliationCard(score = score)
+                        }
+
+                        // 6. What's Helping Your Resume
+                        item {
+                            AtsHelpingFactorsCard(
+                                score = score,
+                                analysis = analysisData
+                            )
+                        }
+
+                        // 7. What's Holding Your Resume Back
+                        item {
+                            AtsHoldingBackCard(
+                                score = score,
+                                analysis = analysisData
+                            )
+                        }
+
+                        // 8. Top Priorities / Actionable Booster Plan
+                        item {
+                            val fixes = score.priorityFixes.ifEmpty {
+                                analysisData.prioritizedSuggestions?.highPriority ?: emptyList()
+                            }
+                            if (fixes.isNotEmpty()) {
+                                AtsPriorityFixesCard(
+                                    fixes = fixes,
+                                    onFixClick = { fix ->
+                                        selectedPriorityForDetail = fix
+                                    }
+                                )
+                            }
+                        }
+
+                        // 9. Role Alignment & Evidence Snapshot
+                        item {
+                            AtsRoleAlignmentSnapshotCard(
+                                score = score,
+                                analysis = analysisData
+                            )
+                        }
+
+                        // 10. Key ATS AI Insight
+                        item {
+                            AtsKeyAiInsightCard(
+                                score = score,
+                                analysis = analysisData,
+                                onConsultAiClick = {
+                                    navController.navigate(Screen.AiAssistant.route)
+                                }
+                            )
+                        }
+
+                        // 11. NEXT DASHBOARD NAVIGATION: Continue to Skill Gap
+                        item {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = Primary,
+                                shadowElevation = 3.dp
+                            ) {
+                                Button(
+                                    onClick = { navController.navigate(Screen.SkillGap.route) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
+                                    shape = RoundedCornerShape(16.dp),
+                                    contentPadding = PaddingValues(vertical = 16.dp, horizontal = 20.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Continue to Skill Gap",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
+                    }
                 }
+
+                FloatingAstraBot(navController, "ATS Dashboard")
             }
 
-            FloatingAstraBot(navController, "ATS Dashboard")
-        }
+            // Priority Detail Dialog
+            if (selectedPriorityForDetail != null) {
+                AtsPriorityDetailDialog(
+                    priority = selectedPriorityForDetail!!,
+                    onDismiss = { selectedPriorityForDetail = null },
+                    onAskAi = {
+                        selectedPriorityForDetail = null
+                        navController.navigate(Screen.AiAssistant.route)
+                    }
+                )
+            }
 
-        // Priority Detail Dialog
-        if (selectedPriorityForDetail != null) {
-            AtsPriorityDetailDialog(
-                priority = selectedPriorityForDetail!!,
-                onDismiss = { selectedPriorityForDetail = null },
-                onAskAi = {
-                    selectedPriorityForDetail = null
-                    navController.navigate(Screen.AiAssistant.route)
-                }
-            )
-        }
-
-        // Immersive "Why?" Explanation Modal
-        if (selectedWhyMetric != null) {
-            AtsMetricWhyModal(
-                calculation = selectedWhyMetric!!,
-                onDismiss = { selectedWhyMetric = null },
-                onAskAi = {
-                    selectedWhyMetric = null
-                    navController.navigate(Screen.AiAssistant.route)
-                }
-            )
+            // Immersive Enlarged "Why?" Explanation Modal with Pure Background Blur (No color tint, No dark overlay)
+            if (selectedWhyMetric != null) {
+                AtsMetricWhyModal(
+                    calculation = selectedWhyMetric!!,
+                    onDismiss = { selectedWhyMetric = null },
+                    onAskAi = {
+                        selectedWhyMetric = null
+                        navController.navigate(Screen.AiAssistant.route)
+                    }
+                )
+            }
         }
 
         // ATS Info Dialog
@@ -6047,13 +5811,16 @@ fun AtsMetricWhyModal(
         AtsCategoryIcon.OVERALL -> Icons.Default.AutoAwesome
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        )
+    // Pure transparent overlay container - No dark overlay, No blue background, No color tint
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Surface(
             shape = RoundedCornerShape(24.dp),
@@ -6064,6 +5831,11 @@ fun AtsMetricWhyModal(
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.88f)
                 .padding(vertical = 12.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { /* Intercept clicks to prevent dismiss when clicking inside card */ }
+                )
         ) {
             Column(
                 modifier = Modifier

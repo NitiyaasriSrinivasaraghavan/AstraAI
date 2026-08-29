@@ -733,6 +733,10 @@ class SkillGapViewModel(
 }
 
 data class InteractiveAnalysisState(
+    val atsComplete: Boolean = false,
+    val skillGapComplete: Boolean = false,
+    val jdMatchingComplete: Boolean = false,
+    val isComplete: Boolean = false,
     val stage: Int = 0,
     val sections: List<com.example.aidrivencompetencyplatform.model.ParsedSectionItem> = emptyList(),
     val extractedSkills: List<String> = emptyList(),
@@ -746,8 +750,7 @@ data class InteractiveAnalysisState(
     val parsingScore: Int = 0,
     val skillMatch: Int = 0,
     val matchedSkillsCount: Int = 0,
-    val missingSkillsCount: Int = 0,
-    val isComplete: Boolean = false
+    val missingSkillsCount: Int = 0
 )
 
 class ResumeViewModel(
@@ -825,9 +828,18 @@ class ResumeViewModel(
             _analyzingRole.value = effectiveRole
             _stageIndex.value = 0
             
+            // Initial real-time state: all 3 modules in progress
+            _interactiveState.value = InteractiveAnalysisState(
+                atsComplete = false,
+                skillGapComplete = false,
+                jdMatchingComplete = false,
+                isComplete = false,
+                stage = 0,
+                targetRole = effectiveRole
+            )
+            
             try {
-                // Initial State
-                _loadingStage.value = "Parsing Your Resume..."
+                _loadingStage.value = "Analyzing ATS compatibility..."
                 _stageIndex.value = 0
                 
                 var text = if (selectedUri != null) {
@@ -848,42 +860,10 @@ class ResumeViewModel(
                 // Parse deterministic structure, real sections, project titles and skills
                 val structure = resumeParser.parseResumeStructure(text)
                 val candidateName = structure.candidateInfo.name ?: sessionManager.getUserName() ?: "Candidate"
-                
-                // ==========================================
-                // STAGE 0: "Parsing Your Resume"
-                // ==========================================
-                _interactiveState.value = InteractiveAnalysisState(
-                    stage = 0,
-                    sections = structure.sections,
-                    extractedSkills = structure.extractedSkills,
-                    detectedProjects = structure.extractedProjects,
-                    candidateName = candidateName,
-                    targetRole = targetRole
-                )
-                _stageIndex.value = 0
-                _loadingStage.value = "Parsing Your Resume..."
-                kotlinx.coroutines.delay(1100)
-
-                // ==========================================
-                // STAGE 1: "Identifying Your Skills"
-                // ==========================================
-                _interactiveState.value = _interactiveState.value.copy(
-                    stage = 1
-                )
-                _stageIndex.value = 1
-                _loadingStage.value = "Identifying Your Skills..."
-                kotlinx.coroutines.delay(1200)
-
-                // ==========================================
-                // STAGE 2: "Evaluating ATS Compatibility"
-                // Call Gemini or fallback
-                // ==========================================
-                _stageIndex.value = 2
-                _loadingStage.value = "Evaluating ATS Compatibility..."
 
                 var result: ResumeAnalysisResult? = null
                 try {
-                    result = geminiService.analyzeResume(text, targetRole)
+                    result = geminiService.analyzeResume(text, effectiveRole)
                 } catch (e: Exception) {
                     Log.w(TAG, "Gemini call had issue, generating fallback deterministic result", e)
                 }
@@ -895,7 +875,7 @@ class ResumeViewModel(
                         overallScore = 82,
                         atsScore = defaultAts,
                         skillMatch = defaultSkillMatch,
-                        summary = "Comprehensive profile for $targetRole with strong core programming fundamentals.",
+                        summary = "Comprehensive profile for $effectiveRole with strong core programming fundamentals.",
                         strengths = listOf("Clear technical foundations", "Recognizable section layout", "Well-defined competencies"),
                         weaknesses = listOf("Add quantified metrics to project bullet points"),
                         extractedSkills = structure.extractedSkills.map {
@@ -924,43 +904,65 @@ class ResumeViewModel(
                 )
 
                 val atsBreakdown = enrichedResult.atsBreakdown ?: com.example.aidrivencompetencyplatform.model.AtsBreakdown(85, 90, 85, 88)
+
+                // ----------------------------------------------------
+                // 1. MODULE 1: ATS Analysis completes first
+                // ----------------------------------------------------
+                kotlinx.coroutines.delay(1100)
                 _interactiveState.value = _interactiveState.value.copy(
-                    stage = 2,
+                    atsComplete = true,
+                    stage = 1,
                     atsScore = enrichedResult.atsScore,
                     keywordScore = atsBreakdown.keywordCoverage,
                     structureScore = atsBreakdown.resumeStructure,
                     formattingScore = atsBreakdown.formattingSafety,
-                    parsingScore = atsBreakdown.parsingAccuracy
+                    parsingScore = atsBreakdown.parsingAccuracy,
+                    candidateName = candidateName,
+                    sections = structure.sections,
+                    extractedSkills = structure.extractedSkills,
+                    detectedProjects = structure.extractedProjects
                 )
-                kotlinx.coroutines.delay(1300)
+                _loadingStage.value = "Benchmarking Skill Gaps for $effectiveRole..."
+                _stageIndex.value = 1
 
-                // ==========================================
-                // STAGE 3: "Matching Your Profile"
-                // ==========================================
-                _stageIndex.value = 3
-                _loadingStage.value = "Matching Your Profile..."
+                // ----------------------------------------------------
+                // 2. MODULE 2: Skill Gap Analysis completes second
+                // ----------------------------------------------------
+                kotlinx.coroutines.delay(1200)
                 val extractedCount = enrichedResult.extractedSkills?.size ?: structure.extractedSkills.size
                 _interactiveState.value = _interactiveState.value.copy(
-                    stage = 3,
-                    skillMatch = enrichedResult.skillMatch,
+                    skillGapComplete = true,
+                    stage = 2,
                     matchedSkillsCount = maxOf(4, extractedCount - 2),
                     missingSkillsCount = 2
                 )
-                kotlinx.coroutines.delay(1200)
+                _loadingStage.value = "Generating Job Description Matching..."
+                _stageIndex.value = 2
 
-                // ==========================================
-                // STAGE 4: "Analysis Complete"
-                // ==========================================
+                // ----------------------------------------------------
+                // 3. MODULE 3: JD Matching completes third
+                // ----------------------------------------------------
+                kotlinx.coroutines.delay(1100)
+                _interactiveState.value = _interactiveState.value.copy(
+                    jdMatchingComplete = true,
+                    stage = 3,
+                    skillMatch = enrichedResult.skillMatch
+                )
+
+                // ----------------------------------------------------
+                // Final Completion: All 3 modules finished!
+                // ----------------------------------------------------
+                kotlinx.coroutines.delay(600)
                 _stageIndex.value = 4
                 _loadingStage.value = "Analysis Complete!"
                 _interactiveState.value = _interactiveState.value.copy(
-                    stage = 4,
-                    isComplete = true
+                    isComplete = true,
+                    stage = 4
                 )
 
                 // Save data once to SessionManager (reused by all dashboards)
                 sessionManager.saveLatestAnalysis(enrichedResult, _selectedFileName.value)
-                sessionManager.updateTargetRole(targetRole)
+                sessionManager.updateTargetRole(effectiveRole)
                 
                 kotlinx.coroutines.delay(800)
                 _analysisResult.value = enrichedResult
