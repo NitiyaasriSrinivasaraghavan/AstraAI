@@ -27,32 +27,32 @@ class SessionManager(context: Context) {
     }
 
     fun saveLatestAnalysis(result: ResumeAnalysisResult, fileName: String? = null) {
-        val email = getCurrentEmail() ?: "default_user"
+        val email = getCurrentEmail() ?: return
+        val normalizedEmail = normalizeEmail(email)
         val json = gson.toJson(result)
         
         // Also create a history record
-        val role = getTargetRole() ?: "Android Developer"
+        val role = getTargetRole(normalizedEmail) ?: "Android Developer"
         val topSkills = (result.extractedSkills ?: emptyList()).map { it.name }.take(4)
         val historyRecord = AnalysisHistoryRecord(
             targetRole = role,
             atsScore = result.atsScore,
             skillMatch = result.skillMatch,
-            candidateName = result.candidateName ?: getUserName(),
+            candidateName = result.candidateName ?: getUserName(normalizedEmail),
             fileName = fileName ?: "Resume.pdf",
             topSkills = topSkills
         )
-        addAnalysisHistoryRecord(historyRecord, email)
+        addAnalysisHistoryRecord(historyRecord, normalizedEmail)
 
         prefs.edit()
-            .putString(KEY_LATEST_ANALYSIS + email, json)
-            .putString(KEY_LATEST_ANALYSIS + "global", json)
-            .commit()
+            .putString(KEY_LATEST_ANALYSIS + normalizedEmail, json)
+            .apply()
     }
 
-    fun getAnalysisHistory(): List<AnalysisHistoryRecord> {
-        val email = getCurrentEmail() ?: "default_user"
-        val json = prefs.getString(KEY_ANALYSIS_HISTORY + email, null)
-            ?: prefs.getString(KEY_ANALYSIS_HISTORY + "global", null)
+    fun getAnalysisHistory(specificEmail: String? = null): List<AnalysisHistoryRecord> {
+        val email = specificEmail ?: getCurrentEmail() ?: return emptyList()
+        val normalizedEmail = normalizeEmail(email)
+        val json = prefs.getString(KEY_ANALYSIS_HISTORY + normalizedEmail, null)
         
         if (json != null) {
             try {
@@ -64,16 +64,16 @@ class SessionManager(context: Context) {
             }
         }
 
-        // Synthesize a record from latest analysis if available
-        val latest = getLatestAnalysis()
+        // Synthesize a record from latest analysis if available for this specific user
+        val latest = getLatestAnalysis(normalizedEmail)
         if (latest != null) {
-            val role = getTargetRole() ?: "Android Developer"
+            val role = getTargetRole(normalizedEmail) ?: "Android Developer"
             val topSkills = (latest.extractedSkills ?: emptyList()).map { it.name }.take(4)
             val initialRecord = AnalysisHistoryRecord(
                 targetRole = role,
                 atsScore = latest.atsScore,
                 skillMatch = latest.skillMatch,
-                candidateName = latest.candidateName ?: getUserName(),
+                candidateName = latest.candidateName ?: getUserName(normalizedEmail),
                 fileName = "Resume.pdf",
                 topSkills = topSkills
             )
@@ -84,23 +84,22 @@ class SessionManager(context: Context) {
     }
 
     fun addAnalysisHistoryRecord(record: AnalysisHistoryRecord, specificEmail: String? = null) {
-        val email = specificEmail ?: getCurrentEmail() ?: "default_user"
-        val currentHistory = getAnalysisHistory().toMutableList()
+        val email = specificEmail ?: getCurrentEmail() ?: return
+        val normalizedEmail = normalizeEmail(email)
+        val currentHistory = getAnalysisHistory(normalizedEmail).toMutableList()
         // Prepend to show latest first
         currentHistory.add(0, record)
         val trimmedHistory = currentHistory.distinctBy { it.id }.take(15)
         val json = gson.toJson(trimmedHistory)
         prefs.edit()
-            .putString(KEY_ANALYSIS_HISTORY + email, json)
-            .putString(KEY_ANALYSIS_HISTORY + "global", json)
-            .commit()
+            .putString(KEY_ANALYSIS_HISTORY + normalizedEmail, json)
+            .apply()
     }
 
-    fun getLatestAnalysis(): ResumeAnalysisResult? {
-        val email = getCurrentEmail() ?: "default_user"
-        val json = prefs.getString(KEY_LATEST_ANALYSIS + email, null)
-            ?: prefs.getString(KEY_LATEST_ANALYSIS + "global", null)
-            ?: return null
+    fun getLatestAnalysis(specificEmail: String? = null): ResumeAnalysisResult? {
+        val email = specificEmail ?: getCurrentEmail() ?: return null
+        val normalizedEmail = normalizeEmail(email)
+        val json = prefs.getString(KEY_LATEST_ANALYSIS + normalizedEmail, null) ?: return null
         return try {
             gson.fromJson(json, ResumeAnalysisResult::class.java)
         } catch (e: Exception) {
@@ -182,10 +181,10 @@ class SessionManager(context: Context) {
     }
 
     /**
-     * Gets the name of the currently logged-in user.
+     * Gets the name of the currently logged-in user or specified email.
      */
-    fun getUserName(): String? {
-        val email = getCurrentEmail() ?: return null
+    fun getUserName(specificEmail: String? = null): String? {
+        val email = specificEmail ?: getCurrentEmail() ?: return null
         return getUser(email)?.name
     }
 
@@ -211,8 +210,8 @@ class SessionManager(context: Context) {
         saveUser(user.copy(targetRole = role))
     }
 
-    fun getTargetRole(): String? {
-        val email = getCurrentEmail() ?: return null
+    fun getTargetRole(specificEmail: String? = null): String? {
+        val email = specificEmail ?: getCurrentEmail() ?: return null
         return getUser(email)?.targetRole
     }
 

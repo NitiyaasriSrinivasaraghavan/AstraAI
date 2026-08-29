@@ -204,7 +204,13 @@ class AtsViewModel(
     }
 
     private fun calculateAtsScores() {
-        val analysis = _analysisResult.value ?: return
+        val analysis = _analysisResult.value
+        if (analysis == null) {
+            _scoreResult.value = null
+            _overallAtsScore.value = 0
+            _atsBreakdownState.value = AtsBreakdown()
+            return
+        }
         val calculated = scoringEngine.calculateScore(analysis, targetRole)
         _scoreResult.value = calculated
         _overallAtsScore.value = calculated.overallScore
