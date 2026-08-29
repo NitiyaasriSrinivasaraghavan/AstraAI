@@ -40,13 +40,84 @@ CERTIFICATIONS
 - Associate Android Developer (Google Certified)
 `;
 
-export function generateDeterministicAtsScore(targetRole: string = "Android Developer"): AtsScoreResult {
+export function parseResumeCandidateInfo(text: string): { name: string; email: string; phone: string; location: string } {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  // Email
+  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const email = emailMatch ? emailMatch[0].trim() : "alex.johnson@example.com";
+  
+  // Phone
+  const phoneMatch = text.match(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|(?:\+?91[\s-]?)?[6-9]\d{9}|(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+  const phone = phoneMatch ? phoneMatch[0].trim() : "+1 (555) 382-9910";
+
+  // Location Keywords
+  const locationKeywords = [
+    "srirangam", "trichy", "tiruchirappalli", "chennai", "coimbatore", "madurai", "salem",
+    "bangalore", "bengaluru", "hyderabad", "pune", "mumbai", "delhi", "noida", "gurgaon",
+    "kolkata", "kochi", "san francisco", "new york", "london", "seattle", "austin", "tamil nadu", "california", "texas"
+  ];
+
+  let location = "San Francisco, CA";
+  for (const line of lines.slice(0, 15)) {
+    const lower = line.toLowerCase();
+    if (locationKeywords.some(k => lower.includes(k)) || lower.startsWith("location:")) {
+      const cleaned = line.replace(/^location\s*:\s*/i, '').trim();
+      const parts = cleaned.split(/[|•·,]/).map(p => p.trim());
+      const locPart = parts.find(p => locationKeywords.some(k => p.toLowerCase().includes(k)));
+      if (locPart && locPart.length < 50 && !locPart.includes('@') && !/\d/.test(locPart)) {
+        location = locPart;
+        break;
+      }
+    }
+  }
+
+  // Name extraction (strictly preventing location from sticking to candidate name)
+  let name = "Alex Johnson";
+  const blacklist = ["developer", "engineer", "designer", "architect", "analyst", "resume", "summary", "experience", "education", "skills"];
+  
+  for (const line of lines.slice(0, 10)) {
+    const lower = line.toLowerCase();
+    if (emailMatch && line.includes(emailMatch[0])) continue;
+    if (phoneMatch && line.includes(phoneMatch[0])) continue;
+    if (line.includes('@') || line.includes('http') || line.includes('www.') || line.includes('.com')) continue;
+    if (/\d/.test(line)) continue;
+    if (blacklist.some(b => lower.includes(b))) continue;
+
+    // Check if delimited by comma or pipe
+    const lineParts = line.split(/[|,•·\-]/).map(p => p.trim()).filter(p => p.length > 0);
+    let candidatePart = line;
+    if (lineParts.length > 1) {
+      candidatePart = lineParts.find(p => !locationKeywords.some(k => p.toLowerCase().includes(k)) && !blacklist.some(b => p.toLowerCase().includes(b))) || lineParts[0];
+    } else if (line.includes(',')) {
+      const commaParts = line.split(',').map(p => p.trim());
+      candidatePart = commaParts[0];
+    }
+
+    let cleanedCandidate = candidatePart;
+    for (const k of locationKeywords) {
+      cleanedCandidate = cleanedCandidate.replace(new RegExp(`\\b${k}\\b`, 'gi'), '').trim();
+    }
+    cleanedCandidate = cleanedCandidate.replace(/[,|•·\-]+$/, '').trim();
+
+    const words = cleanedCandidate.split(/\s+/).filter(w => w.length > 0);
+    if (words.length >= 1 && words.length <= 4 && words.every(w => /^[A-Za-z.]+$/.test(w))) {
+      name = cleanedCandidate;
+      break;
+    }
+  }
+
+  return { name, email, phone, location };
+}
+
+export function generateDeterministicAtsScore(targetRole: string = "Android Developer", rawText: string = SAMPLE_RESUME_TEXT): AtsScoreResult {
+  const candidateInfo = parseResumeCandidateInfo(rawText);
   return {
     overallScore: 88,
-    candidateName: "Alex Johnson",
-    candidateEmail: "alex.johnson@example.com",
-    candidatePhone: "+1 (555) 382-9910",
-    candidateLocation: "San Francisco, CA",
+    candidateName: candidateInfo.name,
+    candidateEmail: candidateInfo.email,
+    candidatePhone: candidateInfo.phone,
+    candidateLocation: candidateInfo.location,
     targetRole: targetRole,
     keywordCoverage: {
       metricName: "Keyword Coverage",

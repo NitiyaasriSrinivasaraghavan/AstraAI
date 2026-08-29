@@ -2530,7 +2530,17 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     ) {
                         item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                        // 1. Entity Data Extraction Diagnostics (MUST BE FIRST AT THE TOP)
+                        // 1. Main ATS Compatibility Score Hero (MUST BE FIRST AT THE TOP)
+                        item {
+                            AtsOverallScoreHero(
+                                score = score,
+                                onMetricClick = { metric ->
+                                    selectedWhyMetric = metric
+                                }
+                            )
+                        }
+
+                        // 2. Entity Data Extraction Diagnostics (MUST APPEAR SECOND)
                         item {
                             AtsEntityExtractionCard(
                                 score = score,
@@ -2538,7 +2548,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 2. Candidate Profile & Target Role Header
+                        // 3. Candidate Profile & Target Role Sub-feature Header
                         item {
                             CandidateProfileCard(
                                 targetRole = score.targetRole,
@@ -2546,16 +2556,6 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                                 candidateEmail = score.candidateEmail,
                                 candidatePhone = score.candidatePhone,
                                 candidateLocation = score.candidateLocation
-                            )
-                        }
-
-                        // 3. Main ATS Compatibility Score Hero
-                        item {
-                            AtsOverallScoreHero(
-                                score = score,
-                                onMetricClick = { metric ->
-                                    selectedWhyMetric = metric
-                                }
                             )
                         }
 

@@ -17,6 +17,17 @@ class SessionManager(context: Context) {
         )
     private val gson = Gson()
 
+    init {
+        // Delete all existing users and their analysis history from the application
+        if (!prefs.getBoolean("has_cleared_all_legacy_data_v3", false)) {
+            prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v3", true).commit()
+        }
+    }
+
+    fun deleteAllUsersAndHistory() {
+        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v3", true).commit()
+    }
+
     companion object {
         private const val KEY_USER_DATA_PREFIX = "user_data_"
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
