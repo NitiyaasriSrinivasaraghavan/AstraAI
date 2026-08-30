@@ -5609,12 +5609,8 @@ fun AtsOverallScoreHero(
         else -> "Action Required"
     }
 
-    val passProbability = when {
-        score.overallScore >= 80 -> "92% Estimated ATS Pass Rate"
-        score.overallScore >= 65 -> "74% Estimated ATS Pass Rate"
-        score.overallScore >= 50 -> "51% Estimated ATS Pass Rate"
-        else -> "32% Estimated ATS Pass Rate"
-    }
+    val estimatedPassRate = ((score.overallScore * 0.95).toInt().coerceIn(10, 99))
+    val passProbability = "$estimatedPassRate% Estimated ATS Pass Rate"
 
     AstraCard(
         modifier = Modifier.fillMaxWidth(),
@@ -6483,12 +6479,12 @@ fun AtsExpandableCard(
 
             // Progress Bar
             LinearProgressIndicator(
-                progress = { calculation.score / 100f },
+                progress = { (calculation.score / 100f).coerceIn(0f, 1f) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = color,
+                color = AtsProgressPurple,
                 trackColor = SoftGreen
             )
 

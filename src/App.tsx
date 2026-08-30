@@ -416,7 +416,7 @@ export default function App() {
 
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-3">
                         <div 
-                          className="bg-[#1B5E20] h-full rounded-full transition-all duration-700"
+                          className="bg-[#7C3AED] h-full rounded-full transition-all duration-700"
                           style={{ width: `${(metric.score / metric.maxScore) * 100}%` }}
                         />
                       </div>
