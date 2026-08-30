@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, CheckCircle2, AlertCircle, ShieldAlert, Sparkles, 
   ArrowRight, Search, Zap, Check, ChevronRight, X, Cpu, 
-  BarChart3, Target, BookOpen, MessageSquare, Award, RefreshCw
+  BarChart3, Target, BookOpen, MessageSquare, Award, RefreshCw, Send
 } from 'lucide-react';
 import { SAMPLE_RESUME_TEXT, generateDeterministicAtsScore, SAMPLE_SKILL_GAPS, SAMPLE_JD_MATCHES } from './sampleData';
 import { AtsScoreResult, AtsCalculation } from './types';
+import { NoviQLogoTile, NovaAvatar } from './components/BrandLogos';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'upload' | 'ats' | 'skillgap' | 'jd' | 'ai'>('ats');
@@ -87,17 +88,15 @@ export default function App() {
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-[#E2E8F0] shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-[#1B5E20] flex items-center justify-center text-white shadow-sm shadow-green-900/20">
-              <Sparkles className="w-5 h-5 text-[#81C784]" />
-            </div>
+            <NoviQLogoTile size={40} className="shadow-sm" />
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-bold text-lg text-[#0D3B12] tracking-tight">NoviQ</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-[#E8F5E9] text-[#1B5E20] border border-[#C8E6C9]">
-                  Competency OS
+                <span className="font-extrabold text-lg text-[#2C4A3E] tracking-tight">Novi<span className="text-[#568367]">Q</span></span>
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-[#E8F5E9] text-[#2C4A3E] border border-[#C8E6C9]">
+                  AI Career Companion
                 </span>
               </div>
-              <p className="text-xs text-slate-500">ATS Diagnostics & Skill Gap Benchmarks</p>
+              <p className="text-xs text-slate-500">ATS Diagnostics & Competency OS</p>
             </div>
           </div>
 
@@ -105,7 +104,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('upload')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'upload' ? 'bg-[#1B5E20] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                activeTab === 'upload' ? 'bg-[#2C4A3E] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               Upload / Edit
@@ -113,7 +112,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('ats')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'ats' ? 'bg-[#1B5E20] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                activeTab === 'ats' ? 'bg-[#2C4A3E] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               ATS Score & Why
@@ -121,7 +120,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('skillgap')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'skillgap' ? 'bg-[#1B5E20] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                activeTab === 'skillgap' ? 'bg-[#2C4A3E] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               Skill Gap
@@ -129,10 +128,19 @@ export default function App() {
             <button
               onClick={() => setActiveTab('jd')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'jd' ? 'bg-[#1B5E20] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                activeTab === 'jd' ? 'bg-[#2C4A3E] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               JD Match
+            </button>
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                activeTab === 'ai' ? 'bg-[#476956] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <NovaAvatar size={20} showBorder={false} />
+              <span>Nova AI</span>
             </button>
           </div>
         </div>
@@ -550,7 +558,113 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: NOVA AI ASSISTANT */}
+        {/* ========================================================================= */}
+        {activeTab === 'ai' && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[650px]">
+              {/* Nova Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-[#F4F8F4] to-white flex items-center justify-between">
+                <div className="flex items-center space-x-3.5">
+                  <NovaAvatar size={48} showBorder={true} />
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="font-extrabold text-base text-[#2B483B]">Nova AI</h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E8F5E9] text-[#2C4A3E] border border-[#C8E6C9]">
+                        Online
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">Your AI Career Assistant & Interview Mentor</p>
+                  </div>
+                </div>
+                <div className="text-right hidden sm:block">
+                  <span className="text-xs font-semibold text-[#4E775F] bg-[#EAF2EC] px-3 py-1.5 rounded-full">
+                    Powered by NoviQ Intelligence
+                  </span>
+                </div>
+              </div>
+
+              {/* Chat Messages */}
+              <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-[#FAFBF9]">
+                {/* Message 1: Nova Greeting */}
+                <div className="flex items-start space-x-3 max-w-2xl">
+                  <NovaAvatar size={36} showBorder={false} />
+                  <div className="bg-white rounded-2xl rounded-tl-sm p-4 border border-slate-200 shadow-sm">
+                    <p className="text-sm text-slate-800 leading-relaxed font-medium">
+                      Hello! I'm <strong className="text-[#2C4A3E]">Nova</strong>, your AI Career Assistant.
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                      I'm here to help you dissect your ATS compatibility score (88/100), address critical skill gaps for <span className="font-semibold text-[#2C4A3E]">{targetRole}</span>, and conduct mock technical interview drills. How would you like to level up today?
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button 
+                        onClick={() => setActiveTab('ats')}
+                        className="text-xs bg-[#EAF2EC] hover:bg-[#D4E7D6] text-[#2C4A3E] font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                      >
+                        🔍 Explain Keyword Coverage
+                      </button>
+                      <button 
+                        onClick={() => setActiveTab('skillgap')}
+                        className="text-xs bg-[#EAF2EC] hover:bg-[#D4E7D6] text-[#2C4A3E] font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                      >
+                        🎯 Review Missing Skills
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Message 2: Nova Proactive Insight */}
+                <div className="flex items-start space-x-3 max-w-2xl">
+                  <NovaAvatar size={36} showBorder={false} />
+                  <div className="bg-white rounded-2xl rounded-tl-sm p-4 border border-slate-200 shadow-sm">
+                    <div className="flex items-center space-x-1.5 text-xs font-bold text-[#2C4A3E] mb-1">
+                      <Sparkles className="w-3.5 h-3.5 text-[#568367]" />
+                      <span>Nova's Proactive Competency Tip</span>
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed">
+                      Your resume has strong evidence for <strong>Coroutines & Flows</strong> and <strong>Jetpack Compose</strong>. Adding 1-2 quantified metrics for <strong>Hilt / Dagger DI modularization</strong> will push your ATS score above 92%!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chat Input Bar */}
+              <div className="p-3.5 sm:p-4 border-t border-slate-200 bg-white">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Ask Nova anything about your career, resume, or interview prep..."
+                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2C4A3E] focus:bg-white transition-all"
+                  />
+                  <button className="p-2.5 rounded-xl bg-[#2C4A3E] hover:bg-[#1E352B] text-white shadow-sm transition-all cursor-pointer">
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Floating Nova AI Assistant Quick Access */}
+      {activeTab !== 'ai' && (
+        <button
+          onClick={() => setActiveTab('ai')}
+          className="fixed bottom-6 right-6 z-40 bg-white/95 backdrop-blur-md border-[1.5px] border-[#476956]/40 hover:border-[#2C4A3E] rounded-full pl-2 pr-4 py-2 shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center space-x-2.5 group cursor-pointer"
+        >
+          <NovaAvatar size={34} showBorder={false} />
+          <div className="text-left">
+            <span className="block text-xs font-extrabold text-[#2C4A3E] group-hover:text-[#1E352B]">
+              Nova AI
+            </span>
+            <span className="block text-[10px] font-medium text-slate-500">
+              Ask Assistant
+            </span>
+          </div>
+        </button>
+      )}
 
       {/* ========================================================================= */}
       {/* 3-MODULE REAL-TIME ANALYSIS MODAL */}

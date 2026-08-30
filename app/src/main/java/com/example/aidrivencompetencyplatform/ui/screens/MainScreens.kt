@@ -85,20 +85,7 @@ fun AppTourScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SoftGreen,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = Primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                        NovaAvatar(size = 38.dp, elevation = 2.dp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
@@ -290,6 +277,7 @@ fun MainDashboardScreen(
     LaunchedEffect(analysisResult) {
         if (analysisResult != null) {
             dashboardViewModel.refreshUser()
+            resumeViewModel.resetAnalysisResult()
             navController.navigate(Screen.AtsAnalysis.route)
         }
     }
@@ -660,20 +648,7 @@ fun AstraWelcomeIntroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = SoftGreen,
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = "Nova AI",
-                                tint = Primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    NovaAvatar(size = 44.dp, elevation = 2.dp)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
@@ -683,7 +658,7 @@ fun AstraWelcomeIntroCard(
                             color = TextPrimary
                         )
                         Text(
-                            text = "Your AI Career Copilot",
+                            text = "Your AI Career Assistant",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Primary
@@ -899,20 +874,7 @@ fun AstraInteractiveTourDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SoftGreen,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = "Nova",
-                                    tint = Primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
+                        NovaAvatar(size = 36.dp, elevation = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Nova Tour Guide",
@@ -1503,28 +1465,24 @@ fun AstraDashboardHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.2f),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+                    NoviQLogoTile(size = 38.dp, elevation = 3.dp)
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "NOVIQ",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        letterSpacing = 1.5.sp
-                    )
+                    Column {
+                        Text(
+                            text = "NoviQ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Career Intelligence",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 10.sp
+                        )
+                    }
                 }
 
                 IconButton(
@@ -2016,6 +1974,7 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
     // AUTOMATIC NAVIGATION TO ATS DASHBOARD ON ANALYSIS COMPLETION
     LaunchedEffect(analysisResult) {
         if (analysisResult != null) {
+            viewModel.resetAnalysisResult()
             navController.navigate(Screen.AtsAnalysis.route) {
                 popUpTo(Screen.ResumeUpload.route) { inclusive = false }
             }
@@ -2041,7 +2000,13 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                            }
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -2521,7 +2486,13 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                            }
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -2720,15 +2691,13 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 11. NEXT DASHBOARD NAVIGATION: Continue to Skill Gap
+                        // 11. NEXT DASHBOARD NAVIGATION: Continue to Skill Gap & Return to Main Dashboard
                         item {
-                            Surface(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 12.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                color = Primary,
-                                shadowElevation = 3.dp
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Button(
                                     onClick = { navController.navigate(Screen.SkillGap.route) },
@@ -2754,6 +2723,41 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                                             contentDescription = null,
                                             tint = Color.White,
                                             modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (!navController.popBackStack()) {
+                                            navController.navigate(Screen.Dashboard.route) {
+                                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.5.dp, BorderColor),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                    contentPadding = PaddingValues(vertical = 14.dp, horizontal = 20.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Home,
+                                            contentDescription = null,
+                                            tint = Primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Back to Main Dashboard",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = TextPrimary
                                         )
                                     }
                                 }
@@ -2862,7 +2866,13 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                            }
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -4271,7 +4281,13 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                            }
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -5098,24 +5114,22 @@ fun AiAssistantScreen(navController: NavController, viewModel: AiAssistantViewMo
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SoftGreen,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
-                            }
-                        }
+                        NovaAvatar(size = 38.dp, elevation = 2.dp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("Nova AI Assistant", fontWeight = FontWeight.Bold, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
-                            Text("Real-time Career Intelligence", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("Nova", fontWeight = FontWeight.Bold, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                            Text("Your AI Career Assistant", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                         }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                            }
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -5193,25 +5207,35 @@ fun ModernChatBubble(text: String, isUser: Boolean) {
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Surface(
-            color = if (isUser) Primary else Surface,
-            shape = RoundedCornerShape(
-                topStart = 18.dp,
-                topEnd = 18.dp,
-                bottomStart = if (isUser) 18.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 18.dp
-            ),
-            border = if (isUser) null else androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-            shadowElevation = 1.dp,
-            modifier = Modifier.widthIn(max = 300.dp)
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = text,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                color = if (isUser) Color.White else TextPrimary,
-                style = MaterialTheme.typography.bodyMedium,
-                lineHeight = 20.sp
-            )
+            if (!isUser) {
+                NovaAvatar(size = 30.dp, elevation = 1.dp)
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Surface(
+                color = if (isUser) Primary else Surface,
+                shape = RoundedCornerShape(
+                    topStart = 18.dp,
+                    topEnd = 18.dp,
+                    bottomStart = if (isUser) 18.dp else 4.dp,
+                    bottomEnd = if (isUser) 4.dp else 18.dp
+                ),
+                border = if (isUser) null else androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                shadowElevation = 1.dp,
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Text(
+                    text = text,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    color = if (isUser) Color.White else TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 20.sp
+                )
+            }
         }
     }
 }
@@ -5233,7 +5257,13 @@ fun InterviewPrepScreen(navController: NavController, viewModel: AiAssistantView
             TopAppBar(
                 title = { Text("AI Mock Interview", fontWeight = FontWeight.Bold, color = TextPrimary) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = true }
+                            }
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -7394,21 +7424,7 @@ fun AtsKeyAiInsightCard(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = MintLight,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.2f)),
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = Primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                NovaAvatar(size = 36.dp, elevation = 1.dp)
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
@@ -7560,7 +7576,8 @@ fun AtsPriorityDetailDialog(
 fun BoxScope.FloatingAstraBot(navController: NavController, screenContext: String) {
     Surface(
         shape = RoundedCornerShape(24.dp),
-        color = Primary,
+        color = Surface,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, Primary.copy(alpha = 0.35f)),
         shadowElevation = 8.dp,
         modifier = Modifier
             .align(Alignment.BottomEnd)
@@ -7568,17 +7585,25 @@ fun BoxScope.FloatingAstraBot(navController: NavController, screenContext: Strin
             .clickable { navController.navigate(Screen.AiAssistant.route) }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = "Ask Nova", tint = Color.White, modifier = Modifier.size(18.dp))
-            Text(
-                text = "✦ Nova AI",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            NovaAvatar(size = 28.dp, showBorder = false)
+            Column {
+                Text(
+                    text = "Nova AI",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Ask Assistant",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = TextSecondary
+                )
+            }
         }
     }
 }

@@ -34,6 +34,8 @@ import androidx.navigation.NavController
 import com.example.aidrivencompetencyplatform.AstraApp
 import com.example.aidrivencompetencyplatform.model.User
 import com.example.aidrivencompetencyplatform.ui.components.AstraCard
+import com.example.aidrivencompetencyplatform.ui.components.NoviQFullLogo
+import com.example.aidrivencompetencyplatform.ui.components.NoviQLogoTile
 import com.example.aidrivencompetencyplatform.ui.components.PremiumButton
 import com.example.aidrivencompetencyplatform.ui.navigation.Screen
 import com.example.aidrivencompetencyplatform.ui.theme.*
@@ -51,14 +53,23 @@ fun SplashScreen(navController: NavController) {
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
     val sessionManager = remember { app.sessionManager }
-    val scale = remember { Animatable(0.8f) }
+    val scale = remember { Animatable(0.85f) }
+    val alpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        scale.animateTo(
-            targetValue = 1.0f,
-            animationSpec = tween(durationMillis = 300)
-        )
-        delay(200L)
+        launch {
+            scale.animateTo(
+                targetValue = 1.0f,
+                animationSpec = spring(dampingRatio = 0.7f, stiffness = 350f)
+            )
+        }
+        launch {
+            alpha.animateTo(
+                targetValue = 1.0f,
+                animationSpec = tween(durationMillis = 400)
+            )
+        }
+        delay(1200L)
         
         if (sessionManager.isLoggedIn()) {
             navController.navigate(Screen.Dashboard.route) {
@@ -77,42 +88,13 @@ fun SplashScreen(navController: NavController) {
             .fillMaxSize()
             .background(Background)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .scale(scale.value)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Primary,
-                                PrimaryLight
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "NoviQ",
-                style = MaterialTheme.typography.headlineLarge,
-                color = PrimaryDark,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Career Intelligence & Competency Platform",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.scale(scale.value)
+        ) {
+            NoviQFullLogo(
+                iconSize = 110.dp,
+                showSubtitle = true
             )
         }
     }
@@ -142,20 +124,7 @@ fun LoginScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Surface(
-                shape = CircleShape,
-                color = SoftGreen,
-                modifier = Modifier.size(64.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = Primary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
+            NoviQLogoTile(size = 72.dp, elevation = 4.dp)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "Welcome to NoviQ",
@@ -165,7 +134,7 @@ fun LoginScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Sign in to elevate your career intelligence",
+                text = "Sign in to your AI Career Companion",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
@@ -293,20 +262,7 @@ fun SignupScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Surface(
-                shape = CircleShape,
-                color = SoftGreen,
-                modifier = Modifier.size(64.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        tint = Primary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
+            NoviQLogoTile(size = 72.dp, elevation = 4.dp)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "Create NoviQ Account",
@@ -316,7 +272,7 @@ fun SignupScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Join your intelligent career companion",
+                text = "Join your AI Career Companion",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )

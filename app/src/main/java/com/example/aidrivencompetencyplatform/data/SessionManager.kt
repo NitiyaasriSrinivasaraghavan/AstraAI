@@ -19,13 +19,13 @@ class SessionManager(context: Context) {
 
     init {
         // Delete all existing users and their analysis history from the application
-        if (!prefs.getBoolean("has_cleared_all_legacy_data_v3", false)) {
-            prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v3", true).commit()
+        if (!prefs.getBoolean("has_cleared_all_legacy_data_v5", false)) {
+            prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v5", true).commit()
         }
     }
 
     fun deleteAllUsersAndHistory() {
-        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v3", true).commit()
+        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v5", true).commit()
     }
 
     companion object {
