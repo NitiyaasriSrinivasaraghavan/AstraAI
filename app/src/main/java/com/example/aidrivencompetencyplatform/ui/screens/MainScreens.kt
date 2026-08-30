@@ -278,8 +278,20 @@ fun MainDashboardScreen(
     val tourCurrentStep by dashboardViewModel.tourCurrentStep.collectAsState()
     val analysisHistory by dashboardViewModel.analysisHistory.collectAsState()
 
+    val isLoading by resumeViewModel.isLoading.collectAsState()
+    val interactiveState by resumeViewModel.interactiveState.collectAsState()
+    val analyzingRole by resumeViewModel.analyzingRole.collectAsState()
+    val analysisResult by resumeViewModel.analysisResult.collectAsState()
+
     LaunchedEffect(Unit) {
         dashboardViewModel.refreshUser()
+    }
+
+    LaunchedEffect(analysisResult) {
+        if (analysisResult != null) {
+            dashboardViewModel.refreshUser()
+            navController.navigate(Screen.AtsAnalysis.route)
+        }
     }
 
     // Interactive Astra Onboarding Tour Dialog
@@ -534,7 +546,10 @@ fun MainDashboardScreen(
                                 }
 
                                 Button(
-                                    onClick = { navController.navigate(Screen.ResumeUpload.route) },
+                                    onClick = {
+                                        val role = targetRole.ifBlank { "Android Developer" }
+                                        resumeViewModel.analyzeResume(role)
+                                    },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(52.dp),
@@ -584,7 +599,8 @@ fun MainDashboardScreen(
                         AnalyzeResumeHeroCard(
                             hasAnalysis = true,
                             onAnalyzeClick = {
-                                navController.navigate(Screen.ResumeUpload.route)
+                                val role = targetRole.ifBlank { "Android Developer" }
+                                resumeViewModel.analyzeResume(role)
                             }
                         )
                     }
@@ -598,7 +614,8 @@ fun MainDashboardScreen(
                                 navController.navigate(Screen.AtsAnalysis.route)
                             },
                             onAnalyzeNewClick = {
-                                navController.navigate(Screen.ResumeUpload.route)
+                                val role = targetRole.ifBlank { "Android Developer" }
+                                resumeViewModel.analyzeResume(role)
                             }
                         )
                     }
@@ -608,6 +625,15 @@ fun MainDashboardScreen(
             item {
                 Spacer(modifier = Modifier.height(16.dp))
             }
+        }
+
+        // Real-time Resume Analysis Progress Modal (ATS, Skill Gap, JD Matching)
+        if (isLoading) {
+            ResumeAnalysisProgressModal(
+                isLoading = true,
+                interactiveState = interactiveState,
+                targetRole = analyzingRole.ifBlank { targetRole.ifBlank { "Android Developer" } }
+            )
         }
     }
 }

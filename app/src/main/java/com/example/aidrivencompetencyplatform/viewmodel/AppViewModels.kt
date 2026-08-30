@@ -828,21 +828,23 @@ class ResumeViewModel(
             loadSampleResume(effectiveRole)
         }
         
+        _analysisResult.value = null
+        _isLoading.value = true
+        _errorMessage.value = null
+        _analyzingRole.value = effectiveRole
+        _stageIndex.value = 0
+        
+        // Initial real-time state: all 3 modules in progress
+        _interactiveState.value = InteractiveAnalysisState(
+            atsComplete = false,
+            skillGapComplete = false,
+            jdMatchingComplete = false,
+            isComplete = false,
+            stage = 0,
+            targetRole = effectiveRole
+        )
+        
         viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
-            _analyzingRole.value = effectiveRole
-            _stageIndex.value = 0
-            
-            // Initial real-time state: all 3 modules in progress
-            _interactiveState.value = InteractiveAnalysisState(
-                atsComplete = false,
-                skillGapComplete = false,
-                jdMatchingComplete = false,
-                isComplete = false,
-                stage = 0,
-                targetRole = effectiveRole
-            )
             
             try {
                 _loadingStage.value = "Analyzing ATS compatibility..."

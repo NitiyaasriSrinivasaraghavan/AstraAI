@@ -92,7 +92,7 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-bold text-lg text-[#0D3B12] tracking-tight">AstraAI</span>
+                <span className="font-bold text-lg text-[#0D3B12] tracking-tight">NoviQ</span>
                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-[#E8F5E9] text-[#1B5E20] border border-[#C8E6C9]">
                   Competency OS
                 </span>
