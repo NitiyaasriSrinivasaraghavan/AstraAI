@@ -102,7 +102,7 @@ fun SplashScreen(navController: NavController) {
             }
             Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "AstraAI",
+                text = "NoviQ",
                 style = MaterialTheme.typography.headlineLarge,
                 color = PrimaryDark,
                 fontWeight = FontWeight.Black,
@@ -158,7 +158,7 @@ fun LoginScreen(navController: NavController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Welcome to AstraAI",
+                text = "Welcome to NoviQ",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
@@ -309,7 +309,7 @@ fun SignupScreen(navController: NavController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Create AstraAI Account",
+                text = "Create NoviQ Account",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary

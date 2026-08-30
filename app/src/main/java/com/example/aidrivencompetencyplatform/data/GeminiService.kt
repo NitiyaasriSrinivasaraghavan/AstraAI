@@ -145,7 +145,7 @@ class GeminiService {
     }
 
     suspend fun getAiAssistantResponse(query: String, context: String): String = withContext(Dispatchers.IO) {
-        val prompt = "You are Astra, a career assistant. Use the following context to help the user.\nContext: $context\nUser Query: $query"
+        val prompt = "You are Nova, a career assistant. Use the following context to help the user.\nContext: $context\nUser Query: $query"
         try {
             val responseText = makeApiCall(prompt)
             responseText ?: "I'm sorry, I couldn't process that request."

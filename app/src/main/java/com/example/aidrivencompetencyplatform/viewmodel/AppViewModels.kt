@@ -983,6 +983,10 @@ class ResumeViewModel(
         }
     }
 
+    fun resetAnalysisResult() {
+        _analysisResult.value = null
+    }
+
     fun reset() {
         selectedUri = null
         _selectedFileName.value = null
@@ -1024,7 +1028,7 @@ class AiAssistantViewModel(
     private fun initDefaultChat() {
         val userName = sessionManager.getUserName() ?: "there"
         _messages.value = listOf(
-            ChatMessage("Hello $userName! I'm Astra, your AI Career Assistant. How can I help you elevate your career today?", false)
+            ChatMessage("Hello $userName! I'm Nova, your AI Career Assistant. How can I help you elevate your career today?", false)
         )
     }
 
@@ -1034,8 +1038,8 @@ class AiAssistantViewModel(
         val userName = sessionManager.getUserName() ?: "there"
         _messages.value = listOf(
             ChatMessage(
-                text = "Welcome to AstraAI, $userName! 🌟 I'm your dedicated Career Intelligence Companion.\n\n" +
-                        "Here is what AstraAI does for you:\n" +
+                text = "Welcome to NoviQ, $userName! 🌟 I'm Nova, your dedicated Career Intelligence Companion.\n\n" +
+                        "Here is what NoviQ does for you:\n" +
                         "1️⃣ **Analyse Resume**: Upload your resume (PDF/DOCX) and choose your target role to build your competency profile.\n" +
                         "2️⃣ **ATS Analysis**: Transparent 4-component scoring (Keyword Coverage 35%, Resume Structure 25%, Formatting Safety 20%, Parsing Accuracy 20%) with deep 'Ask Why?' XAI explanations.\n" +
                         "3️⃣ **Skill Gap Dashboard**: Pinpoint strong competencies, developing capabilities, and critical missing skills.\n" +
@@ -1198,7 +1202,7 @@ class JdMatcherViewModel(
 
         val projects = analysis?.projectAnalysis?.map { it.name }?.filter { it.isNotBlank() }
             ?.ifEmpty { null }
-            ?: listOf("AstraMind Career Platform", "Native Android Application Suite")
+            ?: listOf("NoviQ Career Platform", "Native Android Application Suite")
 
         val competencies = listOf(
             "Clean MVVM Architecture",

@@ -102,7 +102,7 @@ fun AppTourScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "AstraAI Guided Tour",
+                                text = "Nova Guided Tour",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
@@ -193,7 +193,7 @@ fun AppTourScreen(
                         OutlinedTextField(
                             value = inputText,
                             onValueChange = { inputText = it },
-                            placeholder = { Text("Ask Astra anything about the app...", fontSize = 14.sp) },
+                            placeholder = { Text("Ask Nova anything about the app...", fontSize = 14.sp) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(20.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -445,7 +445,7 @@ fun MainDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Astra",
+                            text = "Nova",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
@@ -642,7 +642,7 @@ fun AstraWelcomeIntroCard(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Default.AutoAwesome,
-                                contentDescription = "Astra AI",
+                                contentDescription = "Nova AI",
                                 tint = Primary,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -651,7 +651,7 @@ fun AstraWelcomeIntroCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Hi, I'm Astra",
+                            text = "Hi, I'm Nova",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
@@ -881,7 +881,7 @@ fun AstraInteractiveTourDialog(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Default.AutoAwesome,
-                                    contentDescription = "Astra",
+                                    contentDescription = "Nova",
                                     tint = Primary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -889,7 +889,7 @@ fun AstraInteractiveTourDialog(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Astra Tour Guide",
+                            text = "Nova Tour Guide",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
@@ -1493,7 +1493,7 @@ fun AstraDashboardHeader(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "ASTRAAI",
+                        text = "NOVIQ",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         color = Color.White,
@@ -1982,6 +1982,11 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
         }
     }
 
+    // Reset any previous completion state on entering screen
+    LaunchedEffect(Unit) {
+        viewModel.resetAnalysisResult()
+    }
+
     // AUTOMATIC NAVIGATION TO ATS DASHBOARD ON ANALYSIS COMPLETION
     LaunchedEffect(analysisResult) {
         if (analysisResult != null) {
@@ -2070,7 +2075,7 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Astra Tip",
+                                        text = "Nova Tip",
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = PrimaryDark
@@ -2775,7 +2780,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            "AstraAI evaluates your resume using deterministic parser emulation algorithms weighted across 4 key dimensions:",
+                            "NoviQ evaluates your resume using deterministic parser emulation algorithms weighted across 4 key dimensions:",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary
                         )
@@ -3977,7 +3982,7 @@ fun SkillDetailDialog(
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Ask Astra AI", color = Primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        Text("Ask Nova AI", color = Primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                     }
 
                     Button(
@@ -5078,7 +5083,7 @@ fun AiAssistantScreen(navController: NavController, viewModel: AiAssistantViewMo
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("AstraAI Assistant", fontWeight = FontWeight.Bold, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                            Text("Nova AI Assistant", fontWeight = FontWeight.Bold, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
                             Text("Real-time Career Intelligence", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                         }
                     }
@@ -5126,7 +5131,7 @@ fun AiAssistantScreen(navController: NavController, viewModel: AiAssistantViewMo
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask Astra anything...", color = TextSecondary) },
+                        placeholder = { Text("Ask Nova anything...", color = TextSecondary) },
                         shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Primary,
@@ -6247,7 +6252,7 @@ fun AtsMetricWhyModal(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Ask Astra AI", fontWeight = FontWeight.Bold)
+                        Text("Ask Nova AI", fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -7381,7 +7386,7 @@ fun AtsKeyAiInsightCard(
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "AstraAI Executive Career Insight",
+                        text = "Nova AI Executive Career Insight",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -7417,7 +7422,7 @@ fun AtsKeyAiInsightCard(
             }
 
             PremiumButton(
-                text = "Ask AstraAI to Optimize Bullet Points",
+                text = "Ask Nova AI to Optimize Bullet Points",
                 onClick = onConsultAiClick,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -7541,9 +7546,9 @@ fun BoxScope.FloatingAstraBot(navController: NavController, screenContext: Strin
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = "Ask Astra", tint = Color.White, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.AutoAwesome, contentDescription = "Ask Nova", tint = Color.White, modifier = Modifier.size(18.dp))
             Text(
-                text = "✦ AstraAI",
+                text = "✦ Nova AI",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
