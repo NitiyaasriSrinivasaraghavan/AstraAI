@@ -187,7 +187,7 @@ export default function App() {
                     className="px-6 py-3.5 rounded-xl bg-[#1B5E20] hover:bg-[#0D3B12] text-white font-semibold text-sm flex items-center gap-2 shadow-md shadow-green-900/10 transition-all cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-[#81C784]" />
-                    Run Real-Time AI Analysis (3 Modules)
+                    Analyse Resume (3 Modules)
                   </button>
                 </div>
               </div>

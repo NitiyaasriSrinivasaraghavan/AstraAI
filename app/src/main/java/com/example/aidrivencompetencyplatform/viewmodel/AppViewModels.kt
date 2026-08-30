@@ -916,7 +916,6 @@ class ResumeViewModel(
                 // ----------------------------------------------------
                 // 1. MODULE 1: ATS Analysis completes first
                 // ----------------------------------------------------
-                kotlinx.coroutines.delay(1100)
                 _interactiveState.value = _interactiveState.value.copy(
                     atsComplete = true,
                     stage = 1,
@@ -936,7 +935,6 @@ class ResumeViewModel(
                 // ----------------------------------------------------
                 // 2. MODULE 2: Skill Gap Analysis completes second
                 // ----------------------------------------------------
-                kotlinx.coroutines.delay(1200)
                 val extractedCount = enrichedResult.extractedSkills?.size ?: structure.extractedSkills.size
                 _interactiveState.value = _interactiveState.value.copy(
                     skillGapComplete = true,
@@ -950,7 +948,6 @@ class ResumeViewModel(
                 // ----------------------------------------------------
                 // 3. MODULE 3: JD Matching completes third
                 // ----------------------------------------------------
-                kotlinx.coroutines.delay(1100)
                 _interactiveState.value = _interactiveState.value.copy(
                     jdMatchingComplete = true,
                     stage = 3,
@@ -960,7 +957,6 @@ class ResumeViewModel(
                 // ----------------------------------------------------
                 // Final Completion: All 3 modules finished!
                 // ----------------------------------------------------
-                kotlinx.coroutines.delay(600)
                 _stageIndex.value = 4
                 _loadingStage.value = "Analysis Complete!"
                 _interactiveState.value = _interactiveState.value.copy(
@@ -972,7 +968,6 @@ class ResumeViewModel(
                 sessionManager.saveLatestAnalysis(enrichedResult, _selectedFileName.value)
                 sessionManager.updateTargetRole(effectiveRole)
                 
-                kotlinx.coroutines.delay(800)
                 _analysisResult.value = enrichedResult
                 Log.d(TAG, "ANALYSIS_COMPLETED_SUCCESSFULLY")
 
