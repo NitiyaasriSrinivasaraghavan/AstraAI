@@ -823,9 +823,9 @@ class ResumeViewModel(
         
         val effectiveRole = if (targetRole.isNotBlank()) targetRole else "Android Developer"
         
-        // If neither file nor sample is loaded, automatically load sample resume
         if (selectedUri == null && sampleResumeText == null) {
-            loadSampleResume(effectiveRole)
+            _errorMessage.value = "Please select a resume file (PDF/DOCX) or click 'Sample Resume' first."
+            return
         }
         
         _analysisResult.value = null

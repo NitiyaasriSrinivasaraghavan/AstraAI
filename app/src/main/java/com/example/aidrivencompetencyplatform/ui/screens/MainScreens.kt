@@ -253,6 +253,11 @@ fun MainDashboardScreen(
     dashboardViewModel: DashboardViewModel,
     resumeViewModel: ResumeViewModel
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as AstraApp
+    val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
+    var isNovaOpen by remember { mutableStateOf(false) }
+
     val userName by dashboardViewModel.userName.collectAsState()
     val greetingPrefix by dashboardViewModel.greetingPrefix.collectAsState()
     val isNewUser by dashboardViewModel.isNewUser.collectAsState()
@@ -429,37 +434,19 @@ fun MainDashboardScreen(
                             color = TextSecondary
                         )
                     }
-
-                    // 6. Assistant
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clickable { navController.navigate(Screen.AiAssistant.route) }
-                            .padding(horizontal = 4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = "Assistant",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Nova",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary
-                        )
-                    }
                 }
             }
         }
     ) { padding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(padding)
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // 1. Curved Sage/Mint Header with Personalized Greeting
             item {
                 val displayName = if (userName.isNotBlank()) userName else "User"
@@ -535,8 +522,7 @@ fun MainDashboardScreen(
 
                                 Button(
                                     onClick = {
-                                        val role = targetRole.ifBlank { "Android Developer" }
-                                        resumeViewModel.analyzeResume(role)
+                                        navController.navigate(Screen.ResumeUpload.route)
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -545,14 +531,14 @@ fun MainDashboardScreen(
                                     colors = ButtonDefaults.buttonColors(containerColor = Primary)
                                 ) {
                                     Icon(
-                                        Icons.Default.AutoAwesome,
+                                        Icons.Default.CloudUpload,
                                         contentDescription = null,
                                         tint = Color.White,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Analyze Resume",
+                                        text = "Upload Resume to Analyze",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
@@ -611,19 +597,32 @@ fun MainDashboardScreen(
             }
 
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
 
-        // Real-time Resume Analysis Progress Modal (ATS, Skill Gap, JD Matching)
-        if (isLoading) {
-            ResumeAnalysisProgressModal(
-                isLoading = true,
-                interactiveState = interactiveState,
-                targetRole = analyzingRole.ifBlank { targetRole.ifBlank { "Android Developer" } }
-            )
-        }
+        // Floating Nova Assistant Button
+        NovaFloatingButton(
+            onClick = { isNovaOpen = true },
+            bottomPadding = 16.dp
+        )
     }
+
+    // Real-time Resume Analysis Progress Modal (ATS, Skill Gap, JD Matching)
+    if (isLoading) {
+        ResumeAnalysisProgressModal(
+            isLoading = true,
+            interactiveState = interactiveState,
+            targetRole = analyzingRole.ifBlank { targetRole.ifBlank { "Android Developer" } }
+        )
+    }
+
+    // Nova Overlay Chat Panel
+    NovaOverlayChatPanel(
+        viewModel = assistantViewModel,
+        isOpen = isNovaOpen,
+        onDismiss = { isNovaOpen = false }
+    )
 }
 
 // ==========================================
@@ -1932,6 +1931,9 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
     val analyzingRole by viewModel.analyzingRole.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
+    val app = context.applicationContext as AstraApp
+    val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
+    var isNovaOpen by remember { mutableStateOf(false) }
 
     // Target Role selection
     var targetRole by remember { mutableStateOf("Android Developer") }
@@ -2449,7 +2451,20 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                         targetRole = analyzingRole.ifBlank { targetRole }
                     )
                 }
+
+                // Floating Nova Assistant Button
+                NovaFloatingButton(
+                    onClick = { isNovaOpen = true },
+                    bottomPadding = 16.dp
+                )
             }
+
+            // Nova Overlay Chat Panel
+            NovaOverlayChatPanel(
+                viewModel = assistantViewModel,
+                isOpen = isNovaOpen,
+                onDismiss = { isNovaOpen = false }
+            )
         }
     }
 
@@ -2460,6 +2475,11 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
+    val context = LocalContext.current
+    val app = context.applicationContext as AstraApp
+    val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
+    var isNovaOpen by remember { mutableStateOf(false) }
+
     val analysis by viewModel.analysisResult.collectAsState()
     val scoreResult by viewModel.scoreResult.collectAsState()
 
@@ -2778,7 +2798,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     onDismiss = { selectedPriorityForDetail = null },
                     onAskAi = {
                         selectedPriorityForDetail = null
-                        navController.navigate(Screen.AiAssistant.route)
+                        isNovaOpen = true
                     }
                 )
             }
@@ -2790,11 +2810,24 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     onDismiss = { selectedWhyMetric = null },
                     onAskAi = {
                         selectedWhyMetric = null
-                        navController.navigate(Screen.AiAssistant.route)
+                        isNovaOpen = true
                     }
                 )
             }
+
+            // Floating Nova Assistant Button
+            NovaFloatingButton(
+                onClick = { isNovaOpen = true },
+                bottomPadding = 16.dp
+            )
         }
+
+        // Nova Overlay Chat Panel
+        NovaOverlayChatPanel(
+            viewModel = assistantViewModel,
+            isOpen = isNovaOpen,
+            onDismiss = { isNovaOpen = false }
+        )
 
         // ATS Info Dialog
         if (showInfoDialog) {
@@ -2839,6 +2872,11 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapViewModel) {
+    val context = LocalContext.current
+    val app = context.applicationContext as AstraApp
+    val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
+    var isNovaOpen by remember { mutableStateOf(false) }
+
     val state by viewModel.state.collectAsState()
     val selectedSkillForDetail by viewModel.selectedSkillForDetail.collectAsState()
     var showRolePickerDialog by remember { mutableStateOf(false) }
@@ -3540,7 +3578,7 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                     onDismiss = { viewModel.dismissDetailedSkill() },
                     onAskAi = {
                         viewModel.dismissDetailedSkill()
-                        navController.navigate(Screen.AiAssistant.route)
+                        isNovaOpen = true
                     }
                 )
             }
@@ -3558,8 +3596,19 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
                 )
             }
 
-            FloatingAstraBot(navController, "Skill Gap Analysis")
+            // Floating Nova Assistant Button
+            NovaFloatingButton(
+                onClick = { isNovaOpen = true },
+                bottomPadding = 16.dp
+            )
         }
+
+        // Nova Overlay Chat Panel
+        NovaOverlayChatPanel(
+            viewModel = assistantViewModel,
+            isOpen = isNovaOpen,
+            onDismiss = { isNovaOpen = false }
+        )
     }
 }
 
@@ -4254,6 +4303,10 @@ fun SkillGapEmptyState(navController: NavController) {
 @Composable
 fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatcherViewModel) {
     val context = LocalContext.current
+    val app = context.applicationContext as AstraApp
+    val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
+    var isNovaOpen by remember { mutableStateOf(false) }
+
     val profile by viewModel.profile.collectAsState()
     val baseJd by viewModel.baseJobDescription.collectAsState()
     val flowMode by viewModel.flowMode.collectAsState()
@@ -5093,8 +5146,19 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                 }
             }
 
-            FloatingAstraBot(navController, "JD Matcher Dashboard")
+            // Floating Nova Assistant Button
+            NovaFloatingButton(
+                onClick = { isNovaOpen = true },
+                bottomPadding = 16.dp
+            )
         }
+
+        // Nova Overlay Chat Panel
+        NovaOverlayChatPanel(
+            viewModel = assistantViewModel,
+            isOpen = isNovaOpen,
+            onDismiss = { isNovaOpen = false }
+        )
     }
 }
 
