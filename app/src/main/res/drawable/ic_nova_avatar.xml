@@ -1,0 +1,104 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Soft Sage Green Rounded Card Background -->
+    <path
+        android:fillColor="#FFD3E2D0"
+        android:pathData="M144,0 L368,0 C447.53,0 512,64.47 512,144 L512,368 C512,447.53 447.53,512 368,512 L144,512 C64.47,512 0,447.53 0,368 L0,144 C0,64.47 64.47,0 144,0 Z" />
+
+    <!-- Card Border -->
+    <path
+        android:pathData="M144,8 L368,8 C443.11,8 504,68.89 504,144 L504,368 C504,443.11 443.11,504 368,504 L144,504 C68.89,504 8,443.11 8,368 L8,144 C8,68.89 68.89,8 144,8 Z"
+        android:strokeWidth="16"
+        android:strokeColor="#D92B483B" />
+
+    <!-- Sprout / Leaf Antenna -->
+    <path
+        android:fillColor="#FF5D846D"
+        android:pathData="M256,123 C256,61 317,41 338,51 C328,102 282,123 256,123 Z" />
+    <path
+        android:pathData="M256,123 L261,107"
+        android:strokeWidth="18"
+        android:strokeColor="#FF476956"
+        android:strokeLineCap="round" />
+
+    <!-- Speech Bubble in Top Right -->
+    <path
+        android:fillColor="#FF476956"
+        android:pathData="M356,72 L411,72 C432.54,72 450,89.46 450,111 L450,119 C450,140.54 432.54,158 411,158 L356,158 C334.46,158 317,140.54 317,119 L317,111 C317,89.46 334.46,72 356,72 Z" />
+    <path
+        android:fillColor="#FF476956"
+        android:pathData="M337,158 L307,185 L370,158 Z" />
+
+    <!-- Speech Bubble Dots -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M357,104 C363.08,104 368,108.92 368,115 C368,121.08 363.08,126 357,126 C350.92,126 346,121.08 346,115 C346,108.92 350.92,104 357,104 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M384,104 C390.08,104 395,108.92 395,115 C395,121.08 390.08,126 384,126 C377.92,126 373,121.08 373,115 C373,108.92 377.92,104 384,104 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M411,104 C417.08,104 422,108.92 422,115 C422,121.08 417.08,126 411,126 C404.92,126 400,121.08 400,115 C400,108.92 404.92,104 411,104 Z" />
+
+    <!-- Robot Torso / Shoulders -->
+    <path
+        android:fillColor="#FFF3F8F2"
+        android:pathData="M123,481 C133,358 379,358 389,481 Z" />
+    <path
+        android:pathData="M123,481 C133,358 379,358 389,481 Z"
+        android:strokeWidth="10"
+        android:strokeColor="#80476956" />
+
+    <!-- Chest Badge (Green Circle with Sparkle Star) -->
+    <path
+        android:fillColor="#FF476956"
+        android:pathData="M256,360 C280.3,360 300,379.7 300,404 C300,428.3 280.3,448 256,448 C231.7,448 212,428.3 212,404 C212,379.7 231.7,360 256,360 Z" />
+    <path
+        android:fillColor="#FFD4E7D6"
+        android:pathData="M256,381 Q256,404 279,404 Q256,404 256,427 Q256,404 233,404 Q256,404 256,381 Z" />
+
+    <!-- Headphones Band -->
+    <path
+        android:pathData="M113,235 C113,133 399,133 399,235"
+        android:strokeWidth="18"
+        android:strokeColor="#FF476956" />
+    <!-- Left Ear Cup -->
+    <path
+        android:fillColor="#FF476956"
+        android:pathData="M102,194 C124.64,194 143,212.36 143,235 C143,257.64 124.64,276 102,276 C79.36,276 61,257.64 61,235 C61,212.36 79.36,194 102,194 Z" />
+    <!-- Right Ear Cup -->
+    <path
+        android:fillColor="#FF476956"
+        android:pathData="M410,194 C432.64,194 451,212.36 451,235 C451,257.64 432.64,276 410,276 C387.36,276 369,257.64 369,235 C369,212.36 387.36,194 410,194 Z" />
+
+    <!-- Robot Head Shell -->
+    <path
+        android:fillColor="#FFF3F8F2"
+        android:pathData="M226,133 L286,133 C348.41,133 399,183.59 399,246 L399,246 C399,308.41 348.41,359 286,359 L226,359 C163.59,359 113,308.41 113,246 L113,246 C113,183.59 163.59,133 226,133 Z" />
+    <path
+        android:pathData="M226,133 L286,133 C348.41,133 399,183.59 399,246 L399,246 C399,308.41 348.41,359 286,359 L226,359 C163.59,359 113,308.41 113,246 L113,246 C113,183.59 163.59,133 226,133 Z"
+        android:strokeWidth="10"
+        android:strokeColor="#59476956" />
+
+    <!-- Visor (Dark Screen) -->
+    <path
+        android:fillColor="#FF1D3328"
+        android:pathData="M217,169 L295,169 C336.42,169 370,202.58 370,244 L370,244 C370,285.42 336.42,319 295,319 L217,319 C175.58,319 142,285.42 142,244 L142,244 C142,202.58 175.58,169 217,169 Z" />
+
+    <!-- Happy Smiling Eyes (^ ^) -->
+    <path
+        android:pathData="M184,246 C184,220 236,220 236,246"
+        android:strokeWidth="20"
+        android:strokeColor="#FFD4E7D6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M276,246 C276,220 328,220 328,246"
+        android:strokeWidth="20"
+        android:strokeColor="#FFD4E7D6"
+        android:strokeLineCap="round" />
+
+</vector>

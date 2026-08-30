@@ -1,0 +1,62 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Dark Green Rounded Card Background -->
+    <path
+        android:pathData="M144,0 L368,0 C447.53,0 512,64.47 512,144 L512,368 C512,447.53 447.53,512 368,512 L144,512 C64.47,512 0,447.53 0,368 L0,144 C0,64.47 64.47,0 144,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="256"
+                android:startY="0"
+                android:endX="256"
+                android:endY="512"
+                android:type="linear">
+                <item android:color="#FF2C4A3E" android:offset="0.0" />
+                <item android:color="#FF1E352B" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4-point Sparkle Star in Top-Right -->
+    <path
+        android:fillColor="#FFE8F7EB"
+        android:pathData="M348,82 Q348,128 394,128 Q348,128 348,174 Q348,128 302,128 Q348,128 348,82 Z" />
+
+    <!-- Ribbon N Body -->
+    <path
+        android:pathData="M118,389 C102,205 143,92 235,92 C297,92 297,164 266,246 C235,328 266,410 338,399 C384,384 389,230 389,174"
+        android:strokeWidth="87"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="102"
+                android:startY="92"
+                android:endX="410"
+                android:endY="410"
+                android:type="linear">
+                <item android:color="#FFD8EAD9" android:offset="0.0" />
+                <item android:color="#FFB2D3B8" android:offset="0.4" />
+                <item android:color="#FF7CA786" android:offset="0.7" />
+                <item android:color="#FFD8EAD9" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Left Pillar Inner Loop Highlight -->
+    <path
+        android:pathData="M159,384 C148,230 169,133 230,128"
+        android:strokeWidth="66"
+        android:strokeColor="#F2D8EAD9"
+        android:strokeLineCap="round" />
+
+    <!-- Arrow Head Pointing to Top Right -->
+    <path
+        android:fillColor="#FFD8EAD9"
+        android:pathData="M389,118 L327,159 L368,154 L373,195 L414,190 L409,149 L450,154 Z" />
+
+</vector>
