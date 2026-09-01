@@ -1,13 +1,9 @@
 package com.example.aidrivencompetencyplatform.ui.components
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,9 +13,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -36,45 +29,18 @@ fun GlassCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val bg = containerColor ?: Surface
-    var isHovered by remember { mutableStateOf(false) }
-
-    val translationY by animateFloatAsState(
-        targetValue = if (isHovered) -4f else 0f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
-        label = "glassHoverY"
-    )
-    val shadowElevation by animateDpAsState(
-        targetValue = if (isHovered) elevation + 4.dp else elevation,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
-        label = "glassShadow"
-    )
-    val currentBorderColor = if (isHovered) Primary.copy(alpha = 0.35f) else borderColor
 
     Box(
         modifier = modifier
-            .graphicsLayer {
-                this.translationY = translationY
-            }
             .shadow(
-                elevation = shadowElevation,
+                elevation = elevation,
                 shape = RoundedCornerShape(cornerRadius),
-                ambientColor = Color.Black.copy(alpha = if (isHovered) 0.08f else 0.04f),
-                spotColor = Color.Black.copy(alpha = if (isHovered) 0.08f else 0.04f)
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.04f)
             )
             .clip(RoundedCornerShape(cornerRadius))
             .background(color = bg)
-            .border(1.dp, currentBorderColor, RoundedCornerShape(cornerRadius))
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        when (event.type) {
-                            PointerEventType.Enter -> isHovered = true
-                            PointerEventType.Exit -> isHovered = false
-                        }
-                    }
-                }
-            }
+            .border(1.dp, borderColor, RoundedCornerShape(cornerRadius))
             .padding(18.dp)
     ) {
         Column {
@@ -92,45 +58,17 @@ fun AstraCard(
     contentPadding: PaddingValues = PaddingValues(18.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    var isHovered by remember { mutableStateOf(false) }
-
-    val translationY by animateFloatAsState(
-        targetValue = if (isHovered) -4f else 0f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
-        label = "cardHoverY"
-    )
-    val shadowElevation by animateDpAsState(
-        targetValue = if (isHovered) 6.dp else 2.dp,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
-        label = "cardShadow"
-    )
-    val currentBorderColor = if (isHovered) Primary.copy(alpha = 0.35f) else borderColor
-
     Box(
         modifier = modifier
-            .graphicsLayer {
-                this.translationY = translationY
-            }
             .shadow(
-                elevation = shadowElevation,
+                elevation = 2.dp,
                 shape = RoundedCornerShape(cornerRadius),
-                ambientColor = Color.Black.copy(alpha = if (isHovered) 0.07f else 0.03f),
-                spotColor = Color.Black.copy(alpha = if (isHovered) 0.07f else 0.04f)
+                ambientColor = Color.Black.copy(alpha = 0.03f),
+                spotColor = Color.Black.copy(alpha = 0.04f)
             )
             .clip(RoundedCornerShape(cornerRadius))
             .background(containerColor)
-            .border(1.dp, currentBorderColor, RoundedCornerShape(cornerRadius))
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        when (event.type) {
-                            PointerEventType.Enter -> isHovered = true
-                            PointerEventType.Exit -> isHovered = false
-                        }
-                    }
-                }
-            }
+            .border(1.dp, borderColor, RoundedCornerShape(cornerRadius))
             .padding(contentPadding)
     ) {
         Column {
