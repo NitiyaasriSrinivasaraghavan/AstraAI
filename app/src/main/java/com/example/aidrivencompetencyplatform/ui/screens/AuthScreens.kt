@@ -7,27 +7,36 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -106,14 +115,16 @@ fun LoginScreen(navController: NavController) {
     val app = context.applicationContext as AstraApp
     val sessionManager = remember { app.sessionManager }
 
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
+            .background(Background)
+            .safeDrawingPadding()
+            .imePadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -166,6 +177,7 @@ fun LoginScreen(navController: NavController) {
                         if (errorMessage != null) errorMessage = null
                     },
                     label = "Email Address",
+                    placeholder = "name@example.com",
                     icon = Icons.Default.Email,
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
@@ -178,6 +190,7 @@ fun LoginScreen(navController: NavController) {
                         if (errorMessage != null) errorMessage = null
                     },
                     label = "Password",
+                    placeholder = "Enter your password",
                     icon = Icons.Default.Lock,
                     isPassword = true,
                     keyboardType = KeyboardType.Password,
@@ -238,11 +251,11 @@ fun LoginScreen(navController: NavController) {
 
 @Composable
 fun SignupScreen(navController: NavController) {
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
@@ -251,7 +264,9 @@ fun SignupScreen(navController: NavController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
+            .background(Background)
+            .safeDrawingPadding()
+            .imePadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -304,6 +319,7 @@ fun SignupScreen(navController: NavController) {
                         if (errorMessage != null) errorMessage = null
                     },
                     label = "Full Name",
+                    placeholder = "Your Name",
                     icon = Icons.Default.Person,
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next
@@ -316,6 +332,7 @@ fun SignupScreen(navController: NavController) {
                         if (errorMessage != null) errorMessage = null
                     },
                     label = "Email Address",
+                    placeholder = "name@example.com",
                     icon = Icons.Default.Email,
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
@@ -328,6 +345,7 @@ fun SignupScreen(navController: NavController) {
                         if (errorMessage != null) errorMessage = null
                     },
                     label = "Password",
+                    placeholder = "Create a password",
                     icon = Icons.Default.Lock,
                     isPassword = true,
                     keyboardType = KeyboardType.Password,
@@ -341,6 +359,7 @@ fun SignupScreen(navController: NavController) {
                         if (errorMessage != null) errorMessage = null
                     },
                     label = "Confirm Password",
+                    placeholder = "Confirm your password",
                     icon = Icons.Default.Lock,
                     isPassword = true,
                     keyboardType = KeyboardType.Password,
@@ -423,32 +442,85 @@ fun AuthTextField(
     onValueChange: (String) -> Unit,
     label: String,
     icon: ImageVector,
+    placeholder: String? = null,
     isPassword: Boolean = false,
     enabled: Boolean = true,
     keyboardType: KeyboardType = KeyboardType.Text,
-    imeAction: ImeAction = ImeAction.Default
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null
 ) {
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        leadingIcon = { Icon(icon, contentDescription = null, tint = Primary) },
-        visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        placeholder = placeholder?.let { { Text(it, color = TextMuted) } },
+        leadingIcon = { 
+            Icon(
+                imageVector = icon, 
+                contentDescription = null, 
+                tint = Primary 
+            ) 
+        },
+        trailingIcon = if (isPassword) {
+            {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        tint = TextSecondary
+                    )
+                }
+            }
+        } else null,
+        visualTransformation = if (isPassword && !passwordVisible) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        },
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         enabled = enabled,
         singleLine = true,
+        textStyle = TextStyle(
+            color = TextPrimary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Normal
+        ),
         keyboardOptions = KeyboardOptions(
             keyboardType = keyboardType,
             imeAction = imeAction
         ),
+        keyboardActions = KeyboardActions(
+            onNext = { 
+                if (onImeAction != null) onImeAction() else focusManager.moveFocus(FocusDirection.Down) 
+            },
+            onDone = { 
+                if (onImeAction != null) onImeAction() else focusManager.clearFocus() 
+            }
+        ),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = TextPrimary,
             unfocusedTextColor = TextPrimary,
+            cursorColor = Primary,
+            selectionColors = TextSelectionColors(
+                handleColor = Primary,
+                backgroundColor = Primary.copy(alpha = 0.25f)
+            ),
             focusedBorderColor = Primary,
             unfocusedBorderColor = BorderColor,
             focusedContainerColor = SurfaceVariant,
-            unfocusedContainerColor = SurfaceVariant
+            unfocusedContainerColor = SurfaceVariant,
+            focusedLabelColor = Primary,
+            unfocusedLabelColor = TextSecondary,
+            focusedLeadingIconColor = Primary,
+            unfocusedLeadingIconColor = TextSecondary,
+            focusedTrailingIconColor = Primary,
+            unfocusedTrailingIconColor = TextSecondary,
+            focusedPlaceholderColor = TextMuted,
+            unfocusedPlaceholderColor = TextMuted
         )
     )
 }
