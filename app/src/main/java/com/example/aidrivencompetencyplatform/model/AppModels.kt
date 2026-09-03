@@ -18,9 +18,11 @@ data class Skill(
 )
 
 data class ResumeAnalysisResult(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val overallScore: Int,
     val atsScore: Int,
     val skillMatch: Int,
+    val targetRole: String? = null,
     val summary: String? = "",
     val education: List<String>? = emptyList(),
     val experience: List<String>? = emptyList(),
@@ -123,16 +125,16 @@ data class SkillGapData(
 )
 
 data class ExtractedResumeProfile(
-    val targetRole: String = "Android Developer",
-    val candidateName: String = "Candidate",
-    val education: String = "Bachelor's in Computer Science / IT",
-    val experienceLevel: String = "Fresher",
-    val coreSkills: List<String> = listOf("Kotlin", "Android", "Jetpack Compose", "REST APIs", "Git"),
-    val toolsAndTech: List<String> = listOf("Android Studio", "Gradle", "Room Database", "Firebase", "Postman"),
-    val projects: List<String> = listOf("Competency Tracking App", "Portfolio Android Client"),
-    val competencies: List<String> = listOf("MVVM Architecture", "Declarative UI", "State Management", "Offline Caching"),
-    val careerDirection: String = "Mobile Application Engineering & Android Ecosystem",
-    val importantKeywords: List<String> = listOf("Kotlin Coroutines", "Jetpack Compose", "REST APIs", "Clean Architecture")
+    val targetRole: String? = null,
+    val candidateName: String? = null,
+    val education: String? = null,
+    val experienceLevel: String? = null,
+    val coreSkills: List<String> = emptyList(),
+    val toolsAndTech: List<String> = emptyList(),
+    val projects: List<String> = emptyList(),
+    val competencies: List<String> = emptyList(),
+    val careerDirection: String? = null,
+    val importantKeywords: List<String> = emptyList()
 )
 
 data class JobDescriptionSection(
@@ -196,6 +198,7 @@ data class AnalysisHistoryRecord(
     val skillMatch: Int,
     val candidateName: String? = null,
     val fileName: String? = "Resume.pdf",
-    val topSkills: List<String> = emptyList()
+    val topSkills: List<String> = emptyList(),
+    val fullResult: ResumeAnalysisResult? = null
 )
 

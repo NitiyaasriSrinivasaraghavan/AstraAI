@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 private const val TAG = "ResumeAnalysisFlow"
 
@@ -135,11 +136,6 @@ class DashboardViewModel(
         _isNewUser.value = isNew
         _greetingPrefix.value = if (isNew) "Welcome" else "Welcome back"
 
-        val storedRole = sessionManager.getTargetRole()
-        if (!storedRole.isNullOrBlank()) {
-            _targetRole.value = storedRole
-        }
-
         val analysis = sessionManager.getLatestAnalysis()
         _latestAnalysis.value = analysis
         if (analysis != null) {
@@ -147,6 +143,10 @@ class DashboardViewModel(
             _resumeScore.value = analysis.overallScore
             _atsScore.value = analysis.atsScore
             _skillMatch.value = analysis.skillMatch
+            
+            // Prioritize target role from analysis record
+            val currentRole = analysis.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
+            _targetRole.value = currentRole
             
             // Fix NPE by using safe calls. Gson can set fields to null if missing in JSON.
             val extracted = analysis.extractedSkills ?: emptyList()
@@ -157,7 +157,7 @@ class DashboardViewModel(
 
             _jobRecommendations.value = listOf(
                 JobRecommendation(
-                    sessionManager.getTargetRole() ?: "Target Role",
+                    currentRole,
                     analysis.skillMatch,
                     "Matches based on extracted skills.",
                     matchingSkills,
@@ -170,6 +170,11 @@ class DashboardViewModel(
             _atsScore.value = null
             _skillMatch.value = null
             _jobRecommendations.value = emptyList()
+            
+            val storedRole = sessionManager.getTargetRole()
+            if (!storedRole.isNullOrBlank()) {
+                _targetRole.value = storedRole
+            }
         }
         _analysisHistory.value = sessionManager.getAnalysisHistory()
     }
@@ -192,7 +197,7 @@ class AtsViewModel(
     val overallAtsScore: StateFlow<Int> = _overallAtsScore.asStateFlow()
 
     val targetRole: String
-        get() = sessionManager.getTargetRole() ?: "Android Developer"
+        get() = _analysisResult.value?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
 
     init {
         calculateAtsScores()
@@ -201,6 +206,22 @@ class AtsViewModel(
     fun refresh() {
         _analysisResult.value = sessionManager.getLatestAnalysis()
         calculateAtsScores()
+    }
+
+    fun loadAnalysis(id: String?) {
+        if (id == null) {
+            refresh()
+            return
+        }
+        val history = sessionManager.getAnalysisHistory()
+        val found = history.find { it.id == id }
+        if (found?.fullResult != null) {
+            _analysisResult.value = found.fullResult
+            calculateAtsScores()
+        } else {
+            // Fallback to latest if not found or full result missing
+            refresh()
+        }
     }
 
     private fun calculateAtsScores() {
@@ -526,9 +547,27 @@ class SkillGapViewModel(
 
     fun refresh() {
         val analysis = sessionManager.getLatestAnalysis()
+        loadAnalysisResult(analysis)
+    }
+
+    fun loadAnalysis(id: String?) {
+        if (id == null) {
+            refresh()
+            return
+        }
+        val history = sessionManager.getAnalysisHistory()
+        val found = history.find { it.id == id }
+        if (found?.fullResult != null) {
+            loadAnalysisResult(found.fullResult)
+        } else {
+            refresh()
+        }
+    }
+
+    private fun loadAnalysisResult(analysis: ResumeAnalysisResult?) {
         _analysisResult.value = analysis
 
-        val role = sessionManager.getTargetRole() ?: "Android Developer"
+        val role = analysis?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
         
         if (analysis == null) {
             _state.value = SkillGapState(
@@ -828,13 +867,15 @@ class ResumeViewModel(
             return
         }
         
+        // 1. CLEAR ALL PREVIOUS STATE - No leakage between resumes
         _analysisResult.value = null
         _isLoading.value = true
         _errorMessage.value = null
         _analyzingRole.value = effectiveRole
         _stageIndex.value = 0
+        _loadingStage.value = "Starting analysis..."
         
-        // Initial real-time state: all 3 modules in progress
+        // Initial real-time state: resetting progress for new analysis
         _interactiveState.value = InteractiveAnalysisState(
             atsComplete = false,
             skillGapComplete = false,
@@ -845,137 +886,130 @@ class ResumeViewModel(
         )
         
         viewModelScope.launch {
-            
             try {
-                _loadingStage.value = "Analyzing ATS compatibility..."
-                _stageIndex.value = 0
+                // 2. EXTRACTION STAGE
+                _loadingStage.value = "Extracting resume information..."
+                _stageIndex.value = 1
+                _interactiveState.value = _interactiveState.value.copy(stage = 1)
                 
-                var text = if (selectedUri != null) {
+                val text = if (selectedUri != null) {
                     resumeParser.extractText(selectedUri!!)
                 } else {
-                    sampleResumeText ?: resumeParser.getSampleResumeText(effectiveRole)
+                    sampleResumeText ?: ""
                 }
 
                 if (text == ResumeParser.ERROR_SCANNED_PDF) {
-                    Log.e(TAG, "ANALYSIS_FAILED: Scanned PDF detected, using fallback structured text")
-                    text = resumeParser.getSampleResumeText(effectiveRole)
+                    throw Exception("This PDF appears to be a scanned image. Please upload a text-based PDF or DOCX file for accurate analysis.")
                 }
                 if (text.isBlank()) {
-                    Log.w(TAG, "Empty extracted text, using high-fidelity fallback resume text")
-                    text = resumeParser.getSampleResumeText(effectiveRole)
+                    throw Exception("Could not extract any text from the selected file. Please ensure the file is not empty or corrupted.")
                 }
 
-                // Parse deterministic structure, real sections, project titles and skills
+                // 3. PARSING STAGE
+                _loadingStage.value = "Parsing candidate profile..."
+                _stageIndex.value = 2
+                _interactiveState.value = _interactiveState.value.copy(stage = 2)
+                
+                // Deterministic parsing for structure
                 val structure = resumeParser.parseResumeStructure(text)
-                val candidateName = structure.candidateInfo.name ?: sessionManager.getUserName() ?: "Candidate"
-
-                var result: ResumeAnalysisResult? = null
-                try {
-                    result = geminiService.analyzeResume(text, effectiveRole)
+                
+                // 4. AI ANALYSIS STAGE
+                _loadingStage.value = "Analyzing competencies with AI..."
+                _stageIndex.value = 3
+                _interactiveState.value = _interactiveState.value.copy(stage = 3)
+                
+                // AI Parsing and Analysis - The ONLY source of truth for candidate info
+                Log.d("ResumeNetworkDebug", "Starting Gemini analysis for role: $effectiveRole")
+                val aiResult = try {
+                    val result = geminiService.analyzeResume(text, effectiveRole)
+                    Log.d("ResumeNetworkDebug", "Gemini analysis completed successfully")
+                    result
                 } catch (e: Exception) {
-                    Log.w(TAG, "Gemini call had issue, generating fallback deterministic result", e)
+                    Log.e("ResumeNetworkDebug", "Gemini analysis failed: ${e.message}", e)
+                    throw e
                 }
 
-                val finalResult = result ?: run {
-                    val defaultAts = 84
-                    val defaultSkillMatch = 78
-                    ResumeAnalysisResult(
-                        overallScore = 82,
-                        atsScore = defaultAts,
-                        skillMatch = defaultSkillMatch,
-                        summary = "Comprehensive profile for $effectiveRole with strong core programming fundamentals.",
-                        strengths = listOf("Clear technical foundations", "Recognizable section layout", "Well-defined competencies"),
-                        weaknesses = listOf("Add quantified metrics to project bullet points"),
-                        extractedSkills = structure.extractedSkills.map {
-                            com.example.aidrivencompetencyplatform.model.Skill(
-                                name = it,
-                                level = 80,
-                                category = "Technical"
-                            )
-                        },
-                        atsBreakdown = com.example.aidrivencompetencyplatform.model.AtsBreakdown(
-                            keywordCoverage = 85,
-                            resumeStructure = 90,
-                            formattingSafety = 85,
-                            parsingAccuracy = 88
-                        )
-                    )
+                if (aiResult == null) {
+                    throw Exception("AI Analysis returned empty result. Please try again.")
                 }
 
-                val enrichedResult = finalResult.copy(
-                    candidateName = structure.candidateInfo.name ?: finalResult.candidateName ?: candidateName,
-                    candidateEmail = structure.candidateInfo.email ?: finalResult.candidateEmail,
-                    candidatePhone = structure.candidateInfo.phone ?: finalResult.candidatePhone,
-                    candidateLocation = structure.candidateInfo.location ?: finalResult.candidateLocation,
+                // Merge deterministic structure with AI results, prioritizing AI for details
+                // CRITICAL: Explicitly assign a new unique ID to every single analysis result here
+                val enrichedResult = aiResult.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    candidateName = aiResult.candidateName ?: structure.candidateInfo.name,
+                    candidateEmail = aiResult.candidateEmail ?: structure.candidateInfo.email,
+                    candidatePhone = aiResult.candidatePhone ?: structure.candidateInfo.phone,
+                    candidateLocation = aiResult.candidateLocation ?: structure.candidateInfo.location,
                     rawResumeText = text,
-                    detectedJobDescription = structure.detectedJobDescription
+                    targetRole = effectiveRole,
+                    detectedJobDescription = aiResult.detectedJobDescription ?: structure.detectedJobDescription
                 )
 
-                val atsBreakdown = enrichedResult.atsBreakdown ?: com.example.aidrivencompetencyplatform.model.AtsBreakdown(85, 90, 85, 88)
+                val atsBreakdown = enrichedResult.atsBreakdown ?: com.example.aidrivencompetencyplatform.model.AtsBreakdown()
 
-                // ----------------------------------------------------
-                // 1. MODULE 1: ATS Analysis completes first
-                // ----------------------------------------------------
+                // 5. UPDATE PROGRESS MODULES
+                
+                // Module 1: ATS Analysis
                 _interactiveState.value = _interactiveState.value.copy(
                     atsComplete = true,
-                    stage = 1,
+                    stage = 4,
                     atsScore = enrichedResult.atsScore,
                     keywordScore = atsBreakdown.keywordCoverage,
                     structureScore = atsBreakdown.resumeStructure,
                     formattingScore = atsBreakdown.formattingSafety,
                     parsingScore = atsBreakdown.parsingAccuracy,
-                    candidateName = candidateName,
+                    candidateName = enrichedResult.candidateName ?: "Not found",
                     sections = structure.sections,
-                    extractedSkills = structure.extractedSkills,
-                    detectedProjects = structure.extractedProjects
+                    extractedSkills = enrichedResult.extractedSkills?.map { it.name } ?: structure.extractedSkills,
+                    detectedProjects = enrichedResult.projectAnalysis?.map { it.name } ?: structure.extractedProjects
                 )
-                _loadingStage.value = "Benchmarking Skill Gaps for $effectiveRole..."
-                _stageIndex.value = 1
+                
+                delay(100) // Reduced delay for smoother UI but faster processing
+                _loadingStage.value = "Evaluating skill gaps..."
+                _stageIndex.value = 4
 
-                // ----------------------------------------------------
-                // 2. MODULE 2: Skill Gap Analysis completes second
-                // ----------------------------------------------------
-                val extractedCount = enrichedResult.extractedSkills?.size ?: structure.extractedSkills.size
+                // Module 2: Skill Gap Analysis
+                val matchedCount = enrichedResult.extractedSkills?.count { it.level >= 70 } ?: 0
+                val missingCount = enrichedResult.extractedSkills?.count { it.level < 40 } ?: 0
                 _interactiveState.value = _interactiveState.value.copy(
                     skillGapComplete = true,
-                    stage = 2,
-                    matchedSkillsCount = maxOf(4, extractedCount - 2),
-                    missingSkillsCount = 2
+                    stage = 5,
+                    matchedSkillsCount = matchedCount,
+                    missingSkillsCount = missingCount
                 )
-                _loadingStage.value = "Generating Job Description Matching..."
-                _stageIndex.value = 2
+                
+                delay(100)
+                _loadingStage.value = "Calculating JD alignment..."
+                _stageIndex.value = 5
 
-                // ----------------------------------------------------
-                // 3. MODULE 3: JD Matching completes third
-                // ----------------------------------------------------
+                // Module 3: JD Matching
                 _interactiveState.value = _interactiveState.value.copy(
                     jdMatchingComplete = true,
-                    stage = 3,
+                    stage = 6,
                     skillMatch = enrichedResult.skillMatch
                 )
 
-                // ----------------------------------------------------
-                // Final Completion: All 3 modules finished!
-                // ----------------------------------------------------
-                _stageIndex.value = 4
-                _loadingStage.value = "Analysis Complete!"
-                _interactiveState.value = _interactiveState.value.copy(
-                    isComplete = true,
-                    stage = 4
-                )
-
-                // Save data once to SessionManager (reused by all dashboards)
-                sessionManager.saveLatestAnalysis(enrichedResult, _selectedFileName.value)
+                // Save results
                 sessionManager.updateTargetRole(effectiveRole)
+                sessionManager.saveLatestAnalysis(enrichedResult, _selectedFileName.value)
                 
                 _analysisResult.value = enrichedResult
                 Log.d(TAG, "ANALYSIS_COMPLETED_SUCCESSFULLY")
 
+                // 6. FINAL COMPLETION - Trigger UI to show "Complete"
+                _loadingStage.value = "Analysis complete!"
+                _stageIndex.value = 6
+                _interactiveState.value = _interactiveState.value.copy(
+                    isComplete = true,
+                    stage = 7
+                )
+
             } catch (e: Exception) {
-                Log.e(TAG, "ANALYSIS_FAILED: General error", e)
-                _errorMessage.value = "An error occurred: ${e.localizedMessage}"
-            } finally {
-                _isLoading.value = false
+                Log.e(TAG, "ANALYSIS_FAILED", e)
+                _errorMessage.value = e.localizedMessage ?: "An unexpected error occurred during analysis."
+                _interactiveState.value = _interactiveState.value.copy(isComplete = false)
+                _isLoading.value = false // Hide loading on error only
             }
         }
     }
@@ -992,6 +1026,11 @@ class ResumeViewModel(
         _loadingStage.value = ""
         _stageIndex.value = 0
         _analyzingRole.value = ""
+        _isLoading.value = false
+    }
+
+    fun finishLoading() {
+        _isLoading.value = false
     }
 }
 
@@ -1017,6 +1056,9 @@ class AiAssistantViewModel(
         )
     )
     val quickPrompts: StateFlow<List<String>> = _quickPrompts
+
+    private val _isTyping = MutableStateFlow(false)
+    val isTyping: StateFlow<Boolean> = _isTyping
 
     init {
         initDefaultChat()
@@ -1069,10 +1111,15 @@ class AiAssistantViewModel(
         _messages.value = _messages.value + userMsg
         
         viewModelScope.launch {
-            val analysis = sessionManager.getLatestAnalysis()
-            val context = "Screen: $screenContext. User name: ${sessionManager.getUserName()}. Analysis: ${if (analysis != null) "Available" else "Not available"}"
-            val aiResponse = geminiService.getAiAssistantResponse(text, context)
-            _messages.value = _messages.value + ChatMessage(aiResponse, false)
+            _isTyping.value = true
+            try {
+                val analysis = sessionManager.getLatestAnalysis()
+                val context = "Screen: $screenContext. User name: ${sessionManager.getUserName()}. Analysis: ${if (analysis != null) "Available" else "Not available"}"
+                val aiResponse = geminiService.getAiAssistantResponse(text, context)
+                _messages.value = _messages.value + ChatMessage(aiResponse, false)
+            } finally {
+                _isTyping.value = false
+            }
         }
     }
 }
@@ -1129,6 +1176,24 @@ class JdMatcherViewModel(
 
     fun extractProfileAndGenerateJd() {
         val analysis = sessionManager.getLatestAnalysis()
+        loadAnalysisResult(analysis)
+    }
+
+    fun loadAnalysis(id: String?) {
+        if (id == null) {
+            extractProfileAndGenerateJd()
+            return
+        }
+        val history = sessionManager.getAnalysisHistory()
+        val found = history.find { it.id == id }
+        if (found?.fullResult != null) {
+            loadAnalysisResult(found.fullResult)
+        } else {
+            extractProfileAndGenerateJd()
+        }
+    }
+
+    private fun loadAnalysisResult(analysis: ResumeAnalysisResult?) {
         _hasStoredResume.value = analysis != null
 
         val detectedJd = analysis?.detectedJobDescription
@@ -1138,7 +1203,7 @@ class JdMatcherViewModel(
         }
 
         val targetRole = detectedJd.roleTitle.ifBlank {
-            sessionManager.getTargetRole()?.takeIf { it.isNotBlank() } ?: "Software Engineer"
+            analysis.targetRole ?: sessionManager.getTargetRole()?.takeIf { it.isNotBlank() } ?: "Software Engineer"
         }
 
         val extracted = buildProfileFromAnalysis(analysis, targetRole)
@@ -1287,7 +1352,7 @@ class JdMatcherViewModel(
         }
 
         val qualifications = listOf(
-            profile.education,
+            profile.education ?: "Relevant educational background",
             "Hands-on experience or project portfolio demonstrating mastery in ${skills.take(3).joinToString(", ")}.",
             "Strong understanding of software engineering fundamentals, data structures, and clean architecture."
         )
@@ -1320,13 +1385,13 @@ class JdMatcherViewModel(
 
     fun powerJobDescription(targetRole: String? = null) {
         if (!targetRole.isNullOrBlank() && targetRole != _profile.value.targetRole) {
-            updateProfile(targetRole, _profile.value.experienceLevel, _profile.value.coreSkills)
+            updateProfile(targetRole, _profile.value.experienceLevel ?: "Fresher", _profile.value.coreSkills)
         }
         powerTheJd()
     }
 
     fun powerTheJd() {
-        val targetRole = _profile.value.targetRole
+        val targetRole = _profile.value.targetRole ?: "Android Developer"
         val baseJd = _baseJobDescription.value
 
         val stageTemplates = listOf(
@@ -1413,7 +1478,7 @@ class JdMatcherViewModel(
                 requiredSkills = poweredSkills,
                 preferredSkills = preferredSkills,
                 qualifications = listOf(
-                    _profile.value.education,
+                    _profile.value.education ?: "Degree in Computer Science or related field",
                     "Demonstrated portfolio of native Android applications showcasing clean architecture, Jetpack Compose, and offline resilience.",
                     "Strong grasp of concurrency patterns, reactive programming, and industry-standard version control workflows."
                 )

@@ -40,18 +40,27 @@ class SessionManager(context: Context) {
     fun saveLatestAnalysis(result: ResumeAnalysisResult, fileName: String? = null) {
         val email = getCurrentEmail() ?: return
         val normalizedEmail = normalizeEmail(email)
-        val json = gson.toJson(result)
         
-        // Also create a history record
-        val role = getTargetRole(normalizedEmail) ?: "Android Developer"
-        val topSkills = (result.extractedSkills ?: emptyList()).map { it.name }.take(4)
+        // Runtime safety: if Gson bypassed Kotlin non-nullability, fix it now.
+        // Also ensures that if multiple objects have the same or empty ID, they get a fresh one.
+        val existingId = (result as? ResumeAnalysisResult)?.id 
+        val analysisId = if (existingId.isNullOrBlank()) java.util.UUID.randomUUID().toString() else existingId
+        
+        val fixedResult = result.copy(id = analysisId)
+        val json = gson.toJson(fixedResult)
+        
+        // Use target role from analysis record or fallback to user's current role
+        val role = fixedResult.targetRole ?: getTargetRole(normalizedEmail) ?: "Android Developer"
+        val topSkills = (fixedResult.extractedSkills ?: emptyList()).map { it.name }.take(4)
         val historyRecord = AnalysisHistoryRecord(
+            id = analysisId,
             targetRole = role,
-            atsScore = result.atsScore,
-            skillMatch = result.skillMatch,
-            candidateName = result.candidateName ?: getUserName(normalizedEmail),
+            atsScore = fixedResult.atsScore,
+            skillMatch = fixedResult.skillMatch,
+            candidateName = fixedResult.candidateName ?: getUserName(normalizedEmail),
             fileName = fileName ?: "Resume.pdf",
-            topSkills = topSkills
+            topSkills = topSkills,
+            fullResult = fixedResult
         )
         addAnalysisHistoryRecord(historyRecord, normalizedEmail)
 
@@ -78,15 +87,17 @@ class SessionManager(context: Context) {
         // Synthesize a record from latest analysis if available for this specific user
         val latest = getLatestAnalysis(normalizedEmail)
         if (latest != null) {
-            val role = getTargetRole(normalizedEmail) ?: "Android Developer"
+            val role = latest.targetRole ?: getTargetRole(normalizedEmail) ?: "Android Developer"
             val topSkills = (latest.extractedSkills ?: emptyList()).map { it.name }.take(4)
             val initialRecord = AnalysisHistoryRecord(
+                id = latest.id,
                 targetRole = role,
                 atsScore = latest.atsScore,
                 skillMatch = latest.skillMatch,
                 candidateName = latest.candidateName ?: getUserName(normalizedEmail),
                 fileName = "Resume.pdf",
-                topSkills = topSkills
+                topSkills = topSkills,
+                fullResult = latest
             )
             return listOf(initialRecord)
         }
@@ -112,7 +123,13 @@ class SessionManager(context: Context) {
         val normalizedEmail = normalizeEmail(email)
         val json = prefs.getString(KEY_LATEST_ANALYSIS + normalizedEmail, null) ?: return null
         return try {
-            gson.fromJson(json, ResumeAnalysisResult::class.java)
+            val result = gson.fromJson(json, ResumeAnalysisResult::class.java)
+            // Ensure ID exists for consistency
+            if (result != null && result.id.isNullOrBlank()) {
+                result.copy(id = java.util.UUID.randomUUID().toString())
+            } else {
+                result
+            }
         } catch (e: Exception) {
             null
         }

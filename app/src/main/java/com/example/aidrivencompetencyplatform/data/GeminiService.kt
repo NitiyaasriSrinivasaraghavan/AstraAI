@@ -18,14 +18,15 @@ import javax.net.ssl.X509TrustManager
 import javax.net.ssl.HostnameVerifier
 
 class GeminiService {
-    // API Key is now read from BuildConfig for better security handling.
-    private val apiKey = if (BuildConfig.GEMINI_API_KEY != "AQ.Ab8RN6Jwy3UjrBJoa1mw53fDaioiIqMZGeL_Os6oDkRYCPOxfg") {
+    // API Key is now read from BuildConfig with improved fallback logic.
+    private val apiKey = if (BuildConfig.GEMINI_API_KEY != "YOUR_KEY_HERE" && BuildConfig.GEMINI_API_KEY.isNotBlank()) {
         BuildConfig.GEMINI_API_KEY
     } else {
+        // Fallback key if the user hasn't provided one in gradle.properties
         "AQ.Ab8RN6Jwy3UjrBJoa1mw53fDaioiIqMZGeL_Os6oDkRYCPOxfg"
     }
 
-    private val modelName = "gemini-2.5-flash"
+    private val modelName = "gemini-3.6-flash"
     private val client = createUnsafeOkHttpClient()
 
     private fun createUnsafeOkHttpClient(): OkHttpClient {
@@ -45,15 +46,15 @@ class GeminiService {
             OkHttpClient.Builder()
                 .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
                 .hostnameVerifier(HostnameVerifier { _, _ -> true })
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(120, TimeUnit.SECONDS)
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(45, TimeUnit.SECONDS)
                 .build()
         } catch (e: Exception) {
             OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .writeTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
                 .build()
         }
     }
@@ -66,30 +67,47 @@ class GeminiService {
         }
 
         val prompt = """
-            You are an expert career consultant and ATS (Applicant Tracking System) specialist.
-            Analyze the following resume text specifically for the target role: $targetRole.
-            Provide a comprehensive, structured JSON response.
+            You are a strict resume parsing and career analysis system.
+            The uploaded resume text below is the ONLY source of truth.
             
-            RESUME TEXT:
+            EXTRACTED RESUME TEXT:
             $resumeText
             
+            TARGET ROLE:
+            $targetRole
+            
             INSTRUCTIONS:
-            1. Generate scores (0-100) for Keyword Coverage, Resume Structure, Formatting Safety, and Parsing Accuracy.
-            2. For each score, provide XAI (Explainable AI) evidence in the 'explanations' object.
-            3. Detect specific sections: Contact, Education, Skills, Projects, Experience.
-            4. Extract skills semantically. Categorize into: Programming Languages, Frontend, Backend, Database, Cloud, DevOps, AI/ML, Data Science, Tools, Soft Skills.
-            5. Map user skills to the required skills for $targetRole.
-            6. Identify strong skills, developing skills, and skill gaps with evidence from the resume.
-            7. Analyze existing projects for strengths and missing technical details. DO NOT invent metrics.
+            1. Extract candidate information ONLY from the supplied resume text.
+            2. NEVER invent information, infer missing personal details, or use example values.
+            3. If information is not explicitly present in the resume, return null for those fields.
+            4. Generate dynamic scores (0-100) for Keyword Coverage, Resume Structure, Formatting Safety, and Parsing Accuracy based strictly on this resume.
+            5. Provide XAI evidence for each score in the 'explanations' object.
+            6. Extract skills semantically and categorize them.
+            7. Analyze existing projects for strengths and missing technical details.
+            
+            REQUIRED FIELDS TO EXTRACT:
+            - candidateName, candidateEmail, candidatePhone, candidateLocation
+            - education (List of strings or institutions/degrees)
+            - experience (List of strings summarizing work history)
+            - extractedSkills (Full list of skills found)
+            - projectAnalysis (List of projects found with their details)
+            - summary (Professional summary if present)
+            - missingSections (List of standard sections NOT found: "Contact Info", "Work Experience", "Education", "Skills", "Projects", "Summary")
             
             JSON FORMAT REQUIRED:
             {
               "overallScore": 0, 
               "atsScore": 0,
               "skillMatch": 0,
-              "summary": "...",
-              "strengths": ["..."],
-              "weaknesses": ["..."],
+              "candidateName": "string or null",
+              "candidateEmail": "string or null",
+              "candidatePhone": "string or null",
+              "candidateLocation": "string or null",
+              "summary": "string",
+              "strengths": ["string"],
+              "weaknesses": ["string"],
+              "education": ["string"],
+              "experience": ["string"],
               "atsBreakdown": {
                 "keywordCoverage": 0,
                 "resumeStructure": 0,
@@ -120,7 +138,7 @@ class GeminiService {
               }
             }
             
-            IMPORTANT: Return ONLY the raw JSON object. NO conversational text. NO markdown code blocks. Ensure all fields are present. Use 0 for numbers if unknown. Use empty lists [] if no data. Do not rename fields.
+            IMPORTANT: Return ONLY valid structured JSON. NO markdown code blocks. NO additional text. If a field is not found in the resume, use null.
         """.trimIndent()
 
         try {
@@ -156,25 +174,37 @@ class GeminiService {
 
     private fun makeApiCall(promptText: String): String? {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey"
-        val requestBody = gson.toJson(
-            mapOf("contents" to listOf(mapOf("parts" to listOf(mapOf("text" to promptText)))))
-        ).toRequestBody(jsonMediaType)
-
+        
+        // Use JSON mode for faster and more reliable structured data extraction
+        val requestBodyMap = mutableMapOf(
+            "contents" to listOf(mapOf("parts" to listOf(mapOf("text" to promptText)))),
+            "generationConfig" to mapOf(
+                "response_mime_type" to "application/json"
+            )
+        )
+        
+        val requestBody = gson.toJson(requestBodyMap).toRequestBody(jsonMediaType)
         val request = Request.Builder().url(url).post(requestBody).build()
 
-        client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
-            if (!response.isSuccessful) {
-                val errorMsg = when (response.code) {
-                    401, 403 -> "Authentication failed: Ensure your Gemini API key is valid."
-                    404 -> "Model not found: The model '$modelName' is not recognized."
-                    429 -> "Rate limit reached: Free-tier limit exceeded. Please wait a minute."
-                    else -> "AI Error (HTTP ${response.code}): ${response.message}"
+        return try {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    val errorMsg = when (response.code) {
+                        400 -> "Bad Request: The API request was invalid. Please check your prompt or API configuration."
+                        401, 403 -> "Authentication failed: Ensure your Gemini API key is valid and has not expired."
+                        404 -> "Model not found: The model '$modelName' is not recognized."
+                        429 -> "Rate limit reached: Free-tier limit exceeded. Please wait a minute."
+                        500, 503 -> "Server error: Gemini AI is currently unavailable. Please try again later."
+                        else -> "AI Error (HTTP ${response.code}): ${response.message}"
+                    }
+                    throw Exception(errorMsg)
                 }
-                throw Exception(errorMsg)
+                val geminiResponse = gson.fromJson(responseBody, GeminiApiResponse::class.java)
+                geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
             }
-            val geminiResponse = gson.fromJson(responseBody, GeminiApiResponse::class.java)
-            return geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+        } catch (e: java.io.IOException) {
+            throw Exception("Network error: Could not reach Gemini AI. Please check your internet connection.", e)
         }
     }
 

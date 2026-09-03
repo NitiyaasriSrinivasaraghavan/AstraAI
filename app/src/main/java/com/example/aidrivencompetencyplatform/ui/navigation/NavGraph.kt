@@ -1,11 +1,14 @@
 package com.example.aidrivencompetencyplatform.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.example.aidrivencompetencyplatform.AstraApp
 import com.example.aidrivencompetencyplatform.ui.screens.*
 import com.example.aidrivencompetencyplatform.viewmodel.*
@@ -15,6 +18,12 @@ fun AppNavGraph(navController: NavHostController) {
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
     val factory = AppViewModelFactory(app)
+
+    // Shared ResumeViewModel to ensure data consistency across Hub and Upload screen
+    val sharedResumeViewModel: ResumeViewModel = viewModel(factory = factory)
+    
+    // Shared AtsViewModel for detailed extraction views
+    val sharedAtsViewModel: AtsViewModel = viewModel(factory = factory)
 
     NavHost(
         navController = navController,
@@ -36,19 +45,42 @@ fun AppNavGraph(navController: NavHostController) {
         }
         composable(Screen.Dashboard.route) {
             val dashboardViewModel: DashboardViewModel = viewModel(factory = factory)
-            val resumeViewModel: ResumeViewModel = viewModel(factory = factory)
-            MainDashboardScreen(navController, dashboardViewModel, resumeViewModel)
+            MainDashboardScreen(navController, dashboardViewModel, sharedResumeViewModel)
         }
         composable(Screen.ResumeUpload.route) {
-            val viewModel: ResumeViewModel = viewModel(factory = factory)
-            ResumeUploadScreen(navController, viewModel)
+            ResumeUploadScreen(navController, sharedResumeViewModel)
         }
-        composable(Screen.AtsAnalysis.route) {
-            val viewModel: AtsViewModel = viewModel(factory = factory)
-            AtsDashboardScreen(navController, viewModel)
+        composable(
+            route = Screen.AtsAnalysis.route + "?analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
+            LaunchedEffect(analysisId) {
+                sharedAtsViewModel.loadAnalysis(analysisId)
+            }
+            AtsDashboardScreen(navController, sharedAtsViewModel)
         }
-        composable(Screen.SkillGap.route) {
+        composable(
+            route = Screen.SkillGap.route + "?analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
             val viewModel: SkillGapViewModel = viewModel(factory = factory)
+            LaunchedEffect(analysisId) {
+                viewModel.loadAnalysis(analysisId)
+            }
             SkillGapDashboardScreen(navController, viewModel)
         }
         composable(Screen.AiAssistant.route) {
@@ -65,9 +97,37 @@ fun AppNavGraph(navController: NavHostController) {
             val viewModel: AiAssistantViewModel = viewModel(factory = factory)
             InterviewPrepScreen(navController, viewModel)
         }
-        composable(Screen.JobDescriptionAnalyzer.route) {
+        composable(
+            route = Screen.JobDescriptionAnalyzer.route + "?analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
             val viewModel: JdMatcherViewModel = viewModel(factory = factory)
+            LaunchedEffect(analysisId) {
+                viewModel.loadAnalysis(analysisId)
+            }
             JobDescriptionAnalyzerScreen(navController, viewModel)
+        }
+        composable(Screen.SummaryDetail.route) {
+            ResumeSectionDetailScreen("Summary", navController, sharedAtsViewModel)
+        }
+        composable(Screen.ExperienceDetail.route) {
+            ResumeSectionDetailScreen("Work Experience", navController, sharedAtsViewModel)
+        }
+        composable(Screen.EducationDetail.route) {
+            ResumeSectionDetailScreen("Education", navController, sharedAtsViewModel)
+        }
+        composable(Screen.SkillsDetail.route) {
+            ResumeSectionDetailScreen("Skills", navController, sharedAtsViewModel)
+        }
+        composable(Screen.ProjectsDetail.route) {
+            ResumeSectionDetailScreen("Projects", navController, sharedAtsViewModel)
         }
     }
 }

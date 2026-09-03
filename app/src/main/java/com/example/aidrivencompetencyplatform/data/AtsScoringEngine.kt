@@ -45,21 +45,7 @@ class AtsScoringEngine {
             (parsingCalc.score * WEIGHT_PARSING)
         )
 
-        // In real-world ATS screening, a zero score in any fundamental pillar (0% keywords, 0% parsing accuracy, etc.)
-        // represents a fatal disqualification. A resume with 0 keywords or 0 parsing cannot pass ATS screening.
-        val zeroCategoryCount = listOf(keywordCalc.score, structureCalc.score, formattingCalc.score, parsingCalc.score).count { it == 0 }
-
-        val finalScore = when {
-            zeroCategoryCount >= 2 -> 0
-            zeroCategoryCount == 1 -> {
-                // If any single core feature has a score of 0, apply strict disqualification penalty (capped at 20)
-                (weightedSum * 0.30).roundToInt().coerceIn(0, 20)
-            }
-            keywordCalc.score < 25 || parsingCalc.score < 25 -> {
-                (weightedSum * 0.60).roundToInt().coerceIn(0, 45)
-            }
-            else -> weightedSum.roundToInt().coerceIn(0, 100)
-        }
+        val finalScore = weightedSum.roundToInt().coerceIn(0, 100)
 
         val priorityFixes = mutableListOf<String>()
         if (keywordCalc.score < 70) {

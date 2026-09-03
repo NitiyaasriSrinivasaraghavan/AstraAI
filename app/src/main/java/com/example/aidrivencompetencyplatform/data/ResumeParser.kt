@@ -360,7 +360,7 @@ class ResumeParser(private val context: Context) {
                 if (locationKeywords.any { candidatePartLower == it }) continue
 
                 // Clean out any trailing location keywords from name
-                var cleanedNamePart = potentialNamePart
+                var cleanedNamePart: String = potentialNamePart
                 for (locKw in locationKeywords) {
                     cleanedNamePart = cleanedNamePart.replace(Regex("(?i)\\b$locKw\\b"), "").trim()
                 }
@@ -449,38 +449,33 @@ class ResumeParser(private val context: Context) {
                         lowerText.contains("tech stack")
 
         // 5. Projects
-        val hasProjects = lowerText.contains("projects") || lowerText.contains("academic projects") || 
-                          lowerText.contains("key projects") || lowerText.contains("portfolio")
+        val projectKeywords = listOf("project", "projects", "academic projects", "personal projects", "technical projects", "relevant projects", "key projects", "project experience", "portfolio")
+        val hasProjects = projectKeywords.any { lowerText.contains(it) }
         
         // Extract project names
-        val extractedProjects = mutableListOf<String>()
+        val extractedProjectsList = mutableListOf<String>()
         var inProjectSection = false
         for (line in lines) {
-            val lw = line.lowercase()
-            if (lw.contains("project") && (lw.length < 30 || lw.endsWith(":"))) {
+            val lw = line.lowercase().trim().removeSuffix(":")
+            if (projectKeywords.contains(lw) || (lw.contains("project") && lw.length < 30)) {
                 inProjectSection = true
                 continue
             }
             if (inProjectSection) {
                 // Section end check
-                if (lw.startsWith("education") || lw.startsWith("skills") || lw.startsWith("experience") || lw.startsWith("certifications")) {
+                if (isSectionHeader(line) && !projectKeywords.any { line.lowercase().contains(it) }) {
                     inProjectSection = false
                     continue
                 }
                 // Check if line looks like a project title (bullet point, bold-ish, short title, or title with tech stack)
                 val cleanLine = line.removePrefix("•").removePrefix("-").removePrefix("*").trim()
-                if (cleanLine.length in 3..50 && !cleanLine.startsWith("http") && !cleanLine.contains("@")) {
+                if (cleanLine.length in 3..60 && !cleanLine.startsWith("http") && !cleanLine.contains("@")) {
                     val projectCandidate = cleanLine.substringBefore("|").substringBefore("–").substringBefore("-").trim()
-                    if (projectCandidate.length in 3..40 && !projectCandidate.lowercase().contains("responsibilities") && !projectCandidate.lowercase().contains("overview")) {
-                        extractedProjects.add(projectCandidate)
+                    if (projectCandidate.length in 3..50 && !projectCandidate.lowercase().contains("responsibilities") && !projectCandidate.lowercase().contains("overview")) {
+                        extractedProjectsList.add(projectCandidate)
                     }
                 }
             }
-        }
-        if (extractedProjects.isEmpty()) {
-            // Fallback project extraction from common tech pattern
-            val sampleProjects = listOf("AI Career Companion", "Competency Platform", "Mobile Client App", "Cloud Dashboard")
-            extractedProjects.addAll(sampleProjects.take(2))
         }
 
         // 6. Certifications
@@ -502,7 +497,7 @@ class ResumeParser(private val context: Context) {
             ParsedSectionItem("Education", hasEducation, educationDetails),
             ParsedSectionItem("Work Experience", hasExperience, experienceDetails),
             ParsedSectionItem("Skills", hasSkills),
-            ParsedSectionItem("Projects", hasProjects, extractedProjects.take(3)),
+            ParsedSectionItem("Projects", hasProjects, extractedProjectsList.take(3)),
             ParsedSectionItem("Certifications", hasCertifications),
             ParsedSectionItem("Languages", hasLanguages),
             ParsedSectionItem("Patents & Publications", hasPatents)
@@ -526,19 +521,13 @@ class ResumeParser(private val context: Context) {
             }
         }
 
-        // Fallbacks if very few found
-        if (extractedSkillsList.size < 4) {
-            val defaults = listOf("Kotlin", "Java", "Android", "Jetpack Compose", "REST APIs", "Git", "SQLite", "Room Database")
-            defaults.forEach { if (!extractedSkillsList.contains(it)) extractedSkillsList.add(it) }
-        }
-
         val detectedJd = detectJobDescription(rawText)
 
         return DeterministicResumeStructure(
             candidateInfo = candidateInfo,
             sections = sectionsList,
             extractedSkills = extractedSkillsList.distinct(),
-            extractedProjects = extractedProjects.distinct().take(4),
+            extractedProjects = extractedProjectsList.distinct().take(4),
             detectedJobDescription = detectedJd
         )
     }

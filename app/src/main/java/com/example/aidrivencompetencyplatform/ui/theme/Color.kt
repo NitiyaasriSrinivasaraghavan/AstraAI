@@ -30,3 +30,9 @@ val WarningAmber = Color(0xFFF59E0B)
 val ErrorRed = Color(0xFFEF4444)
 val InfoBlue = Color(0xFF0284C7)
 val AtsProgressPurple = Color(0xFF7C3AED)
+
+// New Green-based ATS Palette
+val AtsDarkGreen = Color(0xFF285B4A)
+val AtsPrimaryGreen = Color(0xFF2F7D5F)
+val AtsMediumSage = Color(0xFF5FAF87)
+val AtsLightMint = Color(0xFFE8F3EC)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +30,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -52,6 +54,7 @@ import com.example.aidrivencompetencyplatform.ui.components.*
 import com.example.aidrivencompetencyplatform.ui.navigation.Screen
 import com.example.aidrivencompetencyplatform.ui.theme.*
 import com.example.aidrivencompetencyplatform.viewmodel.*
+import kotlinx.coroutines.delay
 
 // ==========================================
 // 1. APP TOUR / ONBOARDING SCREEN (CHATBOT-LED)
@@ -279,13 +282,7 @@ fun MainDashboardScreen(
         dashboardViewModel.refreshUser()
     }
 
-    LaunchedEffect(analysisResult) {
-        if (analysisResult != null) {
-            dashboardViewModel.refreshUser()
-            resumeViewModel.resetAnalysisResult()
-            navController.navigate(Screen.AtsAnalysis.route)
-        }
-    }
+    // Removed the automatic navigation from Hub to avoid conflicts with Upload screen
 
     // Interactive Astra Onboarding Tour Dialog
     if (showTour) {
@@ -562,8 +559,14 @@ fun MainDashboardScreen(
                             skillMatch = skillMatch,
                             targetRole = targetRole,
                             latestAnalysis = latestAnalysis,
-                            onViewAtsClick = { navController.navigate(Screen.AtsAnalysis.route) },
-                            onViewSkillGapClick = { navController.navigate(Screen.SkillGap.route) }
+                            onViewAtsClick = { 
+                                val route = Screen.AtsAnalysis.route + (latestAnalysis?.id?.let { "?analysisId=$it" } ?: "")
+                                navController.navigate(route) 
+                            },
+                            onViewSkillGapClick = { 
+                                val route = Screen.SkillGap.route + (latestAnalysis?.id?.let { "?analysisId=$it" } ?: "")
+                                navController.navigate(route) 
+                            }
                         )
                     }
                 }
@@ -573,8 +576,7 @@ fun MainDashboardScreen(
                         AnalyzeResumeHeroCard(
                             hasAnalysis = true,
                             onAnalyzeClick = {
-                                val role = targetRole.ifBlank { "Android Developer" }
-                                resumeViewModel.analyzeResume(role)
+                                navController.navigate(Screen.ResumeUpload.route)
                             }
                         )
                     }
@@ -585,11 +587,10 @@ fun MainDashboardScreen(
                         AnalysisHistorySection(
                             historyList = analysisHistory,
                             onRecordClick = { record ->
-                                navController.navigate(Screen.AtsAnalysis.route)
+                                navController.navigate(Screen.AtsAnalysis.route + "?analysisId=${record.id}")
                             },
                             onAnalyzeNewClick = {
-                                val role = targetRole.ifBlank { "Android Developer" }
-                                resumeViewModel.analyzeResume(role)
+                                navController.navigate(Screen.ResumeUpload.route)
                             }
                         )
                     }
@@ -613,7 +614,11 @@ fun MainDashboardScreen(
         ResumeAnalysisProgressModal(
             isLoading = true,
             interactiveState = interactiveState,
-            targetRole = analyzingRole.ifBlank { targetRole.ifBlank { "Android Developer" } }
+            targetRole = analyzingRole.ifBlank { targetRole.ifBlank { "Android Developer" } },
+            onFinishClick = {
+                resumeViewModel.finishLoading()
+                navController.navigate(Screen.AtsAnalysis.route)
+            }
         )
     }
 
@@ -623,6 +628,7 @@ fun MainDashboardScreen(
         isOpen = isNovaOpen,
         onDismiss = { isNovaOpen = false }
     )
+}
 }
 
 // ==========================================
@@ -1100,7 +1106,7 @@ fun AstraProgressSummaryCard(
                             text = if (atsScore != null) "$atsScore/100" else "--",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Black,
-                            color = Primary
+                            color = AtsDarkGreen
                         )
                         Text(
                             text = "ATS Compatibility",
@@ -1128,7 +1134,7 @@ fun AstraProgressSummaryCard(
                             text = if (skillMatch != null) "$skillMatch%" else "--",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Black,
-                            color = Primary
+                            color = AtsDarkGreen
                         )
                         Text(
                             text = "Skill Coverage",
@@ -1632,19 +1638,25 @@ fun MainFeatureCard(
 fun ResumeAnalysisProgressModal(
     isLoading: Boolean = true,
     interactiveState: InteractiveAnalysisState,
-    targetRole: String
+    targetRole: String,
+    onFinishClick: () -> Unit
 ) {
     if (!isLoading) return
 
-    val atsDone = interactiveState.atsComplete
-    val skillGapDone = interactiveState.skillGapComplete
-    val jdMatchingDone = interactiveState.jdMatchingComplete
-    val allComplete = interactiveState.isComplete || (atsDone && skillGapDone && jdMatchingDone)
-
-    val completedCount = listOf(atsDone, skillGapDone, jdMatchingDone).count { it }
+    val currentStage = interactiveState.stage
+    val allComplete = interactiveState.isComplete
+    
+    val stages = listOf(
+        "Extraction" to "Extracting raw text from document...",
+        "Parsing" to "Identifying candidate profile details...",
+        "AI Analysis" to "Deep semantic evaluation with Gemini...",
+        "ATS Analysis" to "Benchmarking ATS compatibility...",
+        "Skill Gaps" to "Mapping competencies to $targetRole...",
+        "JD Alignment" to "Calculating role-specific match score..."
+    )
 
     Dialog(
-        onDismissRequest = { /* Modal remains active during real-time processing */ },
+        onDismissRequest = { /* Modal remains active during processing */ },
         properties = DialogProperties(
             dismissOnBackPress = false,
             dismissOnClickOutside = false,
@@ -1652,158 +1664,93 @@ fun ResumeAnalysisProgressModal(
         )
     ) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Surface,
+            shape = RoundedCornerShape(28.dp),
+            color = Background,
             border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
             shadowElevation = 24.dp,
             modifier = Modifier
-                .fillMaxWidth(0.94f)
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight()
                 .padding(vertical = 16.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(22.dp),
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Header: Real-Time Analysis Status
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (allComplete) SoftGreen else MintLight,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                if (allComplete) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = PrimaryDark,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                } else {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        color = Primary,
-                                        strokeWidth = 2.5.dp
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (allComplete) "Analysis Complete" else "Analyzing Resume...",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "Target Role: $targetRole",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
-                            )
-                        }
-                    }
+                // Header
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = if (allComplete) "Analysis Complete" else "Analyzing Your Resume",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Nova AI Intelligence Hub",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Primary,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.sp
+                    )
+                }
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (allComplete) SoftGreen else MintLight
+                // Miniature Resume Preview with Scanning Animation
+                MiniResumeCard(isScanning = !allComplete)
+
+                // Progress Stages Status
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = if (allComplete) "3 of 3 Complete" else "$completedCount of 3 Modules",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryDark,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        stages.forEachIndexed { index, (title, desc) ->
+                            val stageNum = index + 1
+                            val isDone = currentStage > stageNum || allComplete
+                            val isProcessing = currentStage == stageNum && !allComplete
+                            
+                            AnalysisStepItem(
+                                title = title,
+                                description = desc,
+                                isCompleted = isDone,
+                                isProcessing = isProcessing
+                            )
+                        }
                     }
                 }
 
-                HorizontalDivider(color = BorderColor.copy(alpha = 0.8f))
-
-                // Module 1: ATS Analysis
-                AnalysisModuleProgressItem(
-                    stepNumber = 1,
-                    title = "ATS Analysis",
-                    description = "Analyzing resume for ATS compatibility, keywords, structure, formatting, and parsing.",
-                    isCompleted = atsDone,
-                    resultSummary = if (atsDone) {
-                        val score = if (interactiveState.atsScore > 0) interactiveState.atsScore else 84
-                        "ATS Compatibility Score: $score/100"
-                    } else null
-                )
-
-                // Module 2: Skill Gap Analysis
-                AnalysisModuleProgressItem(
-                    stepNumber = 2,
-                    title = "Skill Gap Analysis",
-                    description = "Analyzing resume against target role ($targetRole) to identify verified, partial, and missing/no-evidence skills.",
-                    isCompleted = skillGapDone,
-                    resultSummary = if (skillGapDone) {
-                        val matched = if (interactiveState.matchedSkillsCount > 0) interactiveState.matchedSkillsCount else 8
-                        "$matched verified competencies identified"
-                    } else null
-                )
-
-                // Module 3: JD Matching
-                AnalysisModuleProgressItem(
-                    stepNumber = 3,
-                    title = "JD Matching",
-                    description = "Comparing resume with target job description and generating relevant matching information.",
-                    isCompleted = jdMatchingDone,
-                    resultSummary = if (jdMatchingDone) {
-                        val match = if (interactiveState.skillMatch > 0) interactiveState.skillMatch else 78
-                        "Role Alignment: $match% Match"
-                    } else null
-                )
-
-                HorizontalDivider(color = BorderColor.copy(alpha = 0.8f))
-
-                // Bottom Status Footer
                 if (allComplete) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = SoftGreen,
-                        modifier = Modifier.fillMaxWidth()
+                    Button(
+                        onClick = onFinishClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = PrimaryDark,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "All 3 modules complete! Opening ATS Dashboard...",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryDark
-                            )
-                        }
+                        Text("Open ATS Dashboard", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                     }
                 } else {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Primary,
+                            strokeWidth = 2.0.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Real-time AI pipeline evaluating competencies...",
+                            text = "Please wait, AI engines running...",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
@@ -1815,105 +1762,144 @@ fun ResumeAnalysisProgressModal(
 }
 
 @Composable
-private fun AnalysisModuleProgressItem(
-    stepNumber: Int,
+fun MiniResumeCard(isScanning: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "scanner")
+    val scannerOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scannerOffset"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(width = 170.dp, height = 220.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(Primary.copy(alpha = 0.03f))
+    ) {
+        // Resume Layout Mockup (Floating miniature document)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header lines
+            Box(modifier = Modifier.fillMaxWidth(0.5f).height(8.dp).background(TextSecondary.copy(alpha = 0.15f)))
+            Box(modifier = Modifier.fillMaxWidth(0.3f).height(4.dp).background(TextSecondary.copy(alpha = 0.1f)))
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Section 1
+            Box(modifier = Modifier.fillMaxWidth(0.4f).height(6.dp).background(Primary.copy(alpha = 0.15f)))
+            repeat(2) {
+                Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(TextMuted.copy(alpha = 0.12f)))
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Section 2
+            Box(modifier = Modifier.fillMaxWidth(0.45f).height(6.dp).background(Primary.copy(alpha = 0.15f)))
+            repeat(3) {
+                Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(TextMuted.copy(alpha = 0.12f)))
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Section 3 (Skills chips)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(3) {
+                    Box(modifier = Modifier.width(26.dp).height(10.dp).clip(RoundedCornerShape(2.dp)).background(SoftGreen.copy(alpha = 0.4f)))
+                }
+            }
+        }
+
+        // Scanning Line
+        if (isScanning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .align(Alignment.TopCenter)
+                    .offset(y = 220.dp * scannerOffset)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Primary.copy(alpha = 0.8f), Color.Transparent)
+                        )
+                    )
+            )
+            
+            // Subtle Overlay Glow following the scanner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(scannerOffset)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Primary.copy(alpha = 0.04f))
+                        )
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnalysisStepItem(
     title: String,
     description: String,
     isCompleted: Boolean,
-    resultSummary: String? = null
+    isProcessing: Boolean
 ) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (isCompleted) SoftGreen.copy(alpha = 0.35f) else SurfaceVariant,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isCompleted) Primary.copy(alpha = 0.3f) else BorderColor
-        ),
-        modifier = Modifier.fillMaxWidth()
+    val alpha = if (isCompleted || isProcessing) 1f else 0.4f
+    Row(
+        modifier = Modifier.fillMaxWidth().alpha(alpha),
+        verticalAlignment = Alignment.Top
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.Top
+        Box(
+            modifier = Modifier.size(20.dp).padding(top = 2.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Status Icon: Green Tick when done, Spinning Indicator when in progress
-            Surface(
-                shape = CircleShape,
-                color = if (isCompleted) SoftGreen else MintLight,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isCompleted) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Completed",
-                            tint = PrimaryDark,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    } else {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Primary,
-                            strokeWidth = 2.dp
-                        )
-                    }
-                }
+            if (isCompleted) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = SuccessGreen,
+                    modifier = Modifier.size(18.dp)
+                )
+            } else if (isProcessing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    color = Primary,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .border(1.5.dp, TextSecondary.copy(alpha = 0.5f), CircleShape)
+                )
             }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (isCompleted) SoftGreen else MintLight
-                    ) {
-                        Text(
-                            text = if (isCompleted) "Completed" else "In Progress",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isCompleted) PrimaryDark else Primary,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (isProcessing) Primary else TextPrimary
+            )
+            if (isProcessing) {
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary,
-                    lineHeight = 18.sp
+                    lineHeight = 14.sp
                 )
-
-                if (isCompleted && resultSummary != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MintLight
-                    ) {
-                        Text(
-                            text = resultSummary,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = PrimaryDark,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-                }
             }
         }
     }
@@ -1974,11 +1960,14 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
     }
 
     // AUTOMATIC NAVIGATION TO ATS DASHBOARD ON ANALYSIS COMPLETION
-    LaunchedEffect(analysisResult) {
-        if (analysisResult != null) {
-            viewModel.resetAnalysisResult()
+    LaunchedEffect(interactiveState.isComplete) {
+        if (interactiveState.isComplete && analysisResult != null) {
+            // SUCCESS: Actual analysis result received and UI marked as complete
+            Log.d("ResumeNetworkDebug", "Analysis complete state reached, preparing navigation")
+            delay(600) // Reduced delay for faster transition
+            viewModel.finishLoading()
             navController.navigate(Screen.AtsAnalysis.route) {
-                popUpTo(Screen.ResumeUpload.route) { inclusive = false }
+                launchSingleTop = true
             }
         }
     }
@@ -2448,7 +2437,11 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                     ResumeAnalysisProgressModal(
                         isLoading = true,
                         interactiveState = interactiveState,
-                        targetRole = analyzingRole.ifBlank { targetRole }
+                        targetRole = analyzingRole.ifBlank { targetRole },
+                        onFinishClick = {
+                            viewModel.finishLoading()
+                            navController.navigate(Screen.AtsAnalysis.route)
+                        }
                     )
                 }
 
@@ -2486,10 +2479,6 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
     var selectedPriorityForDetail by remember { mutableStateOf<String?>(null) }
     var selectedWhyMetric by remember { mutableStateOf<AtsCardCalculation?>(null) }
     var showInfoDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        viewModel.refresh()
-    }
 
     Scaffold(
         containerColor = Background,
@@ -2552,25 +2541,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                     ) {
                         item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                        // 1. Main ATS Compatibility Score Hero (MUST BE FIRST AT THE TOP)
-                        item {
-                            AtsOverallScoreHero(
-                                score = score,
-                                onMetricClick = { metric ->
-                                    selectedWhyMetric = metric
-                                }
-                            )
-                        }
-
-                        // 2. Entity Data Extraction Diagnostics (MUST APPEAR SECOND)
-                        item {
-                            AtsEntityExtractionCard(
-                                score = score,
-                                analysis = analysisData
-                            )
-                        }
-
-                        // 3. Candidate Profile & Target Role Sub-feature Header
+                        // 1. USER NAME / CANDIDATE HEADER (MUST BE FIRST)
                         item {
                             CandidateProfileCard(
                                 targetRole = score.targetRole,
@@ -2581,7 +2552,17 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 4. Keyword Analysis & ATS Performance Areas Header
+                        // 2. Main ATS Compatibility Score Hero
+                        item {
+                            AtsOverallScoreHero(
+                                score = score,
+                                onMetricClick = { metric ->
+                                    selectedWhyMetric = metric
+                                }
+                            )
+                        }
+
+                        // 3. ATS SCORE FEATURES / BREAKDOWN Header
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2616,7 +2597,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             }
                         }
 
-                        // 4a. Dimension 1: Keyword Coverage (35%)
+                        // 3a. Dimension 1: Keyword Coverage (35%)
                         item {
                             AtsExpandableCard(
                                 calculation = score.keywordCoverage,
@@ -2626,7 +2607,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 4b. Dimension 2: Resume Structure (25%)
+                        // 3b. Dimension 2: Resume Structure (25%)
                         item {
                             AtsExpandableCard(
                                 calculation = score.resumeStructure,
@@ -2636,7 +2617,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 4c. Dimension 3: Formatting Safety (20%)
+                        // 3c. Dimension 3: Formatting Safety (20%)
                         item {
                             AtsExpandableCard(
                                 calculation = score.formattingSafety,
@@ -2646,7 +2627,7 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 4d. Dimension 4: Parsing Accuracy (20%)
+                        // 3d. Dimension 4: Parsing Accuracy (20%)
                         item {
                             AtsExpandableCard(
                                 calculation = score.parsingAccuracy,
@@ -2711,7 +2692,16 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                             )
                         }
 
-                        // 11. NEXT DASHBOARD NAVIGATION: Continue to Skill Gap & Return to Main Dashboard
+                        // 11. ENTITY DATA EXTRACTION (At the absolute bottom as requested)
+                        item {
+                            AtsEntityExtractionCard(
+                                score = score,
+                                analysis = analysisData,
+                                navController = navController
+                            )
+                        }
+
+                        // 12. NEXT DASHBOARD NAVIGATION: Continue to Skill Gap & Return to Main Dashboard
                         item {
                             Column(
                                 modifier = Modifier
@@ -2720,7 +2710,10 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Button(
-                                    onClick = { navController.navigate(Screen.SkillGap.route) },
+                                    onClick = { 
+                                        val route = Screen.SkillGap.route + (analysis?.id?.let { "?analysisId=$it" } ?: "")
+                                        navController.navigate(route) 
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
                                     shape = RoundedCornerShape(16.dp),
@@ -3614,6 +3607,12 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
 
 @Composable
 fun CategoryGapMeterItem(coverage: SkillCategoryCoverage) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = coverage.percentage / 100f,
+        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+        label = "CategoryProgress"
+    )
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -3634,7 +3633,7 @@ fun CategoryGapMeterItem(coverage: SkillCategoryCoverage) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "${coverage.percentage}%",
+                    text = "${(animatedProgress * 100).toInt()}%",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (coverage.percentage >= 80) PrimaryDark else if (coverage.percentage >= 50) WarningAmber else ErrorRed
@@ -3654,7 +3653,7 @@ fun CategoryGapMeterItem(coverage: SkillCategoryCoverage) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(coverage.percentage / 100f)
+                    .fillMaxWidth(animatedProgress)
                     .clip(RoundedCornerShape(4.dp))
                     .background(
                         if (coverage.percentage >= 80) Primary
@@ -5449,7 +5448,7 @@ fun CandidateProfileCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = candidateName ?: "Candidate Resume",
+                        text = if (!candidateName.isNullOrBlank()) candidateName else "Candidate Resume",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -5475,24 +5474,12 @@ fun CandidateProfileCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Target: $targetRole",
+                                    text = "Target: ${targetRole.ifBlank { "Not specified" }}",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryDark
                                 )
                             }
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Primary.copy(alpha = 0.1f)
-                        ) {
-                            Text(
-                                text = "ATS Engine v2.4",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                            )
                         }
                     }
                 }
@@ -5513,68 +5500,51 @@ fun CandidateProfileCard(
                 }
             }
 
-            if (!candidateEmail.isNullOrBlank() || !candidatePhone.isNullOrBlank() || !candidateLocation.isNullOrBlank()) {
-                HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (!candidateEmail.isNullOrBlank()) {
-                        item {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SurfaceVariant,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(candidateEmail, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                }
-                            }
-                        }
-                    }
-                    if (!candidatePhone.isNullOrBlank()) {
-                        item {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SurfaceVariant,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(candidatePhone, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                }
-                            }
-                        }
-                    }
-                    if (!candidateLocation.isNullOrBlank()) {
-                        item {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SurfaceVariant,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(candidateLocation, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                }
-                            }
-                        }
-                    }
+            HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 2.dp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Email
+                item {
+                    ProfileBadge(
+                        icon = Icons.Default.Email,
+                        value = candidateEmail ?: "Not found"
+                    )
+                }
+                // Phone
+                item {
+                    ProfileBadge(
+                        icon = Icons.Default.Phone,
+                        value = candidatePhone ?: "Not found"
+                    )
+                }
+                // Location
+                item {
+                    ProfileBadge(
+                        icon = Icons.Default.LocationOn,
+                        value = candidateLocation ?: "Not found"
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileBadge(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = SurfaceVariant,
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextSecondary)
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(value, style = MaterialTheme.typography.labelSmall, color = if (value == "Not found") ErrorRed else TextSecondary)
         }
     }
 }
@@ -5595,12 +5565,8 @@ fun AtsOverallScoreHero(
         label = "scoreInt"
     )
 
-    val scoreColor = when {
-        score.overallScore >= 80 -> SuccessGreen
-        score.overallScore >= 60 -> Color(0xFF0284C7)
-        score.overallScore >= 45 -> WarningAmber
-        else -> ErrorRed
-    }
+    // Using the new Green-based ATS Palette
+    val scoreColor = if (score.overallScore >= 70) AtsPrimaryGreen else AtsDarkGreen
 
     val statusBadge = when {
         score.overallScore >= 85 -> "ATS Optimized (Top 10%)"
@@ -5657,14 +5623,14 @@ fun AtsOverallScoreHero(
                     progress = { 1f },
                     modifier = Modifier.size(164.dp),
                     strokeWidth = 14.dp,
-                    color = SoftGreen,
+                    color = AtsLightMint,
                     trackColor = Color.Transparent
                 )
                 CircularProgressIndicator(
                     progress = { animatedScoreFloat },
                     modifier = Modifier.size(164.dp),
                     strokeWidth = 14.dp,
-                    color = scoreColor,
+                    color = AtsPrimaryGreen,
                     trackColor = Color.Transparent
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -5672,7 +5638,7 @@ fun AtsOverallScoreHero(
                         text = "$animatedScoreInt",
                         style = MaterialTheme.typography.displayMedium,
                         fontWeight = FontWeight.Black,
-                        color = scoreColor
+                        color = AtsDarkGreen
                     )
                     Text(
                         text = "out of 100",
@@ -5917,12 +5883,7 @@ fun AtsMetricWhyModal(
     onDismiss: () -> Unit,
     onAskAi: () -> Unit
 ) {
-    val color = when {
-        calculation.score >= 80 -> SuccessGreen
-        calculation.score >= 60 -> Color(0xFF0284C7)
-        calculation.score >= 40 -> WarningAmber
-        else -> ErrorRed
-    }
+    val color = AtsDarkGreen
 
     val iconVector = when (calculation.iconType) {
         AtsCategoryIcon.KEYWORD -> Icons.Default.Key
@@ -6393,12 +6354,18 @@ fun AtsExpandableCard(
     calculation: AtsCardCalculation,
     onAskWhyClick: (() -> Unit)? = null
 ) {
-    val color = when {
-        calculation.score >= 80 -> SuccessGreen
-        calculation.score >= 60 -> Color(0xFF0284C7)
-        calculation.score >= 40 -> WarningAmber
-        else -> ErrorRed
-    }
+    val animatedProgress by animateFloatAsState(
+        targetValue = calculation.score / 100f,
+        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+        label = "AtsCategoryProgress"
+    )
+    val animatedScoreInt by animateIntAsState(
+        targetValue = calculation.score,
+        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+        label = "AtsCategoryScoreInt"
+    )
+
+    val color = AtsDarkGreen
 
     val iconVector = when (calculation.iconType) {
         AtsCategoryIcon.KEYWORD -> Icons.Default.Key
@@ -6470,7 +6437,7 @@ fun AtsExpandableCard(
                 }
 
                 Text(
-                    text = "${calculation.score}/100",
+                    text = "$animatedScoreInt/100",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
                     color = color
@@ -6479,13 +6446,13 @@ fun AtsExpandableCard(
 
             // Progress Bar
             LinearProgressIndicator(
-                progress = { (calculation.score / 100f).coerceIn(0f, 1f) },
+                progress = { (animatedProgress).coerceIn(0f, 1f) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = AtsProgressPurple,
-                trackColor = SoftGreen
+                color = AtsMediumSage,
+                trackColor = AtsLightMint
             )
 
             // FEATURE ANALYSIS SUMMARY
@@ -6633,7 +6600,7 @@ fun AtsCanonicalScoreReconciliationCard(score: AtsScoreResult) {
                         text = "= (${score.keywordCoverage.score} × 0.35) + (${score.resumeStructure.score} × 0.25) + (${score.formattingSafety.score} × 0.20) + (${score.parsingAccuracy.score} × 0.20) = ${score.overallScore}",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = PrimaryDark,
+                        color = AtsDarkGreen,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -7263,7 +7230,8 @@ private fun FilterTabPill(
 @Composable
 fun AtsEntityExtractionCard(
     score: AtsScoreResult,
-    analysis: ResumeAnalysisResult
+    analysis: ResumeAnalysisResult,
+    navController: NavController
 ) {
     var expanded by remember { mutableStateOf(true) }
 
@@ -7285,19 +7253,19 @@ fun AtsEntityExtractionCard(
                     Icon(
                         Icons.Default.Code,
                         contentDescription = null,
-                        tint = Primary,
+                        tint = AtsPrimaryGreen,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Entity Data Extraction Diagnostics",
+                            text = "Resume Data Extracted",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
                         Text(
-                            text = "Candidate Profile, Resume Sections & Extraction Summary",
+                            text = "Interactive profile entities & extracted sections",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -7314,7 +7282,7 @@ fun AtsEntityExtractionCard(
             if (expanded) {
                 HorizontalDivider(color = BorderColor)
 
-                // 1. Candidate Profile Entities Card
+                // 1. Candidate Profile Entities Card (Visually unchanged)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Background,
@@ -7329,7 +7297,7 @@ fun AtsEntityExtractionCard(
                             Icon(
                                 Icons.Default.Person,
                                 contentDescription = null,
-                                tint = Primary,
+                                tint = AtsPrimaryGreen,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -7337,51 +7305,67 @@ fun AtsEntityExtractionCard(
                                 text = "CANDIDATE PROFILE ENTITIES",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = PrimaryDark,
+                                color = AtsDarkGreen,
                                 letterSpacing = 0.8.sp
                             )
                         }
-                        EntityDiagnosticRow("Name", score.candidateName ?: "Not detected", score.candidateName != null)
-                        EntityDiagnosticRow("Email", score.candidateEmail ?: "Not detected", score.candidateEmail != null)
-                        EntityDiagnosticRow("Phone", score.candidatePhone ?: "Not detected", score.candidatePhone != null)
-                        EntityDiagnosticRow("Location", score.candidateLocation ?: "Not detected", score.candidateLocation != null)
+                        
+                        val name = score.candidateName ?: "Not detected"
+                        val email = score.candidateEmail ?: "Not detected"
+                        val phone = score.candidatePhone ?: "Not detected"
+                        val location = score.candidateLocation ?: "Not detected"
+                        
+                        EntityDiagnosticRow("Name", name, score.candidateName != null)
+                        EntityDiagnosticRow("Email", email, score.candidateEmail != null)
+                        EntityDiagnosticRow("Phone", phone, score.candidatePhone != null)
+                        EntityDiagnosticRow("Location", location, score.candidateLocation != null)
                     }
                 }
 
-                // 2. Standard Sections Detected Card
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Background,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Layers,
-                                contentDescription = null,
-                                tint = Primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "RESUME SECTIONS DETECTED",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryDark,
-                                letterSpacing = 0.8.sp
-                            )
-                        }
-                        val missing = analysis.missingSections ?: emptyList()
-                        val sections = listOf("Contact Info", "Work Experience", "Education", "Skills", "Projects", "Summary")
-                        sections.forEach { sec ->
-                            val isDetected = !missing.any { it.contains(sec, ignoreCase = true) }
-                            EntityDiagnosticRow(sec, if (isDetected) "Verified standard header" else "Missing or unrecognized", isDetected)
-                        }
+                // 2. Standard Sections Detected (Redesigned as independent clickable cards)
+                Text(
+                    text = "RESUME SECTIONS DETECTED",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = AtsDarkGreen,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                val sections = listOf(
+                    Triple("Summary", Icons.Default.Description, Screen.SummaryDetail.route),
+                    Triple("Work Experience", Icons.Default.Work, Screen.ExperienceDetail.route),
+                    Triple("Education", Icons.Default.School, Screen.EducationDetail.route),
+                    Triple("Skills", Icons.Default.Psychology, Screen.SkillsDetail.route),
+                    Triple("Projects", Icons.Default.Architecture, Screen.ProjectsDetail.route)
+                )
+                
+                sections.forEach { (name, icon, route) ->
+                    val isDetected = when(name) {
+                        "Summary" -> !analysis.summary.isNullOrBlank()
+                        "Work Experience" -> !analysis.experience.isNullOrEmpty()
+                        "Education" -> !analysis.education.isNullOrEmpty()
+                        "Skills" -> !analysis.extractedSkills.isNullOrEmpty()
+                        "Projects" -> !analysis.projectAnalysis.isNullOrEmpty()
+                        else -> true
                     }
+                    
+                    val countText = when(name) {
+                        "Summary" -> if (isDetected) "1 section extracted" else "Not detected"
+                        "Work Experience" -> if (isDetected) "${analysis.experience?.size} entries extracted" else "No experience detected"
+                        "Education" -> if (isDetected) "${analysis.education?.size} entries extracted" else "Not detected"
+                        "Skills" -> if (isDetected) "${analysis.extractedSkills?.size} skills extracted" else "Not detected"
+                        "Projects" -> if (isDetected) "${analysis.projectAnalysis?.size} projects extracted" else "No projects detected"
+                        else -> "Not detected"
+                    }
+
+                    ResumeSectionNavigationCard(
+                        name = name,
+                        countText = countText,
+                        icon = icon,
+                        isDetected = isDetected,
+                        onClick = { navController.navigate(route) }
+                    )
                 }
 
                 // 3. Extraction Summary & Parser Text Stats Card
@@ -7439,9 +7423,74 @@ fun AtsEntityExtractionCard(
 }
 
 @Composable
-private fun EntityDiagnosticRow(label: String, value: String, isSuccess: Boolean) {
+private fun ResumeSectionNavigationCard(
+    name: String,
+    countText: String,
+    icon: ImageVector,
+    isDetected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isDetected) BorderColorGreen else BorderColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isDetected) MintLight else SurfaceVariant,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isDetected) AtsPrimaryGreen else TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = countText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDetected) AtsPrimaryGreen else TextSecondary
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "View Details",
+                tint = TextMuted,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun EntityDiagnosticRow(
+    label: String,
+    value: String,
+    isSuccess: Boolean
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -7516,18 +7565,24 @@ fun AtsKeyAiInsightCard(
 
                     Text(
                         text = highestLeverageTweak,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = TextPrimary,
-                        lineHeight = 20.sp
+                        lineHeight = 18.sp
                     )
                 }
             }
 
-            PremiumButton(
-                text = "Ask Nova AI to Optimize Bullet Points",
+            TextButton(
                 onClick = onConsultAiClick,
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(
+                    text = "Consult Nova for Strategy →",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Primary
+                )
+            }
         }
     }
 }
@@ -7787,6 +7842,230 @@ fun StubScreen(title: String, navController: NavController) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun ResumeSectionDetailScreen(
+    title: String,
+    navController: NavController,
+    viewModel: AtsViewModel
+) {
+    val analysis by viewModel.analysisResult.collectAsState()
+    
+    Scaffold(
+        containerColor = Background,
+        topBar = {
+            TopAppBar(
+                title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(
+                    text = "Resume Data Extracted",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            }
+
+            val currentAnalysis = analysis
+            if (currentAnalysis == null) {
+                item { Text("No data available.", color = TextSecondary) }
+            } else {
+                when (title) {
+                    "Summary" -> {
+                        item {
+                            DetailContentCard(
+                                countText = "1 section extracted",
+                                content = {
+                                    Text(
+                                        text = currentAnalysis.summary ?: "Not found",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextPrimary,
+                                        lineHeight = 22.sp
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    "Work Experience" -> {
+                        val items = currentAnalysis.experience ?: emptyList()
+                        if (items.isEmpty()) {
+                            item { Text("No experience detected", color = TextSecondary) }
+                        } else {
+                            items(items) { exp ->
+                                DetailContentCard(
+                                    title = "Work Experience Entry",
+                                    content = {
+                                        Text(text = exp, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    "Education" -> {
+                        val items = currentAnalysis.education ?: emptyList()
+                        if (items.isEmpty()) {
+                            item { Text("No education detected", color = TextSecondary) }
+                        } else {
+                            items(items) { edu ->
+                                DetailContentCard(
+                                    title = "Education Entry",
+                                    content = {
+                                        Text(text = edu, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    "Skills" -> {
+                        item {
+                            DetailContentCard(
+                                countText = "${currentAnalysis.extractedSkills?.size ?: 0} skills extracted",
+                                content = {
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        currentAnalysis.extractedSkills?.forEach { skill ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = AtsLightMint,
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, AtsMediumSage.copy(alpha = 0.3f))
+                                            ) {
+                                                Text(
+                                                    text = skill.name,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = AtsDarkGreen,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    "Projects" -> {
+                        val items = currentAnalysis.projectAnalysis ?: emptyList()
+                        if (items.isEmpty()) {
+                            item { Text("No projects detected", color = TextSecondary) }
+                        } else {
+                            items(items) { proj ->
+                                DetailContentCard(
+                                    title = proj.name,
+                                    content = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            if (!proj.technologies.isNullOrEmpty()) {
+                                                Text(
+                                                    text = "Technologies: ${proj.technologies.joinToString(", ")}",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = Primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            if (!proj.demonstratedSkills.isNullOrEmpty()) {
+                                                Text(
+                                                    text = "Demonstrated Skills: ${proj.demonstratedSkills.joinToString(", ")}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSecondary
+                                                )
+                                            }
+                                            proj.strengths?.forEach { str ->
+                                                Row(verticalAlignment = Alignment.Top) {
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(text = str, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                SourceIndicator()
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailContentCard(
+    title: String? = null,
+    countText: String? = null,
+    content: @Composable () -> Unit
+) {
+    AstraCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (title != null || countText != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (title != null) {
+                        Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AtsDarkGreen)
+                    }
+                    if (countText != null) {
+                        Surface(shape = RoundedCornerShape(8.dp), color = MintLight) {
+                            Text(
+                                text = countText,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = AtsPrimaryGreen
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(color = BorderColor.copy(alpha = 0.5f))
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SourceIndicator() {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SurfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Description, contentDescription = null, tint = AtsPrimaryGreen, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(text = "Source", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Text(text = "Uploaded Resume", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = AtsDarkGreen)
+            }
+        }
+    }
+}
+
 private fun getFileName(context: Context, uri: Uri): String? {
     var result: String? = null
     if (uri.scheme == "content") {
@@ -7811,3 +8090,4 @@ private fun getFileName(context: Context, uri: Uri): String? {
     }
     return result
 }
+
