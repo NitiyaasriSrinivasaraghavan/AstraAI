@@ -1,7 +1,7 @@
 package com.example.aidrivencompetencyplatform.data
 
-import com.google.gson.Gson
-import com.example.aidrivencompetencyplatform.model.ResumeAnalysisResult
+import com.google.gson.*
+import com.example.aidrivencompetencyplatform.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -18,6 +18,7 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import javax.net.ssl.HostnameVerifier
 import android.util.Log
+import kotlin.math.roundToInt
 
 class GeminiService {
     // API Key read from BuildConfig with fallback
@@ -27,14 +28,16 @@ class GeminiService {
         "AQ.Ab8RN6Jwy3UjrBJoa1mw53fDaioiIqMZGeL_Os6oDkRYCPOxfg"
     }
 
-    // High-performance model cascade:
-    // 1. gemini-3.5-flash-lite: ultra-fast (sub-second to 1.5s), reliable JSON extraction
-    // 2. gemini-3.5-flash: fast (1-2s), balanced fallback
-    // 3. gemini-3.6-flash: comprehensive fallback
+    // High-performance model cascade prioritizing fast and reliable endpoints:
+    // 1. gemini-flash-lite-latest: ultra-fast (sub-second), high reliability
+    // 2. gemini-3.6-flash: comprehensive and fast
+    // 3. gemini-3.5-flash-lite: backup lite model
+    // 4. gemini-3.5-flash: general fallback
     private val modelCascade = listOf(
+        "gemini-flash-lite-latest",
+        "gemini-3.6-flash",
         "gemini-3.5-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash"
+        "gemini-3.5-flash"
     )
 
     private val client = createOkHttpClient()
@@ -159,18 +162,299 @@ class GeminiService {
 
         val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
         val jsonString = extractJson(responseText)
-        if (jsonString != null) {
-            try {
-                val parsed = gson.fromJson(jsonString, ResumeAnalysisResult::class.java)
-                sanitizeAnalysisResult(parsed)
-            } catch (e: Exception) {
-                Log.e("GeminiService", "Parsing error: ${e.message}")
-                throw Exception("Failed to parse AI response into structured analysis. Format was unexpected.", e)
-            }
-        } else {
-            Log.e("GeminiService", "No JSON found in response")
-            throw Exception("AI response did not contain valid JSON analysis data.")
+            ?: throw Exception("AI response did not contain valid JSON analysis data.")
+
+        try {
+            parseResumeAnalysisJson(jsonString, targetRole, resumeText)
+        } catch (e: Exception) {
+            Log.e("GeminiService", "Parsing error: ${e.message}", e)
+            throw Exception("Failed to parse AI response into structured analysis. Format was unexpected.", e)
         }
+    }
+
+    /**
+     * Resilient JSON parser that gracefully handles polymorphic fields,
+     * mixed types (objects vs strings), string levels, and unclosed arrays.
+     */
+    fun parseResumeAnalysisJson(
+        jsonString: String,
+        targetRole: String? = null,
+        rawResumeText: String? = null
+    ): ResumeAnalysisResult {
+        val rootElement = try {
+            JsonParser.parseString(jsonString)
+        } catch (e: Exception) {
+            val repaired = repairJson(jsonString)
+            JsonParser.parseString(repaired)
+        }
+
+        if (!rootElement.isJsonObject) {
+            throw Exception("Expected JSON object root, but got ${rootElement.javaClass.simpleName}")
+        }
+        val root = rootElement.asJsonObject
+
+        fun getSafeInt(obj: JsonObject, key: String, default: Int = 0): Int {
+            val elem = obj.get(key) ?: return default
+            if (elem.isJsonPrimitive) {
+                val prim = elem.asJsonPrimitive
+                if (prim.isNumber) return prim.asInt
+                if (prim.isString) {
+                    val clean = prim.asString.trim().replace("%", "")
+                    return clean.toIntOrNull() ?: clean.toDoubleOrNull()?.roundToInt() ?: default
+                }
+            }
+            return default
+        }
+
+        fun getSafeString(obj: JsonObject, key: String): String? {
+            val elem = obj.get(key) ?: return null
+            if (elem.isJsonNull) return null
+            if (elem.isJsonPrimitive) {
+                return sanitizeField(elem.asString)
+            }
+            if (elem.isJsonObject) {
+                val parts = elem.asJsonObject.entrySet().mapNotNull { entry ->
+                    val v = entry.value
+                    if (v.isJsonPrimitive) sanitizeField(v.asString) else null
+                }
+                return if (parts.isNotEmpty()) parts.joinToString(", ") else null
+            }
+            return null
+        }
+
+        fun getSafeStringList(obj: JsonObject, key: String): List<String> {
+            val elem = obj.get(key) ?: return emptyList()
+            if (elem.isJsonArray) {
+                return elem.asJsonArray.mapNotNull { item ->
+                    when {
+                        item.isJsonPrimitive -> sanitizeField(item.asString)
+                        item.isJsonObject -> {
+                            val subParts = item.asJsonObject.entrySet().mapNotNull { entry ->
+                                val v = entry.value
+                                if (v.isJsonPrimitive) "${entry.key}: ${v.asString}" else null
+                            }
+                            if (subParts.isNotEmpty()) subParts.joinToString(" | ") else null
+                        }
+                        else -> null
+                    }
+                }
+            }
+            if (elem.isJsonPrimitive) {
+                val str = sanitizeField(elem.asString)
+                return if (str != null) listOf(str) else emptyList()
+            }
+            return emptyList()
+        }
+
+        fun parseSkillLevel(elem: JsonElement?): Int {
+            if (elem == null || elem.isJsonNull) return 75
+            if (elem.isJsonPrimitive) {
+                val prim = elem.asJsonPrimitive
+                if (prim.isNumber) return prim.asInt.coerceIn(0, 100)
+                if (prim.isString) {
+                    val str = prim.asString.trim().lowercase()
+                    val num = str.replace("%", "").toIntOrNull()
+                    if (num != null) return num.coerceIn(0, 100)
+                    return when {
+                        str.contains("expert") || str.contains("lead") -> 95
+                        str.contains("advanc") || str.contains("senior") -> 85
+                        str.contains("proficient") || str.contains("intermed") || str.contains("mid") -> 75
+                        str.contains("basic") || str.contains("beginn") || str.contains("junior") -> 50
+                        else -> 75
+                    }
+                }
+            }
+            return 75
+        }
+
+        fun getSafeSkills(obj: JsonObject): List<Skill> {
+            val elem = obj.get("extractedSkills") ?: return emptyList()
+            if (elem.isJsonArray) {
+                return elem.asJsonArray.mapNotNull { item ->
+                    when {
+                        item.isJsonObject -> {
+                            val sObj = item.asJsonObject
+                            val name = getSafeString(sObj, "name") ?: return@mapNotNull null
+                            val level = parseSkillLevel(sObj.get("level"))
+                            val category = getSafeString(sObj, "category") ?: "Technical"
+                            val importance = getSafeString(sObj, "importance")
+                            val evidence = getSafeString(sObj, "evidence")
+                            val reason = getSafeString(sObj, "reason")
+                            Skill(
+                                name = name,
+                                level = level,
+                                category = category,
+                                importance = importance,
+                                evidence = evidence,
+                                reason = reason
+                            )
+                        }
+                        item.isJsonPrimitive -> {
+                            val name = item.asString.trim()
+                            if (name.isNotBlank()) Skill(name = name, level = 75, category = "Technical") else null
+                        }
+                        else -> null
+                    }
+                }
+            }
+            return emptyList()
+        }
+
+        fun getSafeAtsBreakdown(obj: JsonObject): AtsBreakdown {
+            val atsObj = obj.getAsJsonObject("atsBreakdown") ?: JsonObject()
+            val keyword = getSafeInt(atsObj, "keywordCoverage", 75)
+            val structure = getSafeInt(atsObj, "resumeStructure", 75)
+            val formatting = getSafeInt(atsObj, "formattingSafety", 80)
+            val parsing = getSafeInt(atsObj, "parsingAccuracy", 80)
+
+            val explanationsObj = atsObj.getAsJsonObject("explanations") ?: JsonObject()
+            fun parseEvidenceList(expObj: JsonObject, key: String): List<AtsEvidence> {
+                val arr = expObj.getAsJsonArray(key) ?: return emptyList()
+                return arr.mapNotNull { item ->
+                    when {
+                        item.isJsonObject -> {
+                            val iObj = item.asJsonObject
+                            val label = getSafeString(iObj, "label") ?: "Check"
+                            val isDetected = iObj.get("isDetected")?.let { d ->
+                                if (d.isJsonPrimitive && d.asJsonPrimitive.isBoolean) d.asBoolean
+                                else d.asString.equals("true", ignoreCase = true) || d.asString.equals("yes", ignoreCase = true)
+                            } ?: true
+                            val detail = getSafeString(iObj, "detail")
+                            val suggestion = getSafeString(iObj, "suggestion")
+                            AtsEvidence(label = label, isDetected = isDetected, detail = detail, suggestion = suggestion)
+                        }
+                        item.isJsonPrimitive -> {
+                            val text = item.asString.trim()
+                            if (text.isNotBlank()) AtsEvidence(label = text.take(35), isDetected = true, detail = text) else null
+                        }
+                        else -> null
+                    }
+                }
+            }
+
+            val explanations = AtsExplanations(
+                keywords = parseEvidenceList(explanationsObj, "keywords"),
+                structure = parseEvidenceList(explanationsObj, "structure"),
+                formatting = parseEvidenceList(explanationsObj, "formatting"),
+                parsing = parseEvidenceList(explanationsObj, "parsing")
+            )
+
+            return AtsBreakdown(
+                keywordCoverage = keyword,
+                resumeStructure = structure,
+                formattingSafety = formatting,
+                parsingAccuracy = parsing,
+                explanations = explanations
+            )
+        }
+
+        fun getSafeProjectAnalysis(obj: JsonObject): List<ProjectAnalysis> {
+            val elem = obj.get("projectAnalysis") ?: return emptyList()
+            if (elem.isJsonArray) {
+                return elem.asJsonArray.mapNotNull { item ->
+                    when {
+                        item.isJsonObject -> {
+                            val pObj = item.asJsonObject
+                            val name = getSafeString(pObj, "name") ?: return@mapNotNull null
+                            val tech = getSafeStringList(pObj, "technologies")
+                            val demoSkills = getSafeStringList(pObj, "demonstratedSkills")
+                            val strengths = getSafeStringList(pObj, "strengths")
+                            val weaknesses = getSafeStringList(pObj, "weaknesses")
+                            val suggestions = getSafeStringList(pObj, "improvementSuggestions")
+                            ProjectAnalysis(
+                                name = name,
+                                technologies = tech,
+                                demonstratedSkills = demoSkills,
+                                strengths = strengths,
+                                weaknesses = weaknesses,
+                                improvementSuggestions = suggestions
+                            )
+                        }
+                        item.isJsonPrimitive -> {
+                            val name = item.asString.trim()
+                            if (name.isNotBlank()) ProjectAnalysis(name = name) else null
+                        }
+                        else -> null
+                    }
+                }
+            }
+            return emptyList()
+        }
+
+        fun getSafePrioritizedSuggestions(obj: JsonObject): PrioritizedSuggestions {
+            val pObj = obj.getAsJsonObject("prioritizedSuggestions") ?: JsonObject()
+            return PrioritizedSuggestions(
+                highPriority = getSafeStringList(pObj, "highPriority"),
+                mediumPriority = getSafeStringList(pObj, "mediumPriority"),
+                lowPriority = getSafeStringList(pObj, "lowPriority")
+            )
+        }
+
+        fun getSafeParsingAccuracyDetails(obj: JsonObject): ParsingAccuracyDetails {
+            val pObj = obj.getAsJsonObject("parsingAccuracyDetails") ?: JsonObject()
+            fun getBool(k: String, def: Boolean = true): Boolean {
+                val e = pObj.get(k) ?: return def
+                if (e.isJsonPrimitive && e.asJsonPrimitive.isBoolean) return e.asBoolean
+                if (e.isJsonPrimitive && e.asJsonPrimitive.isString) return e.asString.equals("true", ignoreCase = true)
+                return def
+            }
+            return ParsingAccuracyDetails(
+                nameDetected = getBool("nameDetected"),
+                contactDetected = getBool("contactDetected"),
+                educationDetected = getBool("educationDetected"),
+                skillsDetected = getBool("skillsDetected"),
+                experienceDetected = getBool("experienceDetected"),
+                projectsDetected = getBool("projectsDetected")
+            )
+        }
+
+        val overallScore = getSafeInt(root, "overallScore", 75)
+        val atsScore = getSafeInt(root, "atsScore", overallScore)
+        val skillMatch = getSafeInt(root, "skillMatch", 70)
+
+        val candidateName = getSafeString(root, "candidateName")
+        val candidateEmail = getSafeString(root, "candidateEmail")
+        val candidatePhone = getSafeString(root, "candidatePhone")
+        val candidateLocation = getSafeString(root, "candidateLocation")
+        val summary = getSafeString(root, "summary") ?: ""
+
+        val education = getSafeStringList(root, "education")
+        val experience = getSafeStringList(root, "experience")
+        val strengths = getSafeStringList(root, "strengths")
+        val weaknesses = getSafeStringList(root, "weaknesses")
+        val missingSections = getSafeStringList(root, "missingSections")
+        val formattingRisks = getSafeStringList(root, "formattingRisks")
+
+        val extractedSkills = getSafeSkills(root)
+        val atsBreakdown = getSafeAtsBreakdown(root)
+        val projectAnalysis = getSafeProjectAnalysis(root)
+        val prioritizedSuggestions = getSafePrioritizedSuggestions(root)
+        val parsingAccuracyDetails = getSafeParsingAccuracyDetails(root)
+
+        return ResumeAnalysisResult(
+            id = java.util.UUID.randomUUID().toString(),
+            overallScore = overallScore,
+            atsScore = atsScore,
+            skillMatch = skillMatch,
+            targetRole = targetRole,
+            summary = summary,
+            education = education,
+            experience = experience,
+            strengths = strengths,
+            weaknesses = weaknesses,
+            atsBreakdown = atsBreakdown,
+            extractedSkills = extractedSkills,
+            missingSections = missingSections,
+            formattingRisks = formattingRisks,
+            projectAnalysis = projectAnalysis,
+            prioritizedSuggestions = prioritizedSuggestions,
+            parsingAccuracyDetails = parsingAccuracyDetails,
+            candidateName = candidateName,
+            candidateEmail = candidateEmail,
+            candidatePhone = candidatePhone,
+            candidateLocation = candidateLocation,
+            rawResumeText = rawResumeText
+        )
     }
 
     private fun sanitizeAnalysisResult(result: ResumeAnalysisResult): ResumeAnalysisResult {
@@ -248,7 +532,9 @@ class GeminiService {
         )
         if (isJson) {
             requestBodyMap["generationConfig"] = mapOf(
-                "response_mime_type" to "application/json"
+                "response_mime_type" to "application/json",
+                "maxOutputTokens" to 8192,
+                "temperature" to 0.1
             )
         }
 
@@ -295,18 +581,57 @@ class GeminiService {
         if (text == null) return null
 
         var cleaned = text.trim()
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.removePrefix("```json").trim()
-        } else if (cleaned.startsWith("```")) {
-            cleaned = cleaned.removePrefix("```").trim()
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.removeSuffix("```").trim()
-        }
+        cleaned = cleaned.replace(Regex("^```(?:json)?\\s*", RegexOption.IGNORE_CASE), "")
+        cleaned = cleaned.replace(Regex("\\s*```\\s*$"), "")
+        cleaned = cleaned.trim()
 
         val start = cleaned.indexOf("{")
+        if (start == -1) return null
+
         val end = cleaned.lastIndexOf("}")
-        return if (start != -1 && end != -1 && end > start) cleaned.substring(start, end + 1) else null
+        val candidateJson = if (end > start) cleaned.substring(start, end + 1) else cleaned.substring(start)
+        return repairJson(candidateJson)
+    }
+
+    private fun repairJson(rawJson: String): String {
+        var repaired = rawJson.replace(Regex(",\\s*([}\\]])"), "$1").trim()
+
+        val stack = mutableListOf<Char>()
+        var inString = false
+        var isEscaped = false
+
+        for (ch in repaired) {
+            if (isEscaped) {
+                isEscaped = false
+                continue
+            }
+            if (ch == '\\') {
+                isEscaped = true
+                continue
+            }
+            if (ch == '"') {
+                inString = !inString
+                continue
+            }
+            if (!inString) {
+                when (ch) {
+                    '{' -> stack.add('}')
+                    '[' -> stack.add(']')
+                    '}' -> if (stack.isNotEmpty() && stack.last() == '}') stack.removeAt(stack.size - 1)
+                    ']' -> if (stack.isNotEmpty() && stack.last() == ']') stack.removeAt(stack.size - 1)
+                }
+            }
+        }
+
+        if (inString) {
+            repaired += "\""
+        }
+
+        while (stack.isNotEmpty()) {
+            repaired += stack.removeAt(stack.size - 1)
+        }
+
+        return repaired
     }
 
     private data class GeminiApiResponse(val candidates: List<Candidate>?)

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aidrivencompetencyplatform.data.AtsScoringEngine
+import com.example.aidrivencompetencyplatform.data.DeterministicResumeStructure
 import com.example.aidrivencompetencyplatform.data.GeminiService
 import com.example.aidrivencompetencyplatform.data.PreferenceManager
 import com.example.aidrivencompetencyplatform.data.ResumeParser
@@ -838,6 +839,7 @@ class ResumeViewModel(
     private val resumeParser: ResumeParser,
     private val geminiService: GeminiService
 ) : ViewModel() {
+    private val atsScoringEngine = AtsScoringEngine()
     private val _analysisResult = MutableStateFlow<ResumeAnalysisResult?>(null)
     val analysisResult: StateFlow<ResumeAnalysisResult?> = _analysisResult
 
@@ -957,19 +959,20 @@ class ResumeViewModel(
                 _stageIndex.value = 3
                 _interactiveState.value = _interactiveState.value.copy(stage = 3)
                 
-                // AI Parsing and Analysis - The ONLY source of truth for candidate info
+                // AI Parsing and Analysis
                 Log.d("ResumeNetworkDebug", "Starting Gemini analysis for role: $effectiveRole")
                 val aiResult = try {
                     val result = geminiService.analyzeResume(text, effectiveRole)
-                    Log.d("ResumeNetworkDebug", "Gemini analysis completed successfully")
-                    result
+                    if (result != null) {
+                        Log.d("ResumeNetworkDebug", "Gemini analysis completed successfully")
+                        result
+                    } else {
+                        Log.w("ResumeNetworkDebug", "Gemini analysis returned null, synthesizing from structure")
+                        synthesizeAnalysisResult(text, effectiveRole, structure)
+                    }
                 } catch (e: Exception) {
-                    Log.e("ResumeNetworkDebug", "Gemini analysis failed: ${e.message}", e)
-                    throw e
-                }
-
-                if (aiResult == null) {
-                    throw Exception("AI Analysis returned empty result. Please try again.")
+                    Log.w("ResumeNetworkDebug", "Gemini analysis encountered error (${e.message}), synthesizing from structure", e)
+                    synthesizeAnalysisResult(text, effectiveRole, structure)
                 }
 
                 // Merge deterministic structure with AI results, prioritizing valid details
@@ -1077,6 +1080,110 @@ class ResumeViewModel(
                 _isLoading.value = false // Hide loading on error only
             }
         }
+    }
+
+    private fun synthesizeAnalysisResult(
+        text: String,
+        targetRole: String,
+        structure: DeterministicResumeStructure
+    ): ResumeAnalysisResult {
+        val candidateInfo = structure.candidateInfo
+        val extractedSkills = structure.extractedSkills
+        val extractedProjects = structure.extractedProjects
+
+        val tempResult = ResumeAnalysisResult(
+            overallScore = 75,
+            atsScore = 75,
+            skillMatch = 70,
+            targetRole = targetRole,
+            candidateName = candidateInfo.name,
+            candidateEmail = candidateInfo.email,
+            candidatePhone = candidateInfo.phone,
+            candidateLocation = candidateInfo.location,
+            rawResumeText = text
+        )
+        val atsScoreResult = atsScoringEngine.calculateScore(tempResult, targetRole)
+
+        val atsBreakdown = AtsBreakdown(
+            keywordCoverage = atsScoreResult.keywordCoverage.score,
+            resumeStructure = atsScoreResult.resumeStructure.score,
+            formattingSafety = atsScoreResult.formattingSafety.score,
+            parsingAccuracy = atsScoreResult.parsingAccuracy.score,
+            explanations = AtsExplanations(
+                keywords = atsScoreResult.keywordCoverage.evidenceItems.map { AtsEvidence(it.label, it.isPositive, it.detail, it.suggestion) },
+                structure = atsScoreResult.resumeStructure.evidenceItems.map { AtsEvidence(it.label, it.isPositive, it.detail, it.suggestion) },
+                formatting = atsScoreResult.formattingSafety.evidenceItems.map { AtsEvidence(it.label, it.isPositive, it.detail, it.suggestion) },
+                parsing = atsScoreResult.parsingAccuracy.evidenceItems.map { AtsEvidence(it.label, it.isPositive, it.detail, it.suggestion) }
+            )
+        )
+
+        val skillsList = extractedSkills.map { s ->
+            Skill(
+                name = s,
+                level = 80,
+                category = RoleSkillsData.getSkillCategory(s),
+                evidence = "Found in resume profile"
+            )
+        }
+
+        val projectsList = extractedProjects.map { p ->
+            ProjectAnalysis(
+                name = p,
+                technologies = emptyList(),
+                demonstratedSkills = emptyList(),
+                strengths = listOf("Project highlighted in candidate resume"),
+                weaknesses = emptyList(),
+                improvementSuggestions = listOf("Add quantifiable outcome metrics and impact")
+            )
+        }
+
+        val highPrioritySuggestions = mutableListOf<String>()
+        val mediumPrioritySuggestions = mutableListOf<String>()
+        val lowPrioritySuggestions = mutableListOf<String>()
+
+        atsScoreResult.keywordCoverage.evidenceItems.filter { !it.isPositive }.forEach {
+            highPrioritySuggestions.add(it.suggestion ?: "Incorporate missing skill keyword: ${it.label}")
+        }
+        atsScoreResult.resumeStructure.evidenceItems.filter { !it.isPositive }.forEach {
+            mediumPrioritySuggestions.add(it.suggestion ?: "Add missing standard section: ${it.label}")
+        }
+        atsScoreResult.formattingSafety.evidenceItems.filter { !it.isPositive }.forEach {
+            lowPrioritySuggestions.add(it.suggestion ?: "Review formatting for: ${it.label}")
+        }
+
+        return ResumeAnalysisResult(
+            id = java.util.UUID.randomUUID().toString(),
+            overallScore = atsScoreResult.overallScore,
+            atsScore = atsScoreResult.overallScore,
+            skillMatch = atsScoreResult.keywordCoverage.score,
+            targetRole = targetRole,
+            summary = structure.sections.find { it.sectionName == "Summary" }?.summary ?: "",
+            candidateName = candidateInfo.name,
+            candidateEmail = candidateInfo.email,
+            candidatePhone = candidateInfo.phone,
+            candidateLocation = candidateInfo.location,
+            education = structure.sections.find { it.sectionName == "Education" }?.details ?: emptyList(),
+            experience = structure.sections.find { it.sectionName == "Work Experience" }?.details ?: emptyList(),
+            extractedSkills = skillsList,
+            projectAnalysis = projectsList,
+            atsBreakdown = atsBreakdown,
+            missingSections = atsScoreResult.resumeStructure.evidenceItems.filter { !it.isPositive }.map { it.label },
+            formattingRisks = atsScoreResult.formattingSafety.evidenceItems.filter { !it.isPositive }.map { it.label },
+            prioritizedSuggestions = PrioritizedSuggestions(
+                highPriority = highPrioritySuggestions.ifEmpty { listOf("Add measurable impact metrics to work experience bullet points") },
+                mediumPriority = mediumPrioritySuggestions.ifEmpty { listOf("Enhance technical skills categorization by framework and tool") },
+                lowPriority = lowPrioritySuggestions.ifEmpty { listOf("Keep font styles consistent across all sections") }
+            ),
+            parsingAccuracyDetails = ParsingAccuracyDetails(
+                nameDetected = candidateInfo.name != null,
+                contactDetected = candidateInfo.email != null || candidateInfo.phone != null,
+                educationDetected = structure.sections.any { it.sectionName == "Education" },
+                skillsDetected = extractedSkills.isNotEmpty(),
+                experienceDetected = structure.sections.any { it.sectionName == "Work Experience" },
+                projectsDetected = extractedProjects.isNotEmpty()
+            ),
+            rawResumeText = text
+        )
     }
 
     fun resetAnalysisResult() {
