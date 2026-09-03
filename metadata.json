@@ -1,6 +1,0 @@
-{
-  "name": "NoviQ",
-  "description": "NoviQ AI career competency and ATS compatibility platform",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

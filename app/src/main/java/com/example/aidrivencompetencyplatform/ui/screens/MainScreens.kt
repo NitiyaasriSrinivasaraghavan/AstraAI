@@ -2467,11 +2467,21 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
+fun AtsDashboardScreen(
+    navController: NavController, 
+    viewModel: AtsViewModel,
+    analysisId: String? = null
+) {
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
     val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
     var isNovaOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(analysisId) {
+        if (!analysisId.isNullOrBlank()) {
+            viewModel.loadAnalysis(analysisId)
+        }
+    }
 
     val analysis by viewModel.analysisResult.collectAsState()
     val scoreResult by viewModel.scoreResult.collectAsState()
@@ -2864,7 +2874,11 @@ fun AtsDashboardScreen(navController: NavController, viewModel: AtsViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapViewModel) {
+fun SkillGapDashboardScreen(
+    navController: NavController, 
+    viewModel: SkillGapViewModel,
+    analysisId: String? = null
+) {
     val context = LocalContext.current
     val app = context.applicationContext as AstraApp
     val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
@@ -2874,8 +2888,12 @@ fun SkillGapDashboardScreen(navController: NavController, viewModel: SkillGapVie
     val selectedSkillForDetail by viewModel.selectedSkillForDetail.collectAsState()
     var showRolePickerDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        viewModel.refresh()
+    LaunchedEffect(analysisId) {
+        if (!analysisId.isNullOrBlank()) {
+            viewModel.loadAnalysis(analysisId)
+        } else {
+            viewModel.refresh()
+        }
     }
 
     Scaffold(

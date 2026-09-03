@@ -35,6 +35,7 @@ class SessionManager(context: Context) {
         private const val KEY_IS_NEW_USER = "is_new_user"
         private const val KEY_LATEST_ANALYSIS = "latest_analysis_"
         private const val KEY_ANALYSIS_HISTORY = "analysis_history_"
+        private const val KEY_ANALYSIS_RECORD_PREFIX = "analysis_record_"
     }
 
     fun saveLatestAnalysis(result: ResumeAnalysisResult, fileName: String? = null) {
@@ -65,6 +66,7 @@ class SessionManager(context: Context) {
         addAnalysisHistoryRecord(historyRecord, normalizedEmail)
 
         prefs.edit()
+            .putString(KEY_ANALYSIS_RECORD_PREFIX + analysisId, json)
             .putString(KEY_LATEST_ANALYSIS + normalizedEmail, json)
             .apply()
     }
@@ -113,9 +115,55 @@ class SessionManager(context: Context) {
         currentHistory.add(0, record)
         val trimmedHistory = currentHistory.distinctBy { it.id }.take(15)
         val json = gson.toJson(trimmedHistory)
-        prefs.edit()
-            .putString(KEY_ANALYSIS_HISTORY + normalizedEmail, json)
-            .apply()
+        val editor = prefs.edit().putString(KEY_ANALYSIS_HISTORY + normalizedEmail, json)
+        if (record.fullResult != null) {
+            editor.putString(KEY_ANALYSIS_RECORD_PREFIX + record.id, gson.toJson(record.fullResult))
+        }
+        editor.apply()
+    }
+
+    fun getAnalysisById(id: String, specificEmail: String? = null): ResumeAnalysisResult? {
+        if (id.isBlank()) return null
+        val email = specificEmail ?: getCurrentEmail() ?: return null
+        val normalizedEmail = normalizeEmail(email)
+
+        // 1. Direct record storage lookup
+        val directJson = prefs.getString(KEY_ANALYSIS_RECORD_PREFIX + id, null)
+        if (!directJson.isNullOrBlank()) {
+            try {
+                val res = gson.fromJson(directJson, ResumeAnalysisResult::class.java)
+                if (res != null) return res
+            } catch (e: Exception) {
+                // fall through
+            }
+        }
+
+        // 2. Lookup in user's analysis history
+        val history = getAnalysisHistory(normalizedEmail)
+        val foundRecord = history.find { it.id == id }
+        if (foundRecord != null) {
+            if (foundRecord.fullResult != null) {
+                return foundRecord.fullResult
+            }
+            // Reconstruct result preserving exact historical scores and fields
+            return ResumeAnalysisResult(
+                id = foundRecord.id,
+                overallScore = foundRecord.atsScore,
+                atsScore = foundRecord.atsScore,
+                skillMatch = foundRecord.skillMatch,
+                targetRole = foundRecord.targetRole,
+                candidateName = foundRecord.candidateName,
+                extractedSkills = foundRecord.topSkills.map { com.example.aidrivencompetencyplatform.model.Skill(name = it, level = 85) }
+            )
+        }
+
+        // 3. Fallback: check latest analysis if matching ID
+        val latest = getLatestAnalysis(normalizedEmail)
+        if (latest?.id == id) {
+            return latest
+        }
+
+        return null
     }
 
     fun getLatestAnalysis(specificEmail: String? = null): ResumeAnalysisResult? {

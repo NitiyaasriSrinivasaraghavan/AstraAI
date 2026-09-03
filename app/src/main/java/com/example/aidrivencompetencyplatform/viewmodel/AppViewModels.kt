@@ -200,28 +200,70 @@ class AtsViewModel(
         get() = _analysisResult.value?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
 
     init {
-        calculateAtsScores()
+        val latest = sessionManager.getLatestAnalysis()
+        _analysisResult.value = latest
+        if (latest != null) {
+            loadSavedAtsScores(latest, if (latest.atsScore > 0) latest.atsScore else null)
+        } else {
+            calculateAtsScores()
+        }
     }
 
     fun refresh() {
-        _analysisResult.value = sessionManager.getLatestAnalysis()
-        calculateAtsScores()
+        val latest = sessionManager.getLatestAnalysis()
+        _analysisResult.value = latest
+        if (latest != null) {
+            loadSavedAtsScores(latest, if (latest.atsScore > 0) latest.atsScore else null)
+        } else {
+            calculateAtsScores()
+        }
     }
 
     fun loadAnalysis(id: String?) {
-        if (id == null) {
+        if (id.isNullOrBlank()) {
             refresh()
             return
         }
-        val history = sessionManager.getAnalysisHistory()
-        val found = history.find { it.id == id }
-        if (found?.fullResult != null) {
-            _analysisResult.value = found.fullResult
-            calculateAtsScores()
+        val historyRecord = sessionManager.getAnalysisHistory().find { it.id == id }
+        val analysis = sessionManager.getAnalysisById(id) ?: historyRecord?.fullResult
+        
+        if (analysis != null) {
+            val targetScore = historyRecord?.atsScore?.takeIf { it > 0 } ?: (if (analysis.atsScore > 0) analysis.atsScore else null)
+            val finalAnalysis = if (targetScore != null && analysis.atsScore != targetScore) {
+                analysis.copy(atsScore = targetScore)
+            } else {
+                analysis
+            }
+            _analysisResult.value = finalAnalysis
+            loadSavedAtsScores(finalAnalysis, targetScore)
+        } else if (historyRecord != null) {
+            val reconstructed = ResumeAnalysisResult(
+                id = historyRecord.id,
+                overallScore = historyRecord.atsScore,
+                atsScore = historyRecord.atsScore,
+                skillMatch = historyRecord.skillMatch,
+                targetRole = historyRecord.targetRole,
+                candidateName = historyRecord.candidateName,
+                extractedSkills = historyRecord.topSkills.map { com.example.aidrivencompetencyplatform.model.Skill(name = it, level = 85) }
+            )
+            _analysisResult.value = reconstructed
+            loadSavedAtsScores(reconstructed, historyRecord.atsScore)
         } else {
-            // Fallback to latest if not found or full result missing
             refresh()
         }
+    }
+
+    private fun loadSavedAtsScores(analysis: ResumeAnalysisResult, forcedOverallScore: Int? = null) {
+        val effectiveScore = forcedOverallScore ?: (if (analysis.atsScore > 0) analysis.atsScore else null)
+        val calculated = scoringEngine.calculateScore(analysis, targetRole, forcedOverallScore = effectiveScore)
+        _scoreResult.value = calculated
+        _overallAtsScore.value = calculated.overallScore
+        _atsBreakdownState.value = AtsBreakdown(
+            keywordCoverage = calculated.keywordCoverage.score,
+            resumeStructure = calculated.resumeStructure.score,
+            formattingSafety = calculated.formattingSafety.score,
+            parsingAccuracy = calculated.parsingAccuracy.score
+        )
     }
 
     private fun calculateAtsScores() {
@@ -232,15 +274,7 @@ class AtsViewModel(
             _atsBreakdownState.value = AtsBreakdown()
             return
         }
-        val calculated = scoringEngine.calculateScore(analysis, targetRole)
-        _scoreResult.value = calculated
-        _overallAtsScore.value = calculated.overallScore
-        _atsBreakdownState.value = AtsBreakdown(
-            keywordCoverage = calculated.keywordCoverage.score,
-            resumeStructure = calculated.resumeStructure.score,
-            formattingSafety = calculated.formattingSafety.score,
-            parsingAccuracy = calculated.parsingAccuracy.score
-        )
+        loadSavedAtsScores(analysis, if (analysis.atsScore > 0) analysis.atsScore else null)
     }
 }
 
@@ -551,14 +585,13 @@ class SkillGapViewModel(
     }
 
     fun loadAnalysis(id: String?) {
-        if (id == null) {
+        if (id.isNullOrBlank()) {
             refresh()
             return
         }
-        val history = sessionManager.getAnalysisHistory()
-        val found = history.find { it.id == id }
-        if (found?.fullResult != null) {
-            loadAnalysisResult(found.fullResult)
+        val analysis = sessionManager.getAnalysisById(id)
+        if (analysis != null) {
+            loadAnalysisResult(analysis)
         } else {
             refresh()
         }
@@ -1180,14 +1213,13 @@ class JdMatcherViewModel(
     }
 
     fun loadAnalysis(id: String?) {
-        if (id == null) {
+        if (id.isNullOrBlank()) {
             extractProfileAndGenerateJd()
             return
         }
-        val history = sessionManager.getAnalysisHistory()
-        val found = history.find { it.id == id }
-        if (found?.fullResult != null) {
-            loadAnalysisResult(found.fullResult)
+        val analysis = sessionManager.getAnalysisById(id)
+        if (analysis != null) {
+            loadAnalysisResult(analysis)
         } else {
             extractProfileAndGenerateJd()
         }

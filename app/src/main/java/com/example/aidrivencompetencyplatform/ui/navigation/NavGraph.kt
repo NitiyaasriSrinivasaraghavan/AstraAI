@@ -64,7 +64,7 @@ fun AppNavGraph(navController: NavHostController) {
             LaunchedEffect(analysisId) {
                 sharedAtsViewModel.loadAnalysis(analysisId)
             }
-            AtsDashboardScreen(navController, sharedAtsViewModel)
+            AtsDashboardScreen(navController, sharedAtsViewModel, analysisId)
         }
         composable(
             route = Screen.SkillGap.route + "?analysisId={analysisId}",
@@ -81,7 +81,7 @@ fun AppNavGraph(navController: NavHostController) {
             LaunchedEffect(analysisId) {
                 viewModel.loadAnalysis(analysisId)
             }
-            SkillGapDashboardScreen(navController, viewModel)
+            SkillGapDashboardScreen(navController, viewModel, analysisId)
         }
         composable(Screen.AiAssistant.route) {
             val viewModel: AiAssistantViewModel = viewModel(factory = factory)

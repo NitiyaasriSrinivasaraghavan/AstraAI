@@ -16,7 +16,11 @@ class AtsScoringEngine {
         const val WEIGHT_PARSING = 0.20
     }
 
-    fun calculateScore(result: ResumeAnalysisResult, targetRole: String): AtsScoreResult {
+    fun calculateScore(
+        result: ResumeAnalysisResult, 
+        targetRole: String, 
+        forcedOverallScore: Int? = null
+    ): AtsScoreResult {
         Log.d(TAG, "Calculating deterministic ATS scores for: $targetRole")
 
         // Candidate personal details from resume
@@ -26,16 +30,56 @@ class AtsScoringEngine {
         val candidateLocation = result.candidateLocation?.takeIf { it.isNotBlank() }
 
         // 1. Card 1: Keyword Coverage (35%)
-        val keywordCalc = calculateKeywordCoverage(result, targetRole)
+        val keywordCalcRaw = calculateKeywordCoverage(result, targetRole)
+        val savedKeywordScore = result.atsBreakdown?.keywordCoverage?.takeIf { it > 0 }
+        val keywordCalc = if (savedKeywordScore != null && savedKeywordScore != keywordCalcRaw.score) {
+            keywordCalcRaw.copy(
+                score = savedKeywordScore,
+                weightedContribution = savedKeywordScore * WEIGHT_KEYWORD,
+                calculationText = "$savedKeywordScore% (Weight 35%) = +${String.format(java.util.Locale.US, "%.1f", savedKeywordScore * WEIGHT_KEYWORD)} pts"
+            )
+        } else {
+            keywordCalcRaw
+        }
 
         // 2. Card 2: Resume Structure (25%)
-        val structureCalc = calculateResumeStructure(result, candidateName, candidateEmail)
+        val structureCalcRaw = calculateResumeStructure(result, candidateName, candidateEmail)
+        val savedStructureScore = result.atsBreakdown?.resumeStructure?.takeIf { it > 0 }
+        val structureCalc = if (savedStructureScore != null && savedStructureScore != structureCalcRaw.score) {
+            structureCalcRaw.copy(
+                score = savedStructureScore,
+                weightedContribution = savedStructureScore * WEIGHT_STRUCTURE,
+                calculationText = "$savedStructureScore% (Weight 25%) = +${String.format(java.util.Locale.US, "%.1f", savedStructureScore * WEIGHT_STRUCTURE)} pts"
+            )
+        } else {
+            structureCalcRaw
+        }
 
         // 3. Card 3: Formatting Safety (20%)
-        val formattingCalc = calculateFormattingSafety(result)
+        val formattingCalcRaw = calculateFormattingSafety(result)
+        val savedFormattingScore = result.atsBreakdown?.formattingSafety?.takeIf { it > 0 }
+        val formattingCalc = if (savedFormattingScore != null && savedFormattingScore != formattingCalcRaw.score) {
+            formattingCalcRaw.copy(
+                score = savedFormattingScore,
+                weightedContribution = savedFormattingScore * WEIGHT_FORMATTING,
+                calculationText = "$savedFormattingScore% (Weight 20%) = +${String.format(java.util.Locale.US, "%.1f", savedFormattingScore * WEIGHT_FORMATTING)} pts"
+            )
+        } else {
+            formattingCalcRaw
+        }
 
         // 4. Card 4: Parsing Accuracy (20%)
-        val parsingCalc = calculateParsingAccuracy(result, candidateName, candidateEmail, candidatePhone, candidateLocation)
+        val parsingCalcRaw = calculateParsingAccuracy(result, candidateName, candidateEmail, candidatePhone, candidateLocation)
+        val savedParsingScore = result.atsBreakdown?.parsingAccuracy?.takeIf { it > 0 }
+        val parsingCalc = if (savedParsingScore != null && savedParsingScore != parsingCalcRaw.score) {
+            parsingCalcRaw.copy(
+                score = savedParsingScore,
+                weightedContribution = savedParsingScore * WEIGHT_PARSING,
+                calculationText = "$savedParsingScore% (Weight 20%) = +${String.format(java.util.Locale.US, "%.1f", savedParsingScore * WEIGHT_PARSING)} pts"
+            )
+        } else {
+            parsingCalcRaw
+        }
 
         // Base weighted sum: (Keyword × 0.35) + (Structure × 0.25) + (Formatting × 0.20) + (Parsing × 0.20)
         val weightedSum = (
@@ -45,7 +89,12 @@ class AtsScoringEngine {
             (parsingCalc.score * WEIGHT_PARSING)
         )
 
-        val finalScore = weightedSum.roundToInt().coerceIn(0, 100)
+        // Preserve saved ATS score (from history or result) without recalculation
+        val finalScore = when {
+            forcedOverallScore != null && forcedOverallScore > 0 -> forcedOverallScore.coerceIn(0, 100)
+            result.atsScore > 0 -> result.atsScore.coerceIn(0, 100)
+            else -> weightedSum.roundToInt().coerceIn(0, 100)
+        }
 
         val priorityFixes = mutableListOf<String>()
         if (keywordCalc.score < 70) {
