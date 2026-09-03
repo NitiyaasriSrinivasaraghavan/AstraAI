@@ -89,9 +89,13 @@ class GeminiService {
             $targetRole
             
             INSTRUCTIONS:
-            1. Extract candidate information ONLY from the supplied resume text.
+            1. Thoroughly extract candidate contact and personal details from headers, contact sections, address lines, and personal details:
+               - candidateName: Full legal name or display name of the candidate.
+               - candidateEmail: Email address.
+               - candidatePhone: Phone or mobile number in any format (e.g. +1..., +91..., (xxx) xxx-xxxx, or raw digits).
+               - candidateLocation: Candidate's city, state/province, region, and/or country (e.g. "San Francisco, CA", "Austin, TX", "Bangalore, India", "Trichy, Tamil Nadu").
             2. NEVER invent information, infer missing personal details, or use placeholder example values.
-            3. If information is not explicitly present in the resume, return null for those fields.
+            3. If information is not present in the resume, return null (do NOT output strings like "Not detected", "N/A", or "None").
             4. Generate dynamic scores (0-100) for Keyword Coverage, Resume Structure, Formatting Safety, and Parsing Accuracy based strictly on this resume.
             5. Provide evidence for each score in the 'explanations' object.
             6. Extract all technical and soft skills semantically and categorize them.
@@ -157,7 +161,8 @@ class GeminiService {
         val jsonString = extractJson(responseText)
         if (jsonString != null) {
             try {
-                gson.fromJson(jsonString, ResumeAnalysisResult::class.java)
+                val parsed = gson.fromJson(jsonString, ResumeAnalysisResult::class.java)
+                sanitizeAnalysisResult(parsed)
             } catch (e: Exception) {
                 Log.e("GeminiService", "Parsing error: ${e.message}")
                 throw Exception("Failed to parse AI response into structured analysis. Format was unexpected.", e)
@@ -166,6 +171,26 @@ class GeminiService {
             Log.e("GeminiService", "No JSON found in response")
             throw Exception("AI response did not contain valid JSON analysis data.")
         }
+    }
+
+    private fun sanitizeAnalysisResult(result: ResumeAnalysisResult): ResumeAnalysisResult {
+        return result.copy(
+            candidateName = sanitizeField(result.candidateName),
+            candidateEmail = sanitizeField(result.candidateEmail),
+            candidatePhone = sanitizeField(result.candidatePhone),
+            candidateLocation = sanitizeField(result.candidateLocation)
+        )
+    }
+
+    private fun sanitizeField(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        val clean = value.trim()
+        val lower = clean.lowercase()
+        val invalid = setOf(
+            "null", "none", "n/a", "na", "not detected", "not specified",
+            "not provided", "not found", "unknown", "nil", "-", "--", "undefined", "empty"
+        )
+        return if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) null else clean
     }
 
     suspend fun getAiAssistantResponse(query: String, context: String): String = withContext(Dispatchers.IO) {

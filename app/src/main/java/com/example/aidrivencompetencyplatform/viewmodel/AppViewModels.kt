@@ -972,18 +972,30 @@ class ResumeViewModel(
                     throw Exception("AI Analysis returned empty result. Please try again.")
                 }
 
-                // Merge deterministic structure with AI results, prioritizing AI for details
+                // Merge deterministic structure with AI results, prioritizing valid details
                 // CRITICAL: Explicitly assign a new unique ID to every single analysis result here
+                fun sanitizeCandidate(value: String?): String? {
+                    if (value.isNullOrBlank()) return null
+                    val clean = value.trim()
+                    val lower = clean.lowercase()
+                    val invalid = setOf(
+                        "null", "none", "n/a", "na", "not detected", "not specified",
+                        "not provided", "not found", "unknown", "nil", "-", "--", "undefined", "empty"
+                    )
+                    return if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) null else clean
+                }
+
+                val candidateName = sanitizeCandidate(aiResult.candidateName) ?: sanitizeCandidate(structure.candidateInfo.name)
+                val candidateEmail = sanitizeCandidate(aiResult.candidateEmail) ?: sanitizeCandidate(structure.candidateInfo.email)
+                val candidatePhone = sanitizeCandidate(aiResult.candidatePhone) ?: sanitizeCandidate(structure.candidateInfo.phone)
+                val candidateLocation = sanitizeCandidate(aiResult.candidateLocation) ?: sanitizeCandidate(structure.candidateInfo.location)
+
                 val enrichedResult = aiResult.copy(
                     id = java.util.UUID.randomUUID().toString(),
-                    candidateName = aiResult.candidateName?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: structure.candidateInfo.name,
-                    candidateEmail = aiResult.candidateEmail?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: structure.candidateInfo.email,
-                    candidatePhone = aiResult.candidatePhone?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: structure.candidateInfo.phone,
-                    candidateLocation = aiResult.candidateLocation?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: structure.candidateInfo.location,
+                    candidateName = candidateName,
+                    candidateEmail = candidateEmail,
+                    candidatePhone = candidatePhone,
+                    candidateLocation = candidateLocation,
                     summary = aiResult.summary?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
                         ?: structure.sections.find { s -> s.sectionName == "Summary" }?.summary ?: "",
                     education = if (!aiResult.education.isNullOrEmpty()) aiResult.education

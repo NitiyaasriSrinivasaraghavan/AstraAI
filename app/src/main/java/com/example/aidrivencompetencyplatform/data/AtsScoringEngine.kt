@@ -24,10 +24,10 @@ class AtsScoringEngine {
         Log.d(TAG, "Calculating deterministic ATS scores for: $targetRole")
 
         // Candidate personal details from resume
-        val candidateName = result.candidateName?.takeIf { it.isNotBlank() }
-        val candidateEmail = result.candidateEmail?.takeIf { it.isNotBlank() }
-        val candidatePhone = result.candidatePhone?.takeIf { it.isNotBlank() }
-        val candidateLocation = result.candidateLocation?.takeIf { it.isNotBlank() }
+        val candidateName = sanitizeEntity(result.candidateName)
+        val candidateEmail = sanitizeEntity(result.candidateEmail)
+        val candidatePhone = sanitizeEntity(result.candidatePhone)
+        val candidateLocation = sanitizeEntity(result.candidateLocation)
 
         // 1. Card 1: Keyword Coverage (35%)
         val keywordCalcRaw = calculateKeywordCoverage(result, targetRole)
@@ -577,5 +577,16 @@ class AtsScoringEngine {
                 listOf("Git", "CI/CD", "Docker")
             )
         }
+    }
+
+    private fun sanitizeEntity(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        val clean = value.trim()
+        val lower = clean.lowercase()
+        val invalid = setOf(
+            "null", "none", "n/a", "na", "not detected", "not specified",
+            "not provided", "not found", "unknown", "nil", "-", "--", "undefined", "empty"
+        )
+        return if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) null else clean
     }
 }

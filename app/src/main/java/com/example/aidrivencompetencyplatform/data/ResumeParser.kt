@@ -213,10 +213,27 @@ class ResumeParser(private val context: Context) {
         val content = inputStream.bufferedReader().readText()
         val sb = StringBuilder()
         
-        // Match <w:t> tags which contain text in OOXML
-        val regex = Regex("<w:t[^>]*>(.*?)</w:t>")
-        regex.findAll(content).forEach { match ->
-            sb.append(match.groupValues[1]).append(" ")
+        // Match paragraphs <w:p>...</w:p> to preserve line breaks
+        val pRegex = Regex("<w:p[ >](.*?)</w:p>")
+        val tRegex = Regex("<w:t[^>]*>(.*?)</w:t>")
+        val pMatches = pRegex.findAll(content).toList()
+        
+        if (pMatches.isNotEmpty()) {
+            for (pMatch in pMatches) {
+                val pContent = pMatch.groupValues[1]
+                val lineSb = StringBuilder()
+                tRegex.findAll(pContent).forEach { tMatch ->
+                    lineSb.append(tMatch.groupValues[1])
+                }
+                val lineStr = lineSb.toString().trim()
+                if (lineStr.isNotEmpty()) {
+                    sb.append(lineStr).append("\n")
+                }
+            }
+        } else {
+            tRegex.findAll(content).forEach { match ->
+                sb.append(match.groupValues[1]).append(" ")
+            }
         }
         
         return sb.toString().trim()
@@ -277,139 +294,304 @@ class ResumeParser(private val context: Context) {
         val emailRegex = Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
         val emailMatch = emailRegex.find(rawText)?.value?.trim()
 
-        // 2. Phone extraction (supports international, Indian +91 with spaces/dashes, standard 10-digit, and US formats)
-        val phoneRegex = Regex("(?:\\+?91[\\s-]?)?[6-9]\\d{4}[\\s-]?\\d{5}|(?:\\+?91[\\s-]?)?[6-9]\\d{9}|(?:\\+?\\d{1,3}[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}")
-        val phoneMatch = phoneRegex.find(rawText)?.value?.trim()
+        // 2. Phone extraction (handles labeled phones, international formats, US/Canada, Indian numbers, landlines)
+        val phoneMatch = extractPhoneNumber(rawText, lines)
 
-        // 4. Location extraction keywords & patterns
-        var candidateLocation: String? = null
-        val locationKeywords = listOf(
-            "srirangam", "trichy", "tiruchirappalli", "chennai", "coimbatore", "madurai", "salem",
-            "bangalore", "bengaluru", "hyderabad", "pune", "mumbai", "delhi", "noida", "gurgaon", "gurugram",
-            "kolkata", "kochi", "trivandrum", "san francisco", "new york", "london", "seattle",
-            "austin", "tamil nadu", "karnataka", "kerala", "maharashtra", "telangana", "india", "usa", "california", "texas"
+        // 3. Location extraction (handles labeled addresses, city/state, city-pincode, known hubs and countries)
+        val locationMatch = extractCandidateLocation(rawText, lines)
+
+        // 4. Name extraction (handles explicit labels, header lines, title-cased names, fallback from email)
+        val nameMatch = extractCandidateName(lines, emailMatch, locationMatch)
+
+        return ParsedCandidateInfo(
+            name = nameMatch,
+            email = emailMatch,
+            phone = phoneMatch,
+            location = locationMatch
         )
-        val locationRegex = Regex("([A-Za-z\\s]+),\\s*([A-Za-z\\s]+(?:,\\s*[A-Za-z\\s]+)?)")
+    }
 
-        // First pass: extract location from top lines
-        for (i in 0 until minOf(15, lines.size)) {
+    private fun extractPhoneNumber(rawText: String, lines: List<String>): String? {
+        // Step 1: Explicit phone label (highest accuracy)
+        val phoneLabelRegex = Regex("(?i)\\b(?:phone|mobile|mob|tel|telephone|cell|contact|ph|whatsapp)\\s*(?:no|number|#)?\\s*[:–-]?\\s*(\\+?[\\d\\s().-]{7,25}\\d)")
+        for (i in 0 until minOf(30, lines.size)) {
             val line = lines[i]
-            val lower = line.lowercase()
-            if (lower.contains("university") || lower.contains("college") || lower.contains("school") || 
-                lower.contains("institute") || lower.contains("project") || lower.contains("experience") ||
-                lower.contains("education") || lower.contains("internship") || lower.contains("description")) continue
-
-            if (locationKeywords.any { lower.contains(it) } || lower.startsWith("location:") || lower.contains("location :")) {
-                // Strip "Location:" prefix if present
-                val cleanedLine = line.replace(Regex("(?i)^location\\s*:\\s*"), "").trim()
-                val pipeParts = cleanedLine.split(Regex("[|•·,]")).map { it.trim() }.filter { it.isNotBlank() }
-                val locPart = pipeParts.firstOrNull { p -> locationKeywords.any { p.lowercase().contains(it) } }
-                if (locPart != null && locPart.length < 50 && !locPart.contains("@") && !locPart.any { it.isDigit() }) {
-                    candidateLocation = locPart.trim()
-                    break
-                }
-                val locMatch = locationRegex.find(cleanedLine)
-                if (locMatch != null && locMatch.value.length < 50) {
-                    candidateLocation = locMatch.value.trim()
-                    break
+            val m = phoneLabelRegex.find(line)
+            if (m != null) {
+                val candidate = m.groupValues[1].trim()
+                val digits = candidate.filter { it.isDigit() }
+                if (digits.length in 7..15) {
+                    if (!(digits.length == 8 && (digits.startsWith("19") || digits.startsWith("20")))) {
+                        return cleanPhone(candidate)
+                    }
                 }
             }
         }
 
-        // 3. Name extraction heuristic from top header (ensuring NO location is glued to candidate name)
-        var candidateName: String? = null
+        // Phone regex patterns
+        val patterns = listOf(
+            Regex("\\+\\d{1,4}(?:[-.\\s]?(?:\\(\\d+\\)|\\d+)){2,5}"),
+            Regex("(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}"),
+            Regex("(?:\\+?91[\\s-]?)?[6-9]\\d{4}[\\s-]?\\d{5}\\b"),
+            Regex("\\(?0\\d{2,4}\\)?[-.\\s]?\\d{6,8}\\b"),
+            Regex("\\b[6-9]\\d{9}\\b")
+        )
+
+        // Step 2: Search top 20 lines (delimited parts first)
+        for (i in 0 until minOf(20, lines.size)) {
+            val line = lines[i]
+            val parts = line.split(Regex("[|•·\\t/]")).map { it.trim() }
+            for (part in parts) {
+                for (pat in patterns) {
+                    val m = pat.find(part)
+                    if (m != null) {
+                        val digits = m.value.filter { it.isDigit() }
+                        if (digits.length in 10..15) {
+                            if (!(digits.length == 8 && (digits.startsWith("19") || digits.startsWith("20")))) {
+                                return cleanPhone(m.value.trim())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 3: Full search of top 25 lines
+        for (i in 0 until minOf(25, lines.size)) {
+            val line = lines[i]
+            for (pat in patterns) {
+                val m = pat.find(line)
+                if (m != null) {
+                    val digits = m.value.filter { it.isDigit() }
+                    if (digits.length in 10..15) {
+                        if (!(digits.length == 8 && (digits.startsWith("19") || digits.startsWith("20")))) {
+                            return cleanPhone(m.value.trim())
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 4: Fallback across entire rawText
+        for (pat in patterns) {
+            val m = pat.find(rawText)
+            if (m != null) {
+                val digits = m.value.filter { it.isDigit() }
+                if (digits.length in 10..15) {
+                    if (!(digits.length == 8 && (digits.startsWith("19") || digits.startsWith("20")))) {
+                        return cleanPhone(m.value.trim())
+                    }
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun cleanPhone(phone: String): String {
+        return phone.replace(Regex("^[^+\\d(]+"), "").replace(Regex("[^\\d)]+$"), "").trim()
+    }
+
+    private fun extractCandidateLocation(rawText: String, lines: List<String>): String? {
+        val usStates = setOf(
+            "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY",
+            "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND",
+            "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC"
+        )
+
+        val stateAndCountryNames = setOf(
+            "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida",
+            "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
+            "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska",
+            "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio",
+            "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas",
+            "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming",
+            "tamil nadu", "karnataka", "kerala", "maharashtra", "telangana", "andhra pradesh", "uttar pradesh", "gujarat",
+            "rajasthan", "west bengal", "punjab", "haryana", "madhya pradesh", "bihar", "odisha", "assam", "delhi",
+            "india", "usa", "united states", "uk", "united kingdom", "canada", "australia", "germany", "france",
+            "singapore", "japan", "netherlands", "ireland", "sweden", "switzerland", "uae", "united arab emirates",
+            "ontario", "british columbia", "quebec", "alberta"
+        )
+
+        val knownCities = setOf(
+            "san francisco", "san jose", "los angeles", "san diego", "seattle", "austin", "new york", "nyc",
+            "boston", "chicago", "denver", "atlanta", "dallas", "houston", "miami", "portland", "phoenix",
+            "philadelphia", "washington", "toronto", "vancouver", "montreal", "london", "manchester", "berlin",
+            "munich", "paris", "amsterdam", "dublin", "sydney", "melbourne", "singapore", "tokyo",
+            "chennai", "bangalore", "bengaluru", "hyderabad", "pune", "mumbai", "delhi", "noida", "gurgaon",
+            "gurugram", "kolkata", "kochi", "trivandrum", "trichy", "tiruchirappalli", "srirangam", "coimbatore",
+            "madurai", "salem", "vellore", "erode", "tirunelveli", "thanjavur", "ahmedabad", "jaipur", "surat",
+            "indore", "nagpur", "bhopal", "patna", "vadodara", "ghaziabad", "ludhiana", "agra", "nashik",
+            "faridabad", "meerut", "rajkot", "varanasi", "srinagar", "aurangabad", "amritsar", "navi mumbai",
+            "mysore", "mysuru", "mangalore", "mangaluru", "visakhapatnam", "vijayawada", "chandigarh", "calicut", "kozhikode"
+        )
+
+        // Step 1: Explicit location / address label across top 35 lines
+        val labelRegex = Regex("(?i)\\b(?:location|current\\s+location|address|residence|place|domicile|based\\s+in|living\\s+in|city)\\s*[:–-]?\\s*([^\\n|•·]+)")
+        for (i in 0 until minOf(35, lines.size)) {
+            val line = lines[i]
+            val m = labelRegex.find(line)
+            if (m != null) {
+                var candidate = m.groupValues[1].trim()
+                candidate = candidate.split(Regex("[|•·]"))[0].trim()
+                candidate = cleanLocationString(candidate)
+                if (candidate.length in 2..70 && !candidate.contains("@") && !candidate.contains("http")) {
+                    return candidate
+                }
+            }
+        }
+
+        // Step 2: Check header lines (first 20 lines) for delimited chunks or city/state combinations
+        for (i in 0 until minOf(20, lines.size)) {
+            val line = lines[i]
+            val lw = line.lowercase()
+            if (lw.contains("university") || lw.contains("college") || lw.contains("school") || 
+                lw.contains("institute") || lw.contains("experience") || lw.contains("education") || 
+                lw.contains("project") || lw.contains("summary") || lw.contains("skills")) {
+                continue
+            }
+
+            val chunks = line.split(Regex("[|•·\\t]")).map { it.trim() }.filter { it.isNotBlank() }
+            for (chunk in chunks) {
+                val clw = chunk.lowercase()
+                if (chunk.contains("@") || chunk.contains("http") || clw.contains("linkedin") || clw.contains("github")) continue
+                if (chunk.length !in 2..65) continue
+
+                // Check City, US State format (e.g. "San Francisco, CA" or "Chicago, IL 60601")
+                val usStateMatch = Regex("\\b([A-Za-z\\s]+),\\s*([A-Z]{2})\\b(?:\\s+\\d{5}(?:-\\d{4})?)?").find(chunk)
+                if (usStateMatch != null) {
+                    val stateCode = usStateMatch.groupValues[2]
+                    if (usStates.contains(stateCode)) {
+                        return cleanLocationString(chunk)
+                    }
+                }
+
+                // Check City - Pincode format (e.g. "Bangalore - 560001" or "Trichy - 620006")
+                val pincodeMatch = Regex("\\b([A-Za-z\\s]+)\\s*[-–]\\s*\\d{6}\\b").find(chunk)
+                if (pincodeMatch != null) {
+                    return cleanLocationString(chunk)
+                }
+
+                val hasCity = knownCities.any { clw.contains(it) }
+                val hasStateOrCountry = stateAndCountryNames.any { clw.contains(it) }
+                if (hasCity || hasStateOrCountry) {
+                    return cleanLocationString(chunk)
+                }
+            }
+        }
+
+        // Step 3: Geographic regex matching across top 15 lines
+        for (i in 0 until minOf(15, lines.size)) {
+            val line = lines[i]
+            val lw = line.lowercase()
+            if (lw.contains("university") || lw.contains("college") || lw.contains("school") || 
+                lw.contains("institute") || lw.contains("experience") || lw.contains("education")) {
+                continue
+            }
+
+            val cityRegionRegex = Regex("\\b([A-Z][a-zA-Z\\s]+),\\s*([A-Z][a-zA-Z\\s]+(?:,\\s*[A-Z][a-zA-Z\\s]+)?)\\b")
+            val m = cityRegionRegex.find(line)
+            if (m != null) {
+                val candidate = m.value.trim()
+                val clw = candidate.lowercase()
+                if (knownCities.any { clw.contains(it) } || stateAndCountryNames.any { clw.contains(it) }) {
+                    return cleanLocationString(candidate)
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun cleanLocationString(loc: String): String {
+        return loc
+            .replace(Regex("(?i)^(?:location|current\\s+location|address|based\\s+in|living\\s+in|city)\\s*[:–-]?\\s*"), "")
+            .replace(Regex("^[•·|,-]+\\s*"), "")
+            .replace(Regex("\\s*[•·|,-]+$"), "")
+            .trim()
+    }
+
+    private fun extractCandidateName(lines: List<String>, emailMatch: String?, locationMatch: String?): String? {
         val blacklistJobTitles = setOf(
             "developer", "engineer", "designer", "architect", "analyst", "consultant",
             "intern", "manager", "lead", "specialist", "student", "fresher", "programmer",
             "software", "hardware", "frontend", "backend", "fullstack", "full stack",
-            "b.tech", "b.e", "m.tech", "m.e", "bca", "mca", "bsc", "msc", "phd", "resume", "curriculum", "vitae"
+            "b.tech", "b.e", "m.tech", "m.e", "bca", "mca", "bsc", "msc", "phd", "resume", "curriculum", "vitae", "cv"
         )
 
+        // Step 1: Explicit name label
+        val nameLabelRegex = Regex("(?i)^(?:candidate\\s+name|full\\s+name|name)\\s*[:–-]?\\s*([A-Za-z\\s.\\-']+)")
+        for (i in 0 until minOf(10, lines.size)) {
+            val line = lines[i]
+            val m = nameLabelRegex.find(line)
+            if (m != null) {
+                val candidate = m.groupValues[1].trim().trim('"', '\'', '\t', ' ')
+                val words = candidate.split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (words.size in 1..5 && !words.any { blacklistJobTitles.contains(it.lowercase()) }) {
+                    return candidate
+                }
+            }
+        }
+
+        // Step 2: Top header lines
         for (i in 0 until minOf(12, lines.size)) {
             val line = lines[i]
-            val lower = line.lowercase().trim()
+            val lw = line.lowercase().trim()
 
-            // Skip lines that match section headers
             if (isSectionHeader(line)) continue
-            if (line.length > 120 || line.length < 2) continue
+            if (lw in setOf("resume", "curriculum vitae", "cv", "personal details", "profile")) continue
+            if (line.length !in 2..120) continue
 
-            // If line contains delimiter like comma, pipe, dash, tab, or bullet, separate name and other info
-            val lineParts = line.split(Regex("[|•·\\-\t]")).map { it.trim() }.filter { it.isNotBlank() }
-            val potentialNamePart = if (lineParts.size > 1) {
-                // Find the part that is clean: no email, no phone, no URL, no digit, not location, not job title
+            val lineParts = line.split(Regex("[|•·\\t]")).map { it.trim() }.filter { it.isNotBlank() }
+            val potentialPart = if (lineParts.size > 1) {
                 lineParts.firstOrNull { part ->
-                    val partLower = part.lowercase()
+                    val plw = part.lowercase()
                     !part.contains("@") && !part.contains("http") && !part.contains(".com") &&
                     !part.any { it.isDigit() } &&
-                    !locationKeywords.any { partLower.contains(it) } &&
-                    !blacklistJobTitles.any { partLower.contains(it) } &&
+                    (locationMatch == null || !part.equals(locationMatch, ignoreCase = true)) &&
+                    !blacklistJobTitles.any { plw.contains(it) } &&
                     part.length in 2..40
                 }
             } else {
-                // Skip lines with emails, phones, or URLs if line has no delimiters
-                if (emailMatch != null && line.contains(emailMatch)) continue
-                if (phoneMatch != null && line.contains(phoneMatch)) continue
-                if (line.contains("@") || line.contains("http") || line.contains("www.") || line.contains(".com") || line.contains("linkedin") || line.contains("github")) continue
+                if (line.contains("@") || line.contains("http") || line.contains("www.") || line.contains("linkedin") || line.contains("github")) continue
                 if (line.any { it.isDigit() }) continue
                 if (line.length > 70) continue
 
-                // If it contains a comma e.g. "Nithiyaa S, Trichy" or "Alex Chen, San Francisco"
-                val commaParts = line.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                if (commaParts.size > 1) {
-                    val nameCandidate = commaParts[0]
-                    val rem = commaParts.drop(1).joinToString(", ")
-                    if (locationKeywords.any { rem.lowercase().contains(it) } && candidateLocation == null) {
-                        candidateLocation = rem
+                if (line.contains(" - ") || line.contains(" – ")) {
+                    val splitHyphen = line.split(Regex("\\s+[-–]\\s+")).map { it.trim() }
+                    splitHyphen.firstOrNull { part ->
+                        val plw = part.lowercase()
+                        !blacklistJobTitles.any { plw.contains(it) } && part.length in 2..40
                     }
-                    nameCandidate
                 } else {
                     line
                 }
             }
 
-            if (potentialNamePart != null) {
-                val candidatePartLower = potentialNamePart.lowercase()
-                if (blacklistJobTitles.any { candidatePartLower.contains(it) }) continue
-                if (locationKeywords.any { candidatePartLower == it }) continue
-
-                // Clean out any trailing location keywords from name
-                var cleanedNamePart: String = potentialNamePart
-                for (locKw in locationKeywords) {
-                    cleanedNamePart = cleanedNamePart.replace(Regex("(?i)\\b$locKw\\b"), "").trim()
-                }
-                cleanedNamePart = cleanedNamePart.replace(Regex("[,|•·\\-]+$"), "").trim()
-
-                val words = cleanedNamePart.split(Regex("[\\s]+")).filter { it.isNotBlank() }
-                if (words.size in 1..4 && words.all { w -> w.all { it.isLetter() || it == '.' } }) {
-                    if (words.any { w -> SECTION_HEADER_KEYWORDS.contains(w.lowercase()) || blacklistJobTitles.contains(w.lowercase()) || locationKeywords.contains(w.lowercase()) }) {
-                        continue
-                    }
-
-                    val isTitleCase = words.all { it.first().isUpperCase() }
-                    val isAllUpper = words.all { it.all { c -> c.isUpperCase() || c == '.' } }
-                    if (isTitleCase || isAllUpper) {
-                        candidateName = cleanedNamePart.trim()
-                        break
+            if (potentialPart != null) {
+                val cleanedPart = potentialPart.replace(Regex("[,|•·\\-]+$"), "").trim()
+                val words = cleanedPart.split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (words.size in 1..4 && words.all { w -> w.all { it.isLetter() || it == '.' || it == '-' || it == '\'' } }) {
+                    if (!words.any { blacklistJobTitles.contains(it.lowercase()) || SECTION_HEADER_KEYWORDS.contains(it.lowercase()) }) {
+                        val hasUpper = words.any { it.first().isUpperCase() }
+                        if (hasUpper) {
+                            return cleanedPart
+                        }
                     }
                 }
             }
         }
 
-        // Fallback: derive name from email if name wasn't cleanly isolated
-        if (candidateName.isNullOrBlank() && emailMatch != null) {
+        // Step 3: Fallback from email
+        if (!emailMatch.isNullOrBlank()) {
             val emailPrefix = emailMatch.substringBefore("@").replace(Regex("[0-9_]+"), " ").trim()
             val candidateWords = emailPrefix.split(Regex("[.\\-_\\s]+")).filter { it.length >= 2 }
             if (candidateWords.size in 1..3 && candidateWords.all { it.all { c -> c.isLetter() } }) {
-                candidateName = candidateWords.joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+                return candidateWords.joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
             }
         }
 
-        return ParsedCandidateInfo(
-            name = candidateName,
-            email = emailMatch,
-            phone = phoneMatch,
-            location = candidateLocation
-        )
+        return null
     }
 
     fun parseResumeStructure(rawText: String): DeterministicResumeStructure {
