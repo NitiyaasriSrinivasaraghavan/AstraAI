@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 private const val TAG = "ResumeAnalysisFlow"
 
@@ -925,10 +927,12 @@ class ResumeViewModel(
                 _stageIndex.value = 1
                 _interactiveState.value = _interactiveState.value.copy(stage = 1)
                 
-                val text = if (selectedUri != null) {
-                    resumeParser.extractText(selectedUri!!)
-                } else {
-                    sampleResumeText ?: ""
+                val text = withContext(Dispatchers.IO) {
+                    if (selectedUri != null) {
+                        resumeParser.extractText(selectedUri!!)
+                    } else {
+                        sampleResumeText ?: ""
+                    }
                 }
 
                 if (text == ResumeParser.ERROR_SCANNED_PDF) {
@@ -943,8 +947,10 @@ class ResumeViewModel(
                 _stageIndex.value = 2
                 _interactiveState.value = _interactiveState.value.copy(stage = 2)
                 
-                // Deterministic parsing for structure
-                val structure = resumeParser.parseResumeStructure(text)
+                // Deterministic parsing for structure on background dispatcher
+                val structure = withContext(Dispatchers.Default) {
+                    resumeParser.parseResumeStructure(text)
+                }
                 
                 // 4. AI ANALYSIS STAGE
                 _loadingStage.value = "Analyzing competencies with AI..."
@@ -970,10 +976,24 @@ class ResumeViewModel(
                 // CRITICAL: Explicitly assign a new unique ID to every single analysis result here
                 val enrichedResult = aiResult.copy(
                     id = java.util.UUID.randomUUID().toString(),
-                    candidateName = aiResult.candidateName ?: structure.candidateInfo.name,
-                    candidateEmail = aiResult.candidateEmail ?: structure.candidateInfo.email,
-                    candidatePhone = aiResult.candidatePhone ?: structure.candidateInfo.phone,
-                    candidateLocation = aiResult.candidateLocation ?: structure.candidateInfo.location,
+                    candidateName = aiResult.candidateName?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: structure.candidateInfo.name,
+                    candidateEmail = aiResult.candidateEmail?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: structure.candidateInfo.email,
+                    candidatePhone = aiResult.candidatePhone?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: structure.candidateInfo.phone,
+                    candidateLocation = aiResult.candidateLocation?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: structure.candidateInfo.location,
+                    summary = aiResult.summary?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: structure.sections.find { s -> s.sectionName == "Summary" }?.summary ?: "",
+                    education = if (!aiResult.education.isNullOrEmpty()) aiResult.education
+                        else structure.sections.find { s -> s.sectionName == "Education" }?.details ?: emptyList(),
+                    experience = if (!aiResult.experience.isNullOrEmpty()) aiResult.experience
+                        else structure.sections.find { s -> s.sectionName == "Work Experience" }?.details ?: emptyList(),
+                    extractedSkills = if (!aiResult.extractedSkills.isNullOrEmpty()) aiResult.extractedSkills
+                        else structure.extractedSkills.map { skillStr -> com.example.aidrivencompetencyplatform.model.Skill(name = skillStr, level = 80, category = RoleSkillsData.getSkillCategory(skillStr)) },
+                    projectAnalysis = if (!aiResult.projectAnalysis.isNullOrEmpty()) aiResult.projectAnalysis
+                        else structure.extractedProjects.map { projStr -> com.example.aidrivencompetencyplatform.model.ProjectAnalysis(name = projStr, technologies = emptyList(), demonstratedSkills = emptyList()) },
                     rawResumeText = text,
                     targetRole = effectiveRole,
                     detectedJobDescription = aiResult.detectedJobDescription ?: structure.detectedJobDescription

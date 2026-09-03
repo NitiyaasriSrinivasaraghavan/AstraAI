@@ -163,24 +163,34 @@ class ResumeParser(private val context: Context) {
 
     private fun extractFromPdf(uri: Uri): String {
         Log.d("ResumeParser", "Starting PDF extraction...")
-        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            val document = PDDocument.load(inputStream)
-            val pageCount = document.numberOfPages
-            Log.d("ResumeParser", "PDF Pages: $pageCount")
-            
-            val stripper = PDFTextStripper()
-            val text = stripper.getText(document)
-            document.close()
-            
-            // Basic heuristic to detect scanned PDFs (images instead of text)
-            if (text.trim().length < 50 && pageCount > 0) {
-                Log.w("ResumeParser", "PDF has $pageCount pages but almost no text. Likely scanned.")
-                return ERROR_SCANNED_PDF
+        return try {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes == null || bytes.isEmpty()) {
+                Log.w("ResumeParser", "PDF bytes are empty")
+                return ""
             }
-            
-            return text
+
+            PDDocument.load(bytes).use { document ->
+                val pageCount = document.numberOfPages
+                Log.d("ResumeParser", "PDF Pages: $pageCount")
+                
+                val stripper = PDFTextStripper().apply {
+                    sortByPosition = true
+                }
+                val text = stripper.getText(document)
+                
+                // Basic heuristic to detect scanned PDFs (images instead of text)
+                if (text.trim().length < 20 && pageCount > 0) {
+                    Log.w("ResumeParser", "PDF has $pageCount pages but almost no text. Likely scanned.")
+                    return ERROR_SCANNED_PDF
+                }
+                
+                text
+            }
+        } catch (e: Exception) {
+            Log.e("ResumeParser", "Error extracting text from PDF: ${e.message}", e)
+            ""
         }
-        return ""
     }
 
     private fun extractFromDocx(uri: Uri): String {
@@ -321,25 +331,28 @@ class ResumeParser(private val context: Context) {
 
             // Skip lines that match section headers
             if (isSectionHeader(line)) continue
+            if (line.length > 120 || line.length < 2) continue
 
-            // Skip lines with emails, phones, or URLs
-            if (emailMatch != null && line.contains(emailMatch)) continue
-            if (phoneMatch != null && line.contains(phoneMatch)) continue
-            if (line.contains("@") || line.contains("http") || line.contains("www.") || line.contains(".com") || line.contains("linkedin") || line.contains("github")) continue
-            if (line.any { it.isDigit() }) continue
-            if (line.length > 70 || line.length < 2) continue
-
-            // If line contains delimiter like comma, pipe, dash, or bullet, separate name and location/other info
-            val lineParts = line.split(Regex("[|,•·\\-]")).map { it.trim() }.filter { it.isNotBlank() }
+            // If line contains delimiter like comma, pipe, dash, tab, or bullet, separate name and other info
+            val lineParts = line.split(Regex("[|•·\\-\t]")).map { it.trim() }.filter { it.isNotBlank() }
             val potentialNamePart = if (lineParts.size > 1) {
-                // Find the part that is NOT a location and NOT a job title
+                // Find the part that is clean: no email, no phone, no URL, no digit, not location, not job title
                 lineParts.firstOrNull { part ->
                     val partLower = part.lowercase()
+                    !part.contains("@") && !part.contains("http") && !part.contains(".com") &&
+                    !part.any { it.isDigit() } &&
                     !locationKeywords.any { partLower.contains(it) } &&
                     !blacklistJobTitles.any { partLower.contains(it) } &&
                     part.length in 2..40
                 }
             } else {
+                // Skip lines with emails, phones, or URLs if line has no delimiters
+                if (emailMatch != null && line.contains(emailMatch)) continue
+                if (phoneMatch != null && line.contains(phoneMatch)) continue
+                if (line.contains("@") || line.contains("http") || line.contains("www.") || line.contains(".com") || line.contains("linkedin") || line.contains("github")) continue
+                if (line.any { it.isDigit() }) continue
+                if (line.length > 70) continue
+
                 // If it contains a comma e.g. "Nithiyaa S, Trichy" or "Alex Chen, San Francisco"
                 val commaParts = line.split(",").map { it.trim() }.filter { it.isNotBlank() }
                 if (commaParts.size > 1) {

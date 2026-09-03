@@ -1966,7 +1966,8 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
             Log.d("ResumeNetworkDebug", "Analysis complete state reached, preparing navigation")
             delay(600) // Reduced delay for faster transition
             viewModel.finishLoading()
-            navController.navigate(Screen.AtsAnalysis.route) {
+            val route = Screen.AtsAnalysis.route + (analysisResult?.id?.let { "?analysisId=$it" } ?: "")
+            navController.navigate(route) {
                 launchSingleTop = true
             }
         }
@@ -2440,7 +2441,8 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                         targetRole = analyzingRole.ifBlank { targetRole },
                         onFinishClick = {
                             viewModel.finishLoading()
-                            navController.navigate(Screen.AtsAnalysis.route)
+                            val route = Screen.AtsAnalysis.route + (analysisResult?.id?.let { "?analysisId=$it" } ?: "")
+                            navController.navigate(route)
                         }
                     )
                 }
@@ -2480,6 +2482,8 @@ fun AtsDashboardScreen(
     LaunchedEffect(analysisId) {
         if (!analysisId.isNullOrBlank()) {
             viewModel.loadAnalysis(analysisId)
+        } else {
+            viewModel.refresh()
         }
     }
 
