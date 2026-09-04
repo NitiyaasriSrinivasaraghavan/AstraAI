@@ -129,5 +129,8 @@ fun AppNavGraph(navController: NavHostController) {
         composable(Screen.ProjectsDetail.route) {
             ResumeSectionDetailScreen("Projects", navController, sharedAtsViewModel)
         }
+        composable(Screen.KeyboardTest.route) {
+            KeyboardTestScreen(navController)
+        }
     }
 }

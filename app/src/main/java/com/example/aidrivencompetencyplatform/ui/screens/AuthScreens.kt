@@ -123,18 +123,33 @@ fun LoginScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
-            .safeDrawingPadding()
-            .imePadding(),
-        contentAlignment = Alignment.Center
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Top
         ) {
+            Spacer(modifier = Modifier.weight(1f, fill = false))
+
+            // Diagnostic Lab shortcut for keyboard & IME debugging
+            TextButton(
+                onClick = { navController.navigate(Screen.KeyboardTest.route) }
+            ) {
+                Text(
+                    text = "🛠️ Keyboard Diagnostic Test Lab",
+                    fontSize = 12.sp,
+                    color = PrimaryDark,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+
             NoviQLogoTile(size = 72.dp, elevation = 4.dp)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
@@ -202,7 +217,6 @@ fun LoginScreen(navController: NavController) {
                     text = "Sign In",
                     onClick = {
                         val trimmedEmail = email.trim()
-                        val trimmedPassword = password.trim()
 
                         if (trimmedEmail.isBlank()) {
                             errorMessage = "Please enter your email address."
@@ -214,7 +228,7 @@ fun LoginScreen(navController: NavController) {
                             Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
-                        if (trimmedPassword.isBlank()) {
+                        if (password.isEmpty()) {
                             errorMessage = "Please enter your password."
                             Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
@@ -224,7 +238,7 @@ fun LoginScreen(navController: NavController) {
                         if (user == null) {
                             errorMessage = "No account found with this email. Please sign up."
                             Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
-                        } else if (sessionManager.authenticate(trimmedEmail, trimmedPassword)) {
+                        } else if (sessionManager.authenticate(trimmedEmail, password)) {
                             errorMessage = null
                             sessionManager.login(trimmedEmail)
                             Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
@@ -245,6 +259,8 @@ fun LoginScreen(navController: NavController) {
             ) {
                 Text("Don't have an account? Sign Up", color = PrimaryDark, fontWeight = FontWeight.Bold)
             }
+
+            Spacer(modifier = Modifier.weight(1f, fill = false))
         }
     }
 }
@@ -265,18 +281,20 @@ fun SignupScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
-            .safeDrawingPadding()
-            .imePadding(),
-        contentAlignment = Alignment.Center
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Top
         ) {
+            Spacer(modifier = Modifier.weight(1f, fill = false))
+
             NoviQLogoTile(size = 72.dp, elevation = 4.dp)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
@@ -372,8 +390,6 @@ fun SignupScreen(navController: NavController) {
                     onClick = {
                         val trimmedName = name.trim()
                         val trimmedEmail = email.trim()
-                        val trimmedPassword = password.trim()
-                        val trimmedConfirmPassword = confirmPassword.trim()
                         
                         if (trimmedName.isBlank()) {
                             errorMessage = "Please enter your full name."
@@ -390,12 +406,17 @@ fun SignupScreen(navController: NavController) {
                             Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
-                        if (trimmedPassword.length < 4) {
+                        if (password.isEmpty()) {
+                            errorMessage = "Please enter a password."
+                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+                            return@PremiumButton
+                        }
+                        if (password.length < 4) {
                             errorMessage = "Password must be at least 4 characters."
                             Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
                         }
-                        if (trimmedPassword != trimmedConfirmPassword) {
+                        if (password != confirmPassword) {
                             errorMessage = "Passwords do not match."
                             Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
                             return@PremiumButton
@@ -408,8 +429,8 @@ fun SignupScreen(navController: NavController) {
                             return@PremiumButton
                         }
 
-                        // Create account
-                        val newUser = User(name = trimmedName, email = trimmedEmail, password = trimmedPassword)
+                        // Create account with exact password
+                        val newUser = User(name = trimmedName, email = trimmedEmail, password = password)
                         val success = sessionManager.register(newUser)
                         if (success) {
                             errorMessage = null
@@ -431,6 +452,8 @@ fun SignupScreen(navController: NavController) {
             ) {
                 Text("Already have an account? Login", color = PrimaryDark, fontWeight = FontWeight.Bold)
             }
+
+            Spacer(modifier = Modifier.weight(1f, fill = false))
         }
     }
 }
@@ -491,11 +514,12 @@ fun AuthTextField(
         ),
         keyboardOptions = KeyboardOptions(
             keyboardType = keyboardType,
-            imeAction = imeAction
+            imeAction = imeAction,
+            autoCorrectEnabled = !isPassword && keyboardType != KeyboardType.Email
         ),
         keyboardActions = KeyboardActions(
             onNext = { 
-                if (onImeAction != null) onImeAction() else focusManager.moveFocus(FocusDirection.Down) 
+                if (onImeAction != null) onImeAction() else focusManager.moveFocus(FocusDirection.Next) 
             },
             onDone = { 
                 if (onImeAction != null) onImeAction() else focusManager.clearFocus() 

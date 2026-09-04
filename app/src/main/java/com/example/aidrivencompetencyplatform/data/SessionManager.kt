@@ -228,7 +228,7 @@ class SessionManager(context: Context) {
      */
     fun authenticate(email: String, password: String): Boolean {
         val user = getUser(email) ?: return false
-        return user.password.trim() == password.trim()
+        return user.password == password
     }
 
     /**
