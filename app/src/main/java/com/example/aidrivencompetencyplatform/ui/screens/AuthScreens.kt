@@ -1,5 +1,6 @@
 package com.example.aidrivencompetencyplatform.ui.screens
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -26,11 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -474,10 +478,14 @@ fun AuthTextField(
 ) {
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val windowInfo = LocalWindowInfo.current
 
     OutlinedTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = {
+            Log.d("AUTH_INPUT_DEBUG", "AuthTextField[$label] onValueChange='$it'")
+            onValueChange(it)
+        },
         label = { Text(label) },
         placeholder = placeholder?.let { { Text(it, color = TextMuted) } },
         leadingIcon = { 
@@ -503,7 +511,22 @@ fun AuthTextField(
         } else {
             VisualTransformation.None
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        Log.d("AUTH_INPUT_DEBUG", "AuthTextField[$label] pointer: type=${event.type}, changes=${event.changes.size}")
+                    }
+                }
+            }
+            .onFocusChanged {
+                Log.d(
+                    "AUTH_INPUT_DEBUG",
+                    "AuthTextField[$label] focused=${it.isFocused}, hasFocus=${it.hasFocus}, isWindowFocused=${windowInfo.isWindowFocused}"
+                )
+            },
         shape = RoundedCornerShape(14.dp),
         enabled = enabled,
         singleLine = true,
