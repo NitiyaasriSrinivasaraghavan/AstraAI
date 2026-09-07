@@ -18,14 +18,14 @@ class SessionManager(context: Context) {
     private val gson = Gson()
 
     init {
-        // Delete all existing users and their analysis history from the application
-        if (!prefs.getBoolean("has_cleared_all_legacy_data_v5", false)) {
-            prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v5", true).commit()
+        // Delete all existing users and their analysis history from the application once for clean testing
+        if (!prefs.getBoolean("has_cleared_all_legacy_data_v6", false)) {
+            prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v6", true).commit()
         }
     }
 
     fun deleteAllUsersAndHistory() {
-        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v5", true).commit()
+        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v6", true).commit()
     }
 
     companion object {

@@ -6,6 +6,17 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import androidx.compose.foundation.Image
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -41,6 +52,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -446,7 +460,7 @@ fun MainDashboardScreen(
             ) {
             // 1. Curved Sage/Mint Header with Personalized Greeting
             item {
-                val displayName = if (userName.isNotBlank()) userName else "User"
+                val displayName = userName.ifBlank { "User" }
                 val greeting = if (isNewUser || greetingPrefix.equals("Welcome", ignoreCase = true)) {
                     "Welcome, $displayName 👋"
                 } else {
@@ -1964,7 +1978,7 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
         if (interactiveState.isComplete && analysisResult != null) {
             // SUCCESS: Actual analysis result received and UI marked as complete
             Log.d("ResumeNetworkDebug", "Analysis complete state reached, preparing navigation")
-            delay(600) // Reduced delay for faster transition
+            delay(600L) // Reduced delay for faster transition
             viewModel.finishLoading()
             val route = Screen.AtsAnalysis.route + (analysisResult?.id?.let { "?analysisId=$it" } ?: "")
             navController.navigate(route) {
@@ -1999,7 +2013,7 @@ fun ResumeUploadScreen(navController: NavController, viewModel: ResumeViewModel)
                             }
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -2516,7 +2530,7 @@ fun AtsDashboardScreen(
                             }
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 actions = {
@@ -2926,7 +2940,7 @@ fun SkillGapDashboardScreen(
                             }
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 actions = {
@@ -2970,6 +2984,16 @@ fun SkillGapDashboardScreen(
             if (!state.hasAnalysis) {
                 SkillGapEmptyState(navController)
             } else {
+                val top3MissingNames = remember(state.priorityLearningItems) {
+                    state.priorityLearningItems.take(3).map { it.name }.toSet()
+                }
+                val remainingMissingCount = state.remainingMissingSkills.size
+                val displayedSkills = when (state.filter) {
+                    SkillFilter.ALL -> state.allSkillsDetailed.filterNot { it.name in top3MissingNames }
+                    SkillFilter.PRESENT -> state.presentSkills
+                    SkillFilter.MISSING -> state.remainingMissingSkills
+                }
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -3308,54 +3332,6 @@ fun SkillGapDashboardScreen(
                         }
                     }
 
-                    // Section 2: Skill Gap Visualization (Category Distribution)
-                    item {
-                        AstraCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "GAP VISUALIZATION",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextSecondary,
-                                            letterSpacing = 1.sp
-                                        )
-                                        Text(
-                                            text = "Competency Domain Distribution",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
-                                        )
-                                    }
-
-                                    Icon(
-                                        imageVector = Icons.Default.BarChart,
-                                        contentDescription = null,
-                                        tint = Primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                Text(
-                                    text = "Present candidate competencies vs target role requirements by domain:",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    state.categoryCoverage.forEach { coverage ->
-                                        CategoryGapMeterItem(coverage = coverage)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Section 3: Priority Missing Competencies
                     if (state.priorityLearningItems.isNotEmpty()) {
                         item {
@@ -3413,7 +3389,7 @@ fun SkillGapDashboardScreen(
                         }
                     }
 
-                    // Section 4: Filterable Skill Registry (Present vs Missing)
+                    // Section 4: Filterable Skill Registry (Present vs Remaining Missing)
                     item {
                         Column(
                             modifier = Modifier
@@ -3434,7 +3410,7 @@ fun SkillGapDashboardScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // 3 Clean Filters: All, Present, Missing
+                            // 3 Clean Filters: All, Present, Missing (Non-duplicated)
                             Surface(
                                 shape = RoundedCornerShape(24.dp),
                                 color = MintLight,
@@ -3446,9 +3422,9 @@ fun SkillGapDashboardScreen(
                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     val filterList = listOf(
-                                        Triple(SkillFilter.ALL, "All", state.totalRequired),
+                                        Triple(SkillFilter.ALL, "All", state.presentSkills.size + remainingMissingCount),
                                         Triple(SkillFilter.PRESENT, "Present", state.matchedCount),
-                                        Triple(SkillFilter.MISSING, "Missing", state.missingCount)
+                                        Triple(SkillFilter.MISSING, "Missing", remainingMissingCount)
                                     )
 
                                     filterList.forEach { (fOption, label, count) ->
@@ -3480,13 +3456,7 @@ fun SkillGapDashboardScreen(
                         }
                     }
 
-                    // Render Filtered Skills List
-                    val displayedSkills = when (state.filter) {
-                        SkillFilter.ALL -> state.allSkillsDetailed
-                        SkillFilter.PRESENT -> state.presentSkills
-                        SkillFilter.MISSING -> state.missingSkills
-                    }
-
+                    // Render Filtered Skills List (Top 3 Priority Skills excluded to prevent duplicate presentation)
                     if (displayedSkills.isEmpty()) {
                         item {
                             AstraCard(modifier = Modifier.fillMaxWidth()) {
@@ -4075,6 +4045,156 @@ fun SkillDetailDialog(
                     }
                 }
 
+                // Recommended Free Course Card
+                val course = skill.recommendedCourse
+                if (course != null) {
+                    val dialogContext = LocalContext.current
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "RECOMMENDED FREE COURSE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            letterSpacing = 0.8.sp
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = SoftGreen.copy(alpha = 0.35f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            tint = Primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = course.title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Primary.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = "FREE",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black,
+                                            color = PrimaryDark,
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Provider: ${course.provider}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                if (course.description.isNotBlank()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "WHAT YOU'LL LEARN:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 9.sp,
+                                            color = TextSecondary.copy(alpha = 0.8f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                        Text(
+                                            text = course.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+
+                                if (course.explanation.isNotBlank()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "WHY THIS IS RECOMMENDED:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 9.sp,
+                                            color = TextSecondary.copy(alpha = 0.8f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                        Text(
+                                            text = course.explanation,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = PrimaryLight,
+                                            fontSize = 11.sp,
+                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(course.courseUrl))
+                                            dialogContext.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // Handle case if no web browser is installed
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Primary,
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = "View Course",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.OpenInNew,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Action Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -4320,24 +4440,23 @@ fun SkillGapEmptyState(navController: NavController) {
 // 6. JD MATCHER DASHBOARD SCREEN (Separate Dashboard)
 // ==========================================
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.animation.ExperimentalAnimationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatcherViewModel) {
     val context = LocalContext.current
-    val app = context.applicationContext as AstraApp
-    val assistantViewModel: AiAssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = AppViewModelFactory(app))
-    var isNovaOpen by remember { mutableStateOf(false) }
+    
+    val uiState by viewModel.uiState.collectAsState(initial = JdMatcherUiState.INPUT)
+    val jdInput by viewModel.jobDescriptionInput.collectAsState(initial = "")
+    val canonicalResume by viewModel.canonicalResume.collectAsState(initial = null)
+    val optimizationState by viewModel.optimizationState.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState(initial = null)
+    val analysisStageIndex by viewModel.analysisStageIndex.collectAsState(initial = 0)
+    val analysisStages = viewModel.analysisStages
 
-    val profile by viewModel.profile.collectAsState()
-    val baseJd by viewModel.baseJobDescription.collectAsState()
-    val flowMode by viewModel.flowMode.collectAsState()
-    val stages by viewModel.stages.collectAsState()
-    val currentStageIndex by viewModel.currentStageIndex.collectAsState()
-    val poweredResult by viewModel.poweredResult.collectAsState()
-    val expandedExplainId by viewModel.expandedExplainId.collectAsState()
+    var selectedSuggestion by remember { mutableStateOf<OptimizationSuggestion?>(null) }
 
     LaunchedEffect(Unit) {
-        viewModel.extractProfileAndGenerateJd()
+        viewModel.loadCanonicalResume()
     }
 
     Scaffold(
@@ -4346,9 +4465,9 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
             TopAppBar(
                 title = {
                     Column {
-                        Text("JD Matching", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("AI Resume Optimizer", fontWeight = FontWeight.Bold, color = TextPrimary)
                         Text(
-                            text = "Automated Job Description Analysis",
+                            text = "Tailor your resume to a specific job",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
@@ -4362,7 +4481,7 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                             }
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -4374,814 +4493,101 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            when (flowMode) {
-                JdFlowMode.NO_JD -> {
-                    // ==========================================
-                    // NO JOB DESCRIPTION DETECTED STATE
-                    // ==========================================
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        item {
-                            Spacer(modifier = Modifier.height(24.dp))
-                        }
-
-                        item {
-                            AstraCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                cornerRadius = 24.dp,
-                                containerColor = Surface,
-                                borderColor = BorderColor
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = SurfaceVariant,
-                                        modifier = Modifier.size(76.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.FindInPage,
-                                                contentDescription = null,
-                                                tint = TextSecondary,
-                                                modifier = Modifier.size(38.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "NO JOB DESCRIPTION FOUND",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary,
-                                            textAlign = TextAlign.Center,
-                                            letterSpacing = 0.5.sp
-                                        )
-                                        Text(
-                                            text = "We couldn't find a Job Description in this resume. JD analysis will be available when a Job Description is provided.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextSecondary,
-                                            textAlign = TextAlign.Center,
-                                            lineHeight = 22.sp
-                                        )
-                                    }
-
-                                    HorizontalDivider(color = BorderColor)
-
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MintLight,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.2f)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Info,
-                                                contentDescription = null,
-                                                tint = Primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Text(
-                                                text = "You can proceed directly to Interview Preparation, where technical questions will be generated from your analyzed profile.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = PrimaryDark,
-                                                lineHeight = 18.sp
-                                            )
-                                        }
-                                    }
+            when (uiState) {
+                JdMatcherUiState.INPUT -> {
+                    JdOptimizerInputView(
+                        jdInput = jdInput,
+                        onJdChanged = { viewModel.onJobDescriptionInputChanged(it) },
+                        onAnalyzeClick = { viewModel.analyzeJobDescription() },
+                        onPasteClick = {
+                            try {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
+                                if (!clipText.isNullOrBlank()) {
+                                    viewModel.onJobDescriptionInputChanged(clipText)
                                 }
-                            }
-                        }
+                            } catch (_: Exception) {}
+                        },
+                        onClearClick = { viewModel.clearInput() },
+                        errorMessage = errorMessage,
+                        hasStoredResume = canonicalResume != null,
+                        onUploadClick = { navController.navigate(Screen.ResumeUpload.route) }
+                    )
+                }
 
-                        // Navigation Actions
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Primary,
-                                    shadowElevation = 4.dp
-                                ) {
-                                    Button(
-                                        onClick = { navController.navigate(Screen.InterviewPrep.route) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Primary,
-                                            contentColor = Color.White
-                                        ),
-                                        shape = RoundedCornerShape(16.dp),
-                                        contentPadding = PaddingValues(vertical = 16.dp, horizontal = 20.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "Skip JD Matching → Interview Preparation",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
+                JdMatcherUiState.ANALYZING -> {
+                    JdAnalysisAnimationView(
+                        stageIndex = analysisStageIndex,
+                        stages = analysisStages
+                    )
+                }
 
-                                OutlinedButton(
-                                    onClick = { navController.navigate(Screen.SkillGap.route) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = null,
-                                            tint = TextSecondary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Back to Skill Gap",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = TextSecondary,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        item { Spacer(modifier = Modifier.height(60.dp)) }
+                JdMatcherUiState.OPTIMIZING -> {
+                    val resume = optimizationState.optimizedResumeData
+                    if (resume != null) {
+                        ResumeOptimizationDashboard(
+                            resume = resume,
+                            optimizationState = optimizationState,
+                            onSuggestionClick = { selectedSuggestion = it },
+                            onGeneratePdf = { viewModel.generateOptimizedResume() },
+                            onPrevImprovement = { viewModel.setCurrentImprovement(optimizationState.currentImprovementIndex - 1) },
+                            onNextImprovement = { viewModel.setCurrentImprovement(optimizationState.currentImprovementIndex + 1) }
+                        )
                     }
                 }
 
-                JdFlowMode.JD_DETECTED, JdFlowMode.PROFILE_VIEW -> {
-                    // ==========================================
-                    // GENUINE JOB DESCRIPTION DETECTED STATE
-                    // ==========================================
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        item {
-                            AstraCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                containerColor = SoftGreen
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Verified,
-                                            contentDescription = null,
-                                            tint = PrimaryDark,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Text(
-                                                text = "JOB DESCRIPTION DETECTED",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = PrimaryDark
-                                            )
-                                            Text(
-                                                text = "Role Target: ${baseJd.roleTitle.ifBlank { profile.targetRole }}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = TextSecondary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Extracted Job Description Details Card
-                        item {
-                            AstraCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(
-                                        text = baseJd.roleTitle.ifBlank { "Job Description" },
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-
-                                    if (baseJd.roleSummary.isNotBlank()) {
-                                        Text(
-                                            text = baseJd.roleSummary,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextPrimary,
-                                            lineHeight = 20.sp
-                                        )
-                                    }
-
-                                    if (baseJd.responsibilities.isNotEmpty()) {
-                                        HorizontalDivider(color = BorderColor)
-                                        Text(
-                                            text = "Key Responsibilities",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                        baseJd.responsibilities.forEach { resp ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.Top
-                                            ) {
-                                                Text("• ", color = Primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 1.dp))
-                                                Text(resp, style = MaterialTheme.typography.bodySmall, color = TextPrimary, lineHeight = 18.sp)
-                                            }
-                                        }
-                                    }
-
-                                    if (baseJd.requiredSkills.isNotEmpty()) {
-                                        HorizontalDivider(color = BorderColor)
-                                        Text(
-                                            text = "Required Competencies & Skills",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            items(baseJd.requiredSkills) { skill ->
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = MintLight,
-                                                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.3f))
-                                                ) {
-                                                    Text(
-                                                        text = skill,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = PrimaryDark,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if (baseJd.preferredSkills.isNotEmpty()) {
-                                        Text(
-                                            text = "Preferred Skills",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            items(baseJd.preferredSkills) { skill ->
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = SurfaceVariant,
-                                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                                                ) {
-                                                    Text(
-                                                        text = skill,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = TextPrimary,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Primary Action: Power the JD
-                        item {
-                            PremiumButton(
-                                text = "⚡ Power the JD",
-                                onClick = {
-                                    viewModel.powerTheJd()
-                                }
-                            )
-                        }
-
-                        // Secondary Navigation: Skip to Interview Prep or Back to Skill Gap
-                        item {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = { navController.navigate(Screen.InterviewPrep.route) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.5f))
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            text = "Skip to Interview Preparation",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = Primary,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                            contentDescription = null,
-                                            tint = Primary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = { navController.navigate(Screen.SkillGap.route) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = null,
-                                            tint = TextSecondary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Back to Skill Gap",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = TextSecondary,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        item { Spacer(modifier = Modifier.height(80.dp)) }
-                    }
+                JdMatcherUiState.RESULT -> {
+                    OptimizedResumePreview(
+                        resume = optimizationState.optimizedResumeData!!,
+                        jdTitle = optimizationState.jdTitle,
+                        onBack = { viewModel.resetToInput() },
+                        onShare = { /* Share logic */ },
+                        onSave = { /* Save logic */ }
+                    )
                 }
 
-                JdFlowMode.POWERING_PROGRESS -> {
+                JdMatcherUiState.ERROR -> {
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(20.dp),
+                        modifier = Modifier.fillMaxSize().padding(32.dp),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        AstraCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                CircularProgressIndicator(
-                                    color = Primary,
-                                    modifier = Modifier.size(48.dp),
-                                    strokeWidth = 4.dp
-                                )
-
-                                Text(
-                                    text = "Powering Your Job Description",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-
-                                Text(
-                                    text = "Generating ATS-optimized JD customized to your resume competencies...",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                HorizontalDivider(color = BorderColor)
-
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    stages.forEachIndexed { index, stage ->
-                                        val isCurrent = index == currentStageIndex
-                                        val isDone = stage.status == JdStageStatus.COMPLETED
-
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .background(
-                                                    if (isCurrent) MintLight else if (isDone) SurfaceVariant.copy(alpha = 0.5f) else Color.Transparent,
-                                                    RoundedCornerShape(10.dp)
-                                                )
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = if (isDone) SuccessGreen else if (isCurrent) Primary else BorderColor,
-                                                modifier = Modifier.size(24.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    if (isDone) {
-                                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                                    } else {
-                                                        Text(
-                                                            text = stage.number,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = Color.White,
-                                                            fontWeight = FontWeight.Bold,
-                                                            fontSize = 10.sp
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.width(12.dp))
-
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = stage.title,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = if (isCurrent || isDone) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (isDone) SuccessGreen else if (isCurrent) PrimaryDark else TextSecondary
-                                                )
-                                                Text(
-                                                    text = stage.description,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = TextSecondary,
-                                                    fontSize = 11.sp
-                                                )
-                                            }
-
-                                            if (isCurrent) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(16.dp),
-                                                    strokeWidth = 2.dp,
-                                                    color = Primary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                JdFlowMode.POWERED_RESULT -> {
-                    val result = poweredResult
-                    if (result != null) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Top Fit Badge
-                            item {
-                                AstraCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    containerColor = SoftGreen
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(24.dp))
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = "${result.alignmentPercentage}% Role Alignment",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = PrimaryDark
-                                                )
-                                                Text(
-                                                    text = "Calibrated for ${result.targetRole}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = TextSecondary
-                                                )
-                                            }
-                                        }
-                                        OutlinedButton(
-                                            onClick = { viewModel.powerAgain() },
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.5f))
-                                        ) {
-                                            Text("Recalibrate", style = MaterialTheme.typography.labelSmall, color = Primary, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Job Description Card
-                            item {
-                                AstraCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text(
-                                            text = result.jobDescription.roleTitle,
-                                            style = MaterialTheme.typography.headlineSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
-                                        )
-
-                                        Text(
-                                            text = result.jobDescription.roleSummary,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextPrimary,
-                                            lineHeight = 20.sp
-                                        )
-
-                                        HorizontalDivider(color = BorderColor)
-
-                                        Text(
-                                            text = "Key Responsibilities",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                        result.jobDescription.responsibilities.forEach { resp ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.Top
-                                            ) {
-                                                Text("• ", color = Primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 1.dp))
-                                                Text(resp, style = MaterialTheme.typography.bodySmall, color = TextPrimary, lineHeight = 18.sp)
-                                            }
-                                        }
-
-                                        HorizontalDivider(color = BorderColor)
-
-                                        Text(
-                                            text = "Required Competencies & Skills",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            items(result.jobDescription.requiredSkills) { skill ->
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = MintLight,
-                                                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.3f))
-                                                ) {
-                                                    Text(
-                                                        text = skill,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = PrimaryDark,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        Text(
-                                            text = "Preferred Skills",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDark
-                                        )
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            items(result.jobDescription.preferredSkills) { skill ->
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = SurfaceVariant,
-                                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                                                ) {
-                                                    Text(
-                                                        text = skill,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = TextPrimary,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // What Changed & Why Explainability
-                            item {
-                                AstraCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "What Changed & Why",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
-                                            )
-                                        }
-                                        Text(
-                                            text = "Transparency breakdown explaining how this JD was personalized to your background:",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextSecondary
-                                        )
-
-                                        HorizontalDivider(color = BorderColor)
-
-                                        result.whatChangedItems.forEach { explainItem ->
-                                            val isExpanded = expandedExplainId == explainItem.id
-
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = if (isExpanded) MintLight else SurfaceVariant,
-                                                border = androidx.compose.foundation.BorderStroke(
-                                                    1.dp,
-                                                    if (isExpanded) Primary.copy(alpha = 0.4f) else BorderColor
-                                                ),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { viewModel.toggleExplainItem(explainItem.id) }
-                                            ) {
-                                                Column(modifier = Modifier.padding(12.dp)) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text(
-                                                            text = explainItem.title,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = TextPrimary,
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-                                                        Surface(
-                                                            shape = RoundedCornerShape(6.dp),
-                                                            color = if (isExpanded) Primary else SoftGreen
-                                                        ) {
-                                                            Text(
-                                                                text = explainItem.tag,
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = if (isExpanded) Color.White else PrimaryDark,
-                                                                fontWeight = FontWeight.Bold,
-                                                                fontSize = 10.sp,
-                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                            )
-                                                        }
-                                                    }
-
-                                                    if (isExpanded) {
-                                                        Spacer(modifier = Modifier.height(8.dp))
-                                                        Text(
-                                                            text = explainItem.detail,
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = TextPrimary,
-                                                            lineHeight = 18.sp
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Forward Navigation to Interview Preparation & Secondary Actions
-                            item {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = Primary,
-                                        shadowElevation = 4.dp
-                                    ) {
-                                        Button(
-                                            onClick = { navController.navigate(Screen.InterviewPrep.route) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Primary,
-                                                contentColor = Color.White
-                                            ),
-                                            shape = RoundedCornerShape(16.dp),
-                                            contentPadding = PaddingValues(vertical = 16.dp, horizontal = 20.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.Center,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "Continue to Interview Preparation",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color.White
-                                                )
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                val clip = android.content.ClipData.newPlainText(
-                                                    "Job Description",
-                                                    "${result.jobDescription.roleTitle}\n\n${result.jobDescription.roleSummary}\n\nKey Responsibilities:\n${result.jobDescription.responsibilities.joinToString("\n• ")}"
-                                                )
-                                                clipboard.setPrimaryClip(clip)
-                                                Toast.makeText(context, "JD copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ) {
-                                            Text("Copy JD", color = TextPrimary)
-                                        }
-
-                                        OutlinedButton(
-                                            onClick = { navController.navigate(Screen.SkillGap.route) },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ) {
-                                            Text("Back to Skill Gap", color = TextSecondary)
-                                        }
-                                    }
-                                }
-                            }
-
-                            item { Spacer(modifier = Modifier.height(80.dp)) }
+                        Icon(Icons.Default.ErrorOutline, null, tint = ErrorRed, modifier = Modifier.size(64.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Analysis Failed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(errorMessage ?: "Unknown error", textAlign = TextAlign.Center, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(onClick = { viewModel.retryAnalysis() }) {
+                            Text("Retry Analysis")
                         }
                     }
                 }
             }
 
-            // Floating Nova Assistant Button
-            NovaFloatingButton(
-                onClick = { isNovaOpen = true },
-                bottomPadding = 16.dp
-            )
+            // Interactive Suggestion Panel
+            if (selectedSuggestion != null) {
+                ModalBottomSheet(
+                    onDismissRequest = { selectedSuggestion = null },
+                    containerColor = Surface,
+                    dragHandle = { BottomSheetDefaults.DragHandle() }
+                ) {
+                    SuggestionPanel(
+                        suggestion = selectedSuggestion!!,
+                        onKeepChange = { editedText ->
+                            viewModel.updateSuggestionState(selectedSuggestion!!.changeId, SuggestionState.ACCEPTED, editedText)
+                            selectedSuggestion = null
+                        },
+                        onDiscard = {
+                            viewModel.updateSuggestionState(selectedSuggestion!!.changeId, SuggestionState.DISMISSED)
+                            selectedSuggestion = null
+                        }
+                    )
+                }
+            }
         }
-
-        // Nova Overlay Chat Panel
-        NovaOverlayChatPanel(
-            viewModel = assistantViewModel,
-            isOpen = isNovaOpen,
-            onDismiss = { isNovaOpen = false }
-        )
     }
 }
+
 
 // ==========================================
 // 7. CHATBOT / ASTRAAI ASSISTANT SCREEN
@@ -5215,7 +4621,7 @@ fun AiAssistantScreen(navController: NavController, viewModel: AiAssistantViewMo
                             }
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -5349,7 +4755,7 @@ fun InterviewPrepScreen(navController: NavController, viewModel: AiAssistantView
                             }
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -8091,16 +7497,13 @@ private fun SourceIndicator() {
 private fun getFileName(context: Context, uri: Uri): String? {
     var result: String? = null
     if (uri.scheme == "content") {
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        try {
-            if (cursor != null && cursor.moveToFirst()) {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (index != -1) {
                     result = cursor.getString(index)
                 }
             }
-        } finally {
-            cursor?.close()
         }
     }
     if (result == null) {
@@ -8111,5 +7514,961 @@ private fun getFileName(context: Context, uri: Uri): String? {
         }
     }
     return result
+}
+
+@Composable
+fun JdOptimizerInputView(
+    jdInput: String,
+    onJdChanged: (String) -> Unit,
+    onAnalyzeClick: () -> Unit,
+    onPasteClick: () -> Unit,
+    onClearClick: () -> Unit,
+    errorMessage: String?,
+    hasStoredResume: Boolean,
+    onUploadClick: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Tailor your resume to a job",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Paste a job description and NoviQ will identify specific parts of your resume that can be improved.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        if (!hasStoredResume) {
+            item {
+                AstraCard(containerColor = Color(0xFFFEF3C7), borderColor = WarningAmber.copy(alpha = 0.5f)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, tint = WarningAmber, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("No Resume Found", fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                        }
+                        Text("Analyze your resume first so NoviQ can optimize it.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF78350F))
+                        Button(onClick = onUploadClick, colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
+                            Text("Upload Resume", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            AstraCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = jdInput,
+                        onValueChange = onJdChanged,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp),
+                        placeholder = {
+                            Text(
+                                "Paste job description here...\n\nExample:\nWe are looking for an Android Developer with 3+ years of experience in Kotlin and Jetpack Compose...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted
+                            )
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Primary,
+                            unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = SurfaceVariant,
+                            unfocusedContainerColor = SurfaceVariant
+                        )
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = onPasteClick, shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Paste from Clipboard", style = MaterialTheme.typography.labelSmall)
+                        }
+
+                        if (jdInput.isNotBlank()) {
+                            TextButton(onClick = onClearClick) {
+                                Text("Clear", style = MaterialTheme.typography.labelSmall, color = ErrorRed)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!errorMessage.isNullOrBlank()) {
+            item {
+                Text(errorMessage, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        item {
+            PremiumButton(
+                text = "Analyze Resume",
+                onClick = onAnalyzeClick,
+                enabled = hasStoredResume && jdInput.isNotBlank()
+            )
+        }
+        
+        item { Spacer(modifier = Modifier.height(40.dp)) }
+    }
+}
+
+@Composable
+fun JdAnalysisAnimationView(
+    stageIndex: Int,
+    stages: List<String>
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AstraCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Resume Scanner Animation
+                Box(
+                    modifier = Modifier.size(width = 180.dp, height = 240.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ResumeScannerMockup(isScanning = true)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("AI Analysis in Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Tailoring your resume for the best alignment", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                }
+
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    stages.forEachIndexed { index, stage ->
+                        val isDone = index < stageIndex
+                        val isCurrent = index == stageIndex
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().alpha(if (isDone || isCurrent) 1f else 0.4f)
+                        ) {
+                            if (isDone) {
+                                Icon(Icons.Default.CheckCircle, null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                            } else if (isCurrent) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Primary)
+                            } else {
+                                Box(modifier = Modifier.size(18.dp).background(BorderColor, CircleShape))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = stage,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isCurrent) Primary else TextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ResumeScannerMockup(isScanning: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val scanProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    Box(
+        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(Color.White).border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+    ) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.fillMaxWidth(0.5f).height(10.dp).background(SurfaceVariant))
+            Box(modifier = Modifier.fillMaxWidth(0.3f).height(6.dp).background(SurfaceVariant.copy(alpha = 0.6f)))
+            Spacer(modifier = Modifier.height(16.dp))
+            repeat(8) {
+                Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(SurfaceVariant.copy(alpha = 0.4f)))
+            }
+        }
+
+        if (isScanning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .offset(y = 240.dp * scanProgress)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Primary, Color.Transparent)))
+                    .shadow(4.dp, spotColor = Primary)
+            )
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(scanProgress)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Primary.copy(alpha = 0.05f))))
+            )
+        }
+    }
+}
+
+@Composable
+fun ResumeOptimizationDashboard(
+    resume: ResumeAnalysisResult,
+    optimizationState: ResumeOptimizationState,
+    onSuggestionClick: (OptimizationSuggestion) -> Unit,
+    onGeneratePdf: () -> Unit,
+    onPrevImprovement: () -> Unit,
+    onNextImprovement: () -> Unit
+) {
+    val suggestions = optimizationState.suggestions
+    val totalImprovements = suggestions.size
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Summary bar
+        Surface(color = Surface, shadowElevation = 4.dp) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("$totalImprovements targeted improvements found", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Text("Tap highlighted areas to review suggestions", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                }
+            }
+        }
+
+        // Resume View Area
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (resume.layoutInfo?.pdfUri != null) {
+                InteractiveResumeViewer(
+                    resume = resume,
+                    suggestions = suggestions,
+                    onSuggestionClick = onSuggestionClick,
+                    currentSuggestionIndex = optimizationState.currentImprovementIndex
+                )
+            } else {
+                // Fallback to text-based if no PDF
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SummaryChip("${optimizationState.skillGaps.size} Gaps", WarningAmber)
+                            SummaryChip("${optimizationState.keywordOpportunities.size} Keywords", SuccessGreen)
+                            SummaryChip("${suggestions.count { it.state != SuggestionState.UNREVIEWED }} Reviewed", Primary)
+                        }
+                    }
+                    item {
+                        OptimizableResumeDocument(
+                            resume = resume,
+                            suggestions = suggestions,
+                            onSuggestionClick = onSuggestionClick
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(100.dp)) }
+                }
+            }
+        }
+
+        // Bottom Action
+        Surface(color = Surface, shadowElevation = 8.dp) {
+            Box(modifier = Modifier.padding(16.dp)) {
+                Button(
+                    onClick = onGeneratePdf,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) {
+                    Text("Generate Optimized Resume", modifier = Modifier.padding(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SummaryChip(label: String, color: Color) {
+    Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.1f), border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.3f))) {
+        Text(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun InteractiveResumeViewer(
+    resume: ResumeAnalysisResult,
+    suggestions: List<OptimizationSuggestion>,
+    onSuggestionClick: (OptimizationSuggestion) -> Unit,
+    currentSuggestionIndex: Int
+) {
+    val layout = resume.layoutInfo ?: return
+    val pdfUriStr = layout.pdfUri ?: return
+    val pdfUri = Uri.parse(pdfUriStr)
+    val context = LocalContext.current
+    
+    val scrollState = rememberScrollState()
+    var pageCount by remember { mutableIntStateOf(0) }
+    val pageSizes = remember { mutableStateMapOf<Int, Size>() }
+    var renderError by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(pdfUri) {
+        withContext(Dispatchers.IO) {
+            try {
+                val pfd = if (pdfUri.scheme == "file") {
+                    android.os.ParcelFileDescriptor.open(java.io.File(pdfUri.path!!), android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+                } else {
+                    context.contentResolver.openFileDescriptor(pdfUri, "r")
+                }
+                
+                pfd?.use {
+                    val renderer = PdfRenderer(it)
+                    pageCount = renderer.pageCount
+                    renderer.close()
+                } ?: run { renderError = "Could not open resume file" }
+            } catch (e: Exception) {
+                Log.e("InteractiveResumeViewer", "Failed to count pages", e)
+                renderError = "Error loading resume: ${e.message}"
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFE5E5E5))) {
+        if (renderError != null) {
+            Column(
+                modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.ErrorOutline, null, tint = ErrorRed, modifier = Modifier.size(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(renderError!!, textAlign = TextAlign.Center, color = TextSecondary)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { renderError = null }) { Text("Retry") }
+            }
+        } else if (pageCount == 0) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Primary)
+        } else {
+            Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    for (i in 0 until pageCount) {
+                        Box(
+                            modifier = Modifier
+                                .shadow(8.dp, RoundedCornerShape(2.dp))
+                                .background(Color.White)
+                                .fillMaxWidth()
+                                .aspectRatio(if (pageSizes[i] != null) pageSizes[i]!!.width / pageSizes[i]!!.height else 0.707f)
+                        ) {
+                            PdfPageWithOverlays(
+                                pdfUri = pdfUri,
+                                pageIndex = i,
+                                suggestions = suggestions,
+                                layout = layout,
+                                onSuggestionClick = onSuggestionClick,
+                                onPageMeasured = { size -> pageSizes[i] = size },
+                                currentSuggestionIndex = currentSuggestionIndex
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(80.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ScanningOverlay() {
+    val infiniteTransition = rememberInfiniteTransition()
+    val scanY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.01f)
+                .align(Alignment.TopCenter)
+                .offset(y = 1000.dp * scanY)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Primary, Color.Transparent)))
+        )
+    }
+}
+
+@Composable
+fun PdfPageWithOverlays(
+    pdfUri: Uri,
+    pageIndex: Int,
+    suggestions: List<OptimizationSuggestion>,
+    layout: ResumeLayout,
+    onSuggestionClick: (OptimizationSuggestion) -> Unit,
+    onPageMeasured: (Size) -> Unit,
+    currentSuggestionIndex: Int
+) {
+    val context = LocalContext.current
+    val bitmapState = remember(pdfUri, pageIndex) { mutableStateOf<Bitmap?>(null) }
+    
+    var pageWidth by remember { mutableFloatStateOf(612f) }
+    var pageHeight by remember { mutableFloatStateOf(792f) }
+    
+    // Animation states
+    var startHighlightAnimation by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(300) // Small delay after page appearing
+        startHighlightAnimation = true
+    }
+
+    LaunchedEffect(pdfUri, pageIndex) {
+        withContext(Dispatchers.IO) {
+            try {
+                val pfd = if (pdfUri.scheme == "file") {
+                    android.os.ParcelFileDescriptor.open(java.io.File(pdfUri.path!!), android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+                } else {
+                    context.contentResolver.openFileDescriptor(pdfUri, "r")
+                }
+
+                pfd?.use {
+                    val renderer = PdfRenderer(it)
+                    val page = renderer.openPage(pageIndex)
+                    
+                    pageWidth = page.width.toFloat()
+                    pageHeight = page.height.toFloat()
+                    onPageMeasured(Size(pageWidth, pageHeight))
+
+                    val bitmap = Bitmap.createBitmap(page.width * 2, page.height * 2, Bitmap.Config.ARGB_8888)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmapState.value = bitmap
+                    
+                    page.close()
+                    renderer.close()
+                } ?: run {
+                    Log.e("PdfPageWithOverlays", "Failed to open ParcelFileDescriptor for $pdfUri")
+                }
+            } catch (e: Exception) {
+                Log.e("PdfPageWithOverlays", "Failed to render page $pageIndex: ${e.message}", e)
+            }
+        }
+    }
+    
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val canvasWidth = constraints.maxWidth.toFloat()
+        val canvasHeight = constraints.maxHeight.toFloat()
+        val density = LocalContext.current.resources.displayMetrics.density
+        
+        bitmapState.value?.let {
+            Image(
+                bitmap = it.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        
+        // Red Sweep Animation Progress
+        val sweepProgress = animateFloatAsState(
+            targetValue = if (startHighlightAnimation) 1.2f else -0.2f,
+            animationSpec = tween(durationMillis = 1500, easing = LinearOutSlowInEasing)
+        )
+        
+        // Pulsing animation for highlights
+        val infiniteTransition = rememberInfiniteTransition()
+        val pulseAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.15f,
+            targetValue = 0.25f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            )
+        )
+        
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val scaleX = canvasWidth / pageWidth
+            val scaleY = canvasHeight / pageHeight
+            
+            suggestions.forEachIndexed { index, suggestion ->
+                val rects = findTextRectsForSuggestion(suggestion, layout, pageIndex)
+                
+                rects.forEach { rect ->
+                    val isUnreviewed = suggestion.state == SuggestionState.UNREVIEWED
+                    
+                    if (isUnreviewed) {
+                        val drawRect = androidx.compose.ui.geometry.Rect(
+                            rect.left * scaleX, rect.top * scaleY,
+                            rect.right * scaleX, rect.bottom * scaleY
+                        )
+                        
+                        // Red Highlight Sweep Effect
+                        // We highlight only if sweepProgress has reached this vertical position
+                        // Or we can just use sweepProgress as a global X sweep.
+                        // User said: "Red highlight sweeps across affected text"
+                        
+                        val relativeTop = drawRect.top / canvasHeight
+                        val highlightAlpha = if (sweepProgress.value > relativeTop - 0.1f) pulseAlpha else 0f
+                        
+                        drawRoundRect(
+                            color = ErrorRed.copy(alpha = highlightAlpha),
+                            topLeft = Offset(drawRect.left - 2.dp.toPx(), drawRect.top - 1.dp.toPx()),
+                            size = Size(drawRect.width + 4.dp.toPx(), drawRect.height + 2.dp.toPx()),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
+                        )
+                        
+                        // Subtle red border sweep
+                        if (sweepProgress.value in relativeTop - 0.05f..relativeTop + 0.05f) {
+                            drawRoundRect(
+                                color = ErrorRed.copy(alpha = 0.6f),
+                                topLeft = Offset(drawRect.left - 2.dp.toPx(), drawRect.top - 1.dp.toPx()),
+                                size = Size(drawRect.width + 4.dp.toPx(), drawRect.height + 2.dp.toPx()),
+                                style = Stroke(width = 1.5.dp.toPx()),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Replacement Text Overlays (Seamless merging)
+        suggestions.filter { it.state == SuggestionState.ACCEPTED || it.state == SuggestionState.EDITED }.forEach { suggestion ->
+            val rects = findTextRectsForSuggestion(suggestion, layout, pageIndex)
+            if (rects.isNotEmpty()) {
+                val scaleX = canvasWidth / pageWidth
+                val scaleY = canvasHeight / pageHeight
+                
+                rects.forEach { lineRect ->
+                    // Cover original text with white background (matching resume usually)
+                    Box(
+                        modifier = Modifier
+                            .offset(
+                                x = (lineRect.left * scaleX / density).dp,
+                                y = (lineRect.top * scaleY / density).dp
+                            )
+                            .size(
+                                width = (lineRect.width * scaleX / density).dp,
+                                height = (lineRect.height * scaleY / density).dp
+                            )
+                            .background(Color.White) // Assuming white background for seamless merging
+                    )
+                }
+                
+                // Draw new text at the start position of the first rect
+                val firstRect = rects.first()
+                val totalWidth = rects.maxOf { it.right } - rects.minOf { it.left }
+                val totalHeight = rects.maxOf { it.bottom } - rects.minOf { it.top }
+                
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = (rects.minOf { it.left } * scaleX / density).dp,
+                            y = (rects.minOf { it.top } * scaleY / density).dp
+                        )
+                        .size(
+                            width = (totalWidth * scaleX / density).dp,
+                            height = (totalHeight * scaleY / density).dp
+                        )
+                        .padding(horizontal = 1.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = suggestion.manualText ?: suggestion.suggestedText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = (firstRect.height * scaleY / density * 0.75f).sp, // Slightly smaller than box to fit
+                            lineHeight = (firstRect.height * scaleY / density).sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color(0xFF222222) // Professional dark gray/black
+                        ),
+                        maxLines = rects.size,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        
+        // Interactive hit areas
+        suggestions.forEach { suggestion ->
+            if (suggestion.state == SuggestionState.UNREVIEWED) {
+                val rects = findTextRectsForSuggestion(suggestion, layout, pageIndex)
+                rects.forEach { rect ->
+                    val scaleX = canvasWidth / pageWidth
+                    val scaleY = canvasHeight / pageHeight
+                    
+                    Box(
+                        modifier = Modifier
+                            .offset(
+                                x = (rect.left * scaleX / density).dp,
+                                y = (rect.top * scaleY / density).dp
+                            )
+                            .size(
+                                width = (rect.width * scaleX / density).dp,
+                                height = (rect.height * scaleY / density).dp
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                onSuggestionClick(suggestion)
+                            }
+                    )
+                }
+            }
+        }
+    }
+}
+
+fun findTextRectsForSuggestion(suggestion: OptimizationSuggestion, layout: ResumeLayout, pageIndex: Int): List<Rect> {
+    val query = suggestion.originalText.lowercase().trim()
+    if (query.isEmpty()) return emptyList()
+    
+    val pagePositions = layout.textPositions.filter { it.pageIndex == pageIndex }
+    if (pagePositions.isEmpty()) return emptyList()
+
+    val fullText = pagePositions.joinToString("") { it.text }
+    val startIndex = fullText.lowercase().indexOf(query)
+    
+    if (startIndex == -1) return emptyList()
+    
+    val matchedPositions = mutableListOf<com.example.aidrivencompetencyplatform.model.TextPosition>()
+    var charCount = 0
+    for (pos in pagePositions) {
+        val nextCount = charCount + pos.text.length
+        if (nextCount > startIndex && charCount < startIndex + query.length) {
+            matchedPositions.add(pos)
+        }
+        charCount = nextCount
+        if (charCount >= startIndex + query.length) break
+    }
+    
+    if (matchedPositions.isEmpty()) return emptyList()
+
+    // Group by Y to handle multi-line highlights
+    return matchedPositions.groupBy { it.y }.values.map { linePos ->
+        Rect(
+            left = linePos.minOf { it.x },
+            top = linePos.minOf { it.y },
+            right = linePos.maxOf { it.x + it.width },
+            bottom = linePos.maxOf { it.y + it.height }
+        )
+    }
+}
+
+@Composable
+fun OptimizableResumeDocument(
+    resume: ResumeAnalysisResult,
+    suggestions: List<OptimizationSuggestion>,
+    onSuggestionClick: (OptimizationSuggestion) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+        color = Color.White,
+        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(4.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            // Header
+            Text(resume.candidateName ?: "Candidate", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.Black)
+            Text("${resume.candidateEmail ?: ""} | ${resume.candidatePhone ?: ""} | ${resume.candidateLocation ?: ""}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Summary
+            ResumeSectionHeader("PROFESSIONAL SUMMARY")
+            HighlightableResumeText(
+                text = resume.summary ?: "",
+                section = "SUMMARY",
+                suggestions = suggestions,
+                onSuggestionClick = onSuggestionClick
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Experience
+            ResumeSectionHeader("WORK EXPERIENCE")
+            resume.experience?.forEach { exp ->
+                HighlightableResumeText(
+                    text = exp,
+                    section = "EXPERIENCE",
+                    suggestions = suggestions,
+                    onSuggestionClick = onSuggestionClick
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            
+            // Projects
+            ResumeSectionHeader("PROJECTS")
+            resume.projectAnalysis?.forEach { proj ->
+                Text(proj.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = Color.Black)
+                HighlightableResumeText(
+                    text = proj.strengths?.joinToString("; ") ?: "",
+                    section = "PROJECTS",
+                    suggestions = suggestions,
+                    onSuggestionClick = onSuggestionClick
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Skills
+            ResumeSectionHeader("TECHNICAL SKILLS")
+            val skillsText = resume.extractedSkills?.joinToString(", ") { it.name } ?: ""
+            HighlightableResumeText(
+                text = skillsText,
+                section = "SKILLS",
+                suggestions = suggestions,
+                onSuggestionClick = onSuggestionClick
+            )
+        }
+    }
+}
+
+@Composable
+fun ResumeSectionHeader(title: String) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = Primary, letterSpacing = 1.sp)
+        HorizontalDivider(color = Primary.copy(alpha = 0.3f), thickness = 1.dp)
+        Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+@Composable
+fun HighlightableResumeText(
+    text: String,
+    section: String,
+    suggestions: List<OptimizationSuggestion>,
+    onSuggestionClick: (OptimizationSuggestion) -> Unit
+) {
+    val relevantSuggestions = suggestions.filter { 
+        it.section.uppercase() == section.uppercase() && text.contains(it.originalText) 
+    }
+    
+    if (relevantSuggestions.isEmpty()) {
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.Black, lineHeight = 20.sp)
+    } else {
+        val annotatedString = buildAnnotatedString {
+            var currentIndex = 0
+            val sortedSuggestions = relevantSuggestions.sortedBy { text.indexOf(it.originalText) }
+            
+            for (suggestion in sortedSuggestions) {
+                val startIndex = text.indexOf(suggestion.originalText, currentIndex)
+                if (startIndex >= currentIndex) {
+                    append(text.substring(currentIndex, startIndex))
+                    
+                    val highlightColor = when (suggestion.state) {
+                        SuggestionState.ACCEPTED, SuggestionState.EDITED -> SuccessGreen.copy(alpha = 0.2f)
+                        SuggestionState.DISMISSED, SuggestionState.ORIGINAL_KEPT -> Color.Transparent
+                        else -> Primary.copy(alpha = 0.15f)
+                    }
+                    
+                    pushStringAnnotation(tag = "SUGGESTION", annotation = suggestion.changeId)
+                    withStyle(style = SpanStyle(
+                        background = highlightColor,
+                        fontWeight = if (suggestion.state == SuggestionState.UNREVIEWED) FontWeight.Bold else FontWeight.Normal,
+                        textDecoration = if (suggestion.state == SuggestionState.UNREVIEWED) androidx.compose.ui.text.style.TextDecoration.Underline else null
+                    )) {
+                        append(suggestion.originalText)
+                    }
+                    pop()
+                    currentIndex = startIndex + suggestion.originalText.length
+                }
+            }
+            append(text.substring(currentIndex))
+        }
+        
+        androidx.compose.foundation.text.ClickableText(
+            text = annotatedString,
+            style = MaterialTheme.typography.bodyMedium.copy(color = Color.Black, lineHeight = 20.sp),
+            onClick = { offset ->
+                annotatedString.getStringAnnotations(tag = "SUGGESTION", start = offset, end = offset)
+                    .firstOrNull()?.let { annotation ->
+                        suggestions.find { it.changeId == annotation.item }?.let { onSuggestionClick(it) }
+                    }
+            }
+        )
+    }
+}
+
+@Composable
+fun SuggestionPanel(
+    suggestion: OptimizationSuggestion,
+    onKeepChange: (String) -> Unit,
+    onDiscard: () -> Unit
+) {
+    var editedText by remember { mutableStateOf(suggestion.manualText ?: suggestion.suggestedText) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
+            .navigationBarsPadding()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Suggested Improvement", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Text("ORIGINAL", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontWeight = FontWeight.Bold)
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            color = Color(0xFFF5F5F5),
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEEEEEE))
+        ) {
+            Text(
+                suggestion.originalText,
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text("SUGGESTED (EDITABLE)", style = MaterialTheme.typography.labelSmall, color = Primary, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            value = editedText,
+            onValueChange = { editedText = it },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            shape = RoundedCornerShape(8.dp),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = Primary.copy(alpha = 0.02f),
+                focusedContainerColor = Primary.copy(alpha = 0.02f),
+                unfocusedBorderColor = Primary.copy(alpha = 0.2f),
+                focusedBorderColor = Primary
+            )
+        )
+        
+        Spacer(modifier = Modifier.height(20.dp))
+        
+        Text("WHY THIS CHANGE?", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
+        Text(suggestion.reason, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = onDiscard,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDDDDD))
+            ) {
+                Text("Discard", color = TextSecondary)
+            }
+            
+            Button(
+                onClick = { onKeepChange(editedText) },
+                modifier = Modifier.weight(1.5f),
+                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Keep Change", fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+    }
+}
+
+@Composable
+fun SuggestionBox(label: String, content: String, color: Color) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold)
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            color = color.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.2f))
+        ) {
+            Text(
+                content,
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary
+            )
+        }
+    }
+}
+
+@Composable
+fun OptimizedResumePreview(
+    resume: ResumeAnalysisResult,
+    jdTitle: String,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onSave: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().background(Background)) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Optimized Resume Ready", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Tailored for $jdTitle", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+            }
+        }
+        
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)) {
+            if (resume.layoutInfo?.pdfUri != null) {
+                InteractiveResumeViewer(
+                    resume = resume,
+                    suggestions = emptyList(), // Final view
+                    onSuggestionClick = {},
+                    currentSuggestionIndex = -1
+                )
+            } else {
+                OptimizableResumeDocument(resume, emptyList(), {})
+            }
+        }
+        
+        Surface(color = Surface, shadowElevation = 8.dp) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+                    Text("Back to Editor")
+                }
+                Button(onClick = onSave, modifier = Modifier.weight(1.5f), colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
+                    Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save PDF")
+                }
+                IconButton(onClick = onShare) {
+                    Icon(Icons.Default.Share, null, tint = Primary)
+                }
+            }
+        }
+    }
 }
 

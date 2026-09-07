@@ -14,9 +14,15 @@ class AstraApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         sessionManager = SessionManager(this)
         preferenceManager = PreferenceManager(this)
         resumeParser = ResumeParser(this)
         geminiService = GeminiService()
+    }
+
+    companion object {
+        lateinit var instance: AstraApp
+            private set
     }
 }

@@ -1,21 +1,16 @@
 package com.example.aidrivencompetencyplatform.ui.screens
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -26,26 +21,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -146,19 +132,6 @@ fun LoginScreen(navController: NavController) {
             verticalArrangement = Arrangement.Top
         ) {
             Spacer(modifier = Modifier.weight(1f, fill = false))
-
-            // Diagnostic Lab shortcut for keyboard & IME debugging
-            TextButton(
-                onClick = { navController.navigate(Screen.KeyboardTest.route) }
-            ) {
-                Text(
-                    text = "🛠️ Keyboard Diagnostic Test Lab",
-                    fontSize = 12.sp,
-                    color = PrimaryDark,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
 
             NoviQLogoTile(size = 72.dp, elevation = 4.dp)
             Spacer(modifier = Modifier.height(16.dp))
@@ -468,7 +441,6 @@ fun SignupScreen(navController: NavController) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthTextField(
     value: String,
@@ -484,44 +456,10 @@ fun AuthTextField(
 ) {
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusRequester = remember { FocusRequester() }
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    // Explicitly maintain TextFieldValue with valid selection so Compose always renders the blinking cursor
-    var textFieldValue by remember {
-        mutableStateOf(
-            TextFieldValue(
-                text = value,
-                selection = TextRange(value.length)
-            )
-        )
-    }
-
-    // Keep internal text state synchronized with external value changes
-    LaunchedEffect(value) {
-        if (textFieldValue.text != value) {
-            textFieldValue = textFieldValue.copy(
-                text = value,
-                selection = TextRange(value.length)
-            )
-        }
-    }
-
-    // Automatically prompt keyboard whenever field gains focus
-    LaunchedEffect(isFocused) {
-        if (isFocused) {
-            keyboardController?.show()
-        }
-    }
 
     OutlinedTextField(
-        value = textFieldValue,
-        onValueChange = { newTfv ->
-            textFieldValue = newTfv
-            onValueChange(newTfv.text)
-        },
+        value = value,
+        onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = placeholder?.let { { Text(it, color = TextMuted) } },
         leadingIcon = { 
@@ -547,10 +485,7 @@ fun AuthTextField(
         } else {
             VisualTransformation.None
         },
-        interactionSource = interactionSource,
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusRequester(focusRequester),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         enabled = enabled,
         singleLine = true,
@@ -575,7 +510,7 @@ fun AuthTextField(
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = TextPrimary,
             unfocusedTextColor = TextPrimary,
-            cursorColor = TextPrimary,
+            cursorColor = Primary,
             errorCursorColor = ErrorRed,
             selectionColors = TextSelectionColors(
                 handleColor = Primary,
@@ -596,4 +531,5 @@ fun AuthTextField(
         )
     )
 }
+
 

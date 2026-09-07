@@ -2,6 +2,13 @@ package com.example.aidrivencompetencyplatform.viewmodel
 
 import android.net.Uri
 import android.util.Log
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
+import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
+import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
+import java.io.FileOutputStream
+import java.io.File
+import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aidrivencompetencyplatform.data.AtsScoringEngine
@@ -305,7 +312,8 @@ data class DetailedSkillItem(
     val learningTips: List<String> = emptyList(),
     val suggestedMilestone: String = "",
     val isMatched: Boolean = proficiency == SkillProficiency.PRESENT,
-    val targetRole: String = ""
+    val targetRole: String = "",
+    val recommendedCourse: RecommendedCourse? = null
 )
 
 data class LearningRoadmapPhase(
@@ -343,6 +351,7 @@ data class SkillGapState(
     val strongSkills: List<DetailedSkillItem> = emptyList(),
     val developingSkills: List<DetailedSkillItem> = emptyList(),
     val missingSkills: List<DetailedSkillItem> = emptyList(),
+    val remainingMissingSkills: List<DetailedSkillItem> = emptyList(),
     val allSkillsDetailed: List<DetailedSkillItem> = emptyList(),
     val categoryCoverage: List<SkillCategoryCoverage> = emptyList(),
     val priorityLearningItems: List<DetailedSkillItem> = emptyList(),
@@ -518,6 +527,327 @@ object RoleSkillsData {
         }
     }
 
+    fun getRecommendedFreeCourse(
+        skill: String,
+        targetRole: String = "",
+        customExplanation: String? = null
+    ): RecommendedCourse {
+        val s = skill.trim().lowercase()
+        val defaultExp = customExplanation ?: "Recommended because $skill is listed in the job description but is not sufficiently demonstrated in your resume."
+
+        return when {
+            s == "kotlin" -> RecommendedCourse(
+                title = "Android Basics with Compose (Kotlin)",
+                provider = "Google Developers & Android Official",
+                description = "Master Kotlin syntax, coroutines, and modern Android development with official hands-on codelabs.",
+                courseUrl = "https://developer.android.com/courses/android-basics-compose/course",
+                originalTitle = "Android Basics with Compose (Kotlin)",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "jetpack compose" -> RecommendedCourse(
+                title = "Jetpack Compose Fundamentals",
+                provider = "Google Android Developers",
+                description = "Learn declarative UI architecture, state management, layouts, and animations in Jetpack Compose.",
+                courseUrl = "https://developer.android.com/develop/ui/compose/tutorial",
+                originalTitle = "Jetpack Compose Tutorial & Codelabs",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "android sdk" || s == "android studio" || s == "android" -> RecommendedCourse(
+                title = "Android App Development with Kotlin",
+                provider = "Google Developers Training",
+                description = "Learn Activity/Fragment lifecycles, background tasks, WorkManager, and Android system services.",
+                courseUrl = "https://developer.android.com/courses",
+                originalTitle = "Android App Development with Kotlin",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "room database" || s == "room" -> RecommendedCourse(
+                title = "Room Database & Persistence",
+                provider = "Android Developers Codelabs",
+                description = "Learn SQLite persistence, DAOs, entities, and Flow-based reactive queries in Android.",
+                courseUrl = "https://developer.android.com/codelabs/basic-android-kotlin-compose-persisting-data-room",
+                originalTitle = "Persisting Data with Room Database",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "java" || s == "oop" || s == "collections" || s == "multithreading" || s == "exception handling" -> RecommendedCourse(
+                title = "Java Programming Fundamentals",
+                provider = "University of Helsinki (MOOC.fi)",
+                description = "Master object-oriented programming, data structures, multithreading, and enterprise Java principles.",
+                courseUrl = "https://java-programming.mooc.fi/",
+                originalTitle = "Java Programming Comprehensive Course",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "spring" || s == "spring boot" || s == "hibernate" -> RecommendedCourse(
+                title = "Spring Boot Microservices",
+                provider = "Spring.io Official Guides",
+                description = "Build production-ready RESTful web services, dependency injection, and data persistence with Spring Boot.",
+                courseUrl = "https://spring.io/guides/gs/spring-boot/",
+                originalTitle = "Building Microservices with Spring Boot",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "python" -> RecommendedCourse(
+                title = "Python Programming Fundamentals",
+                provider = "Harvard University (edX / Free)",
+                description = "Learn foundational and advanced Python syntax, data structures, libraries, and automated testing.",
+                courseUrl = "https://cs50.harvard.edu/python/",
+                originalTitle = "CS50's Introduction to Programming with Python",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "sql" || s == "sqlite" || s == "jdbc" -> RecommendedCourse(
+                title = "SQL & Relational Databases",
+                provider = "Khan Academy & Mode Analytics",
+                description = "Master relational database querying, joins, aggregations, subqueries, and table indexing.",
+                courseUrl = "https://www.khanacademy.org/computing/computer-programming/sql",
+                originalTitle = "Intro to SQL: Querying and Managing Data",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "postgresql" -> RecommendedCourse(
+                title = "PostgreSQL Developer Guide",
+                provider = "PostgreSQL Official / Tutorial",
+                description = "Learn advanced SQL queries, JSONB indexing, ACID transactions, and performance tuning in Postgres.",
+                courseUrl = "https://www.postgresqltutorial.com/",
+                originalTitle = "PostgreSQL Tutorial for Developers",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "mongodb" -> RecommendedCourse(
+                title = "MongoDB Developer Learning Path",
+                provider = "MongoDB University",
+                description = "Learn document database modeling, aggregation pipelines, indexing, and CRUD operations.",
+                courseUrl = "https://learn.mongodb.com/",
+                originalTitle = "MongoDB Developer Learning Path",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "react" || s == "react.js" -> RecommendedCourse(
+                title = "React Fundamentals",
+                provider = "React.dev (Meta Open Source)",
+                description = "Learn modern component architecture, hooks (useState, useEffect), and reactive state rendering.",
+                courseUrl = "https://react.dev/learn",
+                originalTitle = "React Official Interactive Tutorial",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "node.js" || s == "express.js" || s == "node" || s == "express" -> RecommendedCourse(
+                title = "Node.js & Express Backend",
+                provider = "freeCodeCamp",
+                description = "Learn server-side JavaScript, Express routing, middleware, authentication, and REST APIs.",
+                courseUrl = "https://www.freecodecamp.org/learn/back-end-development-and-apis/",
+                originalTitle = "Back End Development and APIs with Node.js",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "javascript" -> RecommendedCourse(
+                title = "JavaScript Fundamentals",
+                provider = "freeCodeCamp",
+                description = "Master ES6+ syntax, asynchronous JavaScript (Promises/Async-Await), and DOM manipulation.",
+                courseUrl = "https://www.freecodecamp.org/learn/javascript-algorithms-and-data-structures-v8/",
+                originalTitle = "JavaScript Algorithms and Data Structures",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "typescript" -> RecommendedCourse(
+                title = "TypeScript Fundamentals",
+                provider = "Microsoft TypeScript Official",
+                description = "Master static typing, generics, utility types, and type inference for robust application design.",
+                courseUrl = "https://www.typescriptlang.org/docs/handbook/intro.html",
+                originalTitle = "TypeScript Handbook & Practical Guide",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "html" || s == "css" || s == "responsive design" -> RecommendedCourse(
+                title = "Responsive Web Design Fundamentals",
+                provider = "freeCodeCamp",
+                description = "Learn HTML5 semantic structuring, CSS Flexbox, Grid, and mobile-first responsive design.",
+                courseUrl = "https://www.freecodecamp.org/learn/2022/responsive-web-design/",
+                originalTitle = "Responsive Web Design Certification",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "git" || s == "github" -> RecommendedCourse(
+                title = "Git & GitHub Version Control",
+                provider = "Git-SCM Documentation & freeCodeCamp",
+                description = "Learn branching, merge strategies, interactive rebasing, pull requests, and CI workflows.",
+                courseUrl = "https://git-scm.com/doc",
+                originalTitle = "Version Control with Git & GitHub",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "docker" -> RecommendedCourse(
+                title = "Docker & Containerization",
+                provider = "Docker Official Documentation",
+                description = "Learn Dockerfile authoring, multi-stage builds, container networking, and Docker Compose.",
+                courseUrl = "https://docs.docker.com/get-started/",
+                originalTitle = "Docker for Beginners & Containerization",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "machine learning" || s == "scikit-learn" || s == "model evaluation" -> RecommendedCourse(
+                title = "Machine Learning Fundamentals",
+                provider = "Kaggle Learn / freeCodeCamp",
+                description = "Learn supervised learning, regression, classification, cross-validation, and model evaluation.",
+                courseUrl = "https://www.kaggle.com/learn/intro-to-machine-learning",
+                originalTitle = "Intro to Machine Learning with Python",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "deep learning" || s == "pytorch" -> RecommendedCourse(
+                title = "PyTorch Deep Learning",
+                provider = "PyTorch.org Official Tutorials",
+                description = "Learn neural networks, backpropagation, CNNs, RNNs, and Transformers with PyTorch.",
+                courseUrl = "https://pytorch.org/tutorials/",
+                originalTitle = "Deep Learning with PyTorch Tutorial",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "tensorflow" -> RecommendedCourse(
+                title = "TensorFlow Core Fundamentals",
+                provider = "Google TensorFlow",
+                description = "Build and train neural networks, Keras sequential models, and model export pipelines.",
+                courseUrl = "https://www.tensorflow.org/tutorials",
+                originalTitle = "TensorFlow Core Tutorials",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "pandas" || s == "numpy" || s == "data cleaning" -> RecommendedCourse(
+                title = "Pandas Data Manipulation",
+                provider = "Kaggle Learn",
+                description = "Master DataFrame transformations, exploratory data analysis, filtering, and indexing.",
+                courseUrl = "https://www.kaggle.com/learn/pandas",
+                originalTitle = "Pandas & Data Manipulation Course",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "power bi" -> RecommendedCourse(
+                title = "Power BI Guided Learning",
+                provider = "Microsoft Learn",
+                description = "Learn data modeling, DAX formulas, interactive visual dashboards, and report publication.",
+                courseUrl = "https://learn.microsoft.com/en-us/training/powerplatform/power-bi",
+                originalTitle = "Microsoft Power BI Guided Learning",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "tableau" -> RecommendedCourse(
+                title = "Tableau Analytics & Dashboards",
+                provider = "Tableau Official Learning",
+                description = "Build interactive business dashboards, geospatial maps, and predictive trend charts.",
+                courseUrl = "https://www.tableau.com/learn/training",
+                originalTitle = "Tableau Free Training & Data Visuals",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "statistics" || s == "probability" -> RecommendedCourse(
+                title = "Statistics & Probability",
+                provider = "Khan Academy",
+                description = "Learn descriptive statistics, probability distributions, hypothesis testing, and regression analysis.",
+                courseUrl = "https://www.khanacademy.org/math/statistics-probability",
+                originalTitle = "Statistics and Probability for Data Science",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "data visualization" -> RecommendedCourse(
+                title = "Data Visualization Fundamentals",
+                provider = "Kaggle Learn",
+                description = "Create impactful charts using Seaborn, Matplotlib, and plot styling best practices.",
+                courseUrl = "https://www.kaggle.com/learn/data-visualization",
+                originalTitle = "Data Visualization Micro-Course",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "model deployment" || s == "mlops" -> RecommendedCourse(
+                title = "MLOps & Model Deployment",
+                provider = "Google Cloud / freeCodeCamp",
+                description = "Deploy ML models as scalable REST endpoints using FastAPI, Docker, and cloud runtimes.",
+                courseUrl = "https://www.freecodecamp.org/news/how-to-deploy-machine-learning-models/",
+                originalTitle = "Machine Learning Model Deployment Guide",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "feature engineering" -> RecommendedCourse(
+                title = "Feature Engineering Guide",
+                provider = "Kaggle Learn",
+                description = "Learn mutual information, target encoding, principal component analysis (PCA), and scaling.",
+                courseUrl = "https://www.kaggle.com/learn/feature-engineering",
+                originalTitle = "Feature Engineering for Machine Learning",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "firebase" -> RecommendedCourse(
+                title = "Firebase Cloud & Auth",
+                provider = "Google Firebase Guides",
+                description = "Integrate Firestore, Firebase Authentication, Cloud Functions, and push notifications.",
+                courseUrl = "https://firebase.google.com/docs/guides",
+                originalTitle = "Firebase Fundamentals for Developers",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "figma" || s == "wireframing" || s == "prototyping" || s == "design systems" || s == "user flows" || s == "interaction design" || s == "visual design" || s == "typography" || s == "color theory" || s == "usability testing" || s == "user research" -> RecommendedCourse(
+                title = "Figma & UI/UX Design",
+                provider = "Figma Official Resource Library",
+                description = "Master wireframing, interactive prototyping, auto-layout, design tokens, and usability testing.",
+                courseUrl = "https://www.figma.com/resource-library/learn-figma/",
+                originalTitle = "Figma for Beginners & UI/UX Design",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "rest apis" || s == "json" -> RecommendedCourse(
+                title = "REST API Architecture",
+                provider = "MDN Web Docs",
+                description = "Learn HTTP methods, status codes, REST conventions, JSON serialization, and API security.",
+                courseUrl = "https://developer.mozilla.org/en-US/docs/Learn/Server-side/First_steps/Web_frameworks",
+                originalTitle = "RESTful API Design and Web Architecture",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "material design" || s == "xml" -> RecommendedCourse(
+                title = "Material Design Guidelines",
+                provider = "Google Material Design",
+                description = "Learn accessible UI styling, dynamic color, typography scales, and component guidelines.",
+                courseUrl = "https://m3.material.io/",
+                originalTitle = "Material Design 3 Architecture & Guidelines",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "gradle" || s == "maven" -> RecommendedCourse(
+                title = "Gradle & Maven Automation",
+                provider = "Gradle Guides / Baeldung",
+                description = "Learn build lifecycles, dependency management, plugins, and multi-module configurations.",
+                courseUrl = "https://docs.gradle.org/current/userguide/getting_started.html",
+                originalTitle = "Build Automation with Gradle & Maven",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "authentication" -> RecommendedCourse(
+                title = "Web Security & Auth",
+                provider = "MDN Web Docs",
+                description = "Learn JWT tokens, OAuth 2.0 flows, session management, and credential security.",
+                courseUrl = "https://developer.mozilla.org/en-US/docs/Learn/Server-side/First_steps/Website_security",
+                originalTitle = "Web Security & Authentication Fundamentals",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            else -> {
+                val cleanTitle = if (skill.length > 28) "$skill Fundamentals" else "$skill Fundamentals & Best Practices"
+                RecommendedCourse(
+                    title = cleanTitle,
+                    provider = "freeCodeCamp / Developer Docs",
+                    description = "Learn core concepts, practical syntax, and architectural patterns to master $skill for $targetRole.",
+                    courseUrl = "https://www.freecodecamp.org/news/search/?query=" + java.net.URLEncoder.encode(skill, "UTF-8"),
+                    originalTitle = "$skill Fundamentals & Best Practices",
+                    missingSkill = skill,
+                    explanation = defaultExp
+                )
+            }
+        }
+    }
+
     fun isSkillMatched(requiredSkill: String, userSkills: List<String>): Boolean {
         val reqLower = requiredSkill.trim().lowercase()
         val userLowers = userSkills.map { it.trim().lowercase() }
@@ -635,6 +965,7 @@ class SkillGapViewModel(
             val whyItMatters = RoleSkillsData.getSkillWhyItMatters(reqSkill, role)
             val tips = RoleSkillsData.getSkillLearningTips(reqSkill)
             val milestone = RoleSkillsData.getSkillSuggestedMilestone(reqSkill)
+            val course = RoleSkillsData.getRecommendedFreeCourse(reqSkill, role)
 
             if (isMatched) {
                 matchedNames.add(reqSkill)
@@ -653,7 +984,8 @@ class SkillGapViewModel(
                     learningTips = tips,
                     suggestedMilestone = milestone,
                     isMatched = true,
-                    targetRole = role
+                    targetRole = role,
+                    recommendedCourse = course
                 )
 
                 presentList.add(item)
@@ -672,7 +1004,8 @@ class SkillGapViewModel(
                     learningTips = tips,
                     suggestedMilestone = milestone,
                     isMatched = false,
-                    targetRole = role
+                    targetRole = role,
+                    recommendedCourse = course
                 )
                 missingList.add(item)
                 allDetailedList.add(item)
@@ -708,6 +1041,9 @@ class SkillGapViewModel(
                 SkillPriority.NICE_TO_HAVE -> 3
             }}
         )
+
+        val top3MissingNames = priorityItems.take(3).map { it.name }.toSet()
+        val remainingMissing = missingList.filterNot { it.name in top3MissingNames }
 
         // Generate 4-Phase Learning Roadmap (Start -> Build -> Practice -> Apply)
         val phase1Skills = allDetailedList.filter { it.category == "Languages & Core" }.map { it.name }.take(3)
@@ -767,6 +1103,7 @@ class SkillGapViewModel(
             strongSkills = presentList,
             developingSkills = emptyList(),
             missingSkills = missingList,
+            remainingMissingSkills = remainingMissing,
             allSkillsDetailed = allDetailedList,
             categoryCoverage = categoryCoverages,
             priorityLearningItems = priorityItems,
@@ -803,7 +1140,8 @@ class SkillGapViewModel(
                 currentLevelPercent = if (skill.isMatched) 100 else 0,
                 whyItMatters = "Required skill for ${skill.targetRole}",
                 evidenceOrReason = if (skill.isMatched) "Detected in profile." else "Missing from profile.",
-                targetRole = skill.targetRole
+                targetRole = skill.targetRole,
+                recommendedCourse = RoleSkillsData.getRecommendedFreeCourse(skill.name, skill.targetRole)
             )
         }
     }
@@ -869,10 +1207,15 @@ class ResumeViewModel(
 
     fun onFileSelected(uri: Uri, name: String) {
         Log.d(TAG, "RESUME_URI_RECEIVED: $uri, FileName: $name")
-        selectedUri = uri
-        sampleResumeText = null
-        _selectedFileName.value = name
-        _errorMessage.value = null
+        val localUri = resumeParser.saveUriToLocalCache(uri)
+        if (localUri != null) {
+            selectedUri = localUri
+            sampleResumeText = null
+            _selectedFileName.value = name
+            _errorMessage.value = null
+        } else {
+            _errorMessage.value = "Failed to access the selected file. Please try again."
+        }
     }
 
     fun loadSampleResume(targetRole: String = "Android Developer") {
@@ -937,6 +1280,12 @@ class ResumeViewModel(
                     }
                 }
 
+                val layout = withContext(Dispatchers.IO) {
+                    if (selectedUri != null) {
+                        resumeParser.extractLayout(selectedUri!!)
+                    } else null
+                }
+
                 if (text == ResumeParser.ERROR_SCANNED_PDF) {
                     throw Exception("This PDF appears to be a scanned image. Please upload a text-based PDF or DOCX file for accurate analysis.")
                 }
@@ -976,7 +1325,9 @@ class ResumeViewModel(
                 }
 
                 // Merge deterministic structure with AI results, prioritizing valid details
-                // CRITICAL: Explicitly assign a new unique ID to every single analysis result here
+                // If Gemini succeeded (did not return synthesize result), we trust its classification of empty lists.
+                val isSynthesized = aiResult.summary == "Synthesized Analysis" // Heuristic for fallback
+
                 fun sanitizeCandidate(value: String?): String? {
                     if (value.isNullOrBlank()) return null
                     val clean = value.trim()
@@ -993,25 +1344,82 @@ class ResumeViewModel(
                 val candidatePhone = sanitizeCandidate(aiResult.candidatePhone) ?: sanitizeCandidate(structure.candidateInfo.phone)
                 val candidateLocation = sanitizeCandidate(aiResult.candidateLocation) ?: sanitizeCandidate(structure.candidateInfo.location)
 
+                val effectiveSummary = aiResult.summary?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) && !it.equals("Synthesized Analysis", ignoreCase = true) }
+                    ?: structure.summary?.takeIf { it.isNotBlank() }
+                    ?: ""
+
+                // Reconcile Education so 10th, 12th, and College qualifications are never truncated
+                val effectiveEducation = if (!aiResult.education.isNullOrEmpty() && !isSynthesized) {
+                    val combined = mutableListOf<String>()
+                    combined.addAll(aiResult.education)
+                    // Check if deterministic parser captured 10th/12th that AI might have missed
+                    structure.education.forEach { detEdu ->
+                        val detLower = detEdu.lowercase()
+                        val isSchoolTier = detLower.contains("10th") || detLower.contains("12th") || 
+                                          detLower.contains("sslc") || detLower.contains("hsc") || 
+                                          detLower.contains("class x") || detLower.contains("class xii") ||
+                                          detLower.contains("matriculation") || detLower.contains("secondary")
+                        val alreadyPresent = combined.any { existing ->
+                            val exLower = existing.lowercase()
+                            (isSchoolTier && (exLower.contains("10th") || exLower.contains("12th") || exLower.contains("sslc") || exLower.contains("hsc"))) ||
+                            exLower.contains(detLower.take(15))
+                        }
+                        if (isSchoolTier && !alreadyPresent) {
+                            combined.add(detEdu)
+                        }
+                    }
+                    combined
+                } else if (structure.education.isNotEmpty()) {
+                    structure.education
+                } else {
+                    emptyList()
+                }
+
+                // Work Experience: strict isolation (only genuine employment/internships)
+                val effectiveExperience = if (!aiResult.experience.isNullOrEmpty() && !isSynthesized) {
+                    aiResult.experience
+                } else if (structure.experience.isNotEmpty()) {
+                    structure.experience
+                } else {
+                    emptyList()
+                }
+
+                // Projects: strict isolation (only genuine projects)
+                val effectiveProjects = if (!aiResult.projectAnalysis.isNullOrEmpty() && !isSynthesized) {
+                    aiResult.projectAnalysis
+                } else if (structure.projectAnalyses.isNotEmpty()) {
+                    structure.projectAnalyses
+                } else if (structure.extractedProjects.isNotEmpty()) {
+                    structure.extractedProjects.map { projStr ->
+                        ProjectAnalysis(
+                            name = projStr,
+                            technologies = emptyList(),
+                            demonstratedSkills = emptyList(),
+                            strengths = listOf("Project verified from resume"),
+                            weaknesses = emptyList(),
+                            improvementSuggestions = listOf("Add measurable performance metrics")
+                        )
+                    }
+                } else {
+                    emptyList()
+                }
+
                 val enrichedResult = aiResult.copy(
                     id = java.util.UUID.randomUUID().toString(),
                     candidateName = candidateName,
                     candidateEmail = candidateEmail,
                     candidatePhone = candidatePhone,
                     candidateLocation = candidateLocation,
-                    summary = aiResult.summary?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: structure.sections.find { s -> s.sectionName == "Summary" }?.summary ?: "",
-                    education = if (!aiResult.education.isNullOrEmpty()) aiResult.education
-                        else structure.sections.find { s -> s.sectionName == "Education" }?.details ?: emptyList(),
-                    experience = if (!aiResult.experience.isNullOrEmpty()) aiResult.experience
-                        else structure.sections.find { s -> s.sectionName == "Work Experience" }?.details ?: emptyList(),
-                    extractedSkills = if (!aiResult.extractedSkills.isNullOrEmpty()) aiResult.extractedSkills
+                    summary = effectiveSummary,
+                    education = effectiveEducation,
+                    experience = effectiveExperience,
+                    extractedSkills = if (!aiResult.extractedSkills.isNullOrEmpty() && !isSynthesized) aiResult.extractedSkills
                         else structure.extractedSkills.map { skillStr -> com.example.aidrivencompetencyplatform.model.Skill(name = skillStr, level = 80, category = RoleSkillsData.getSkillCategory(skillStr)) },
-                    projectAnalysis = if (!aiResult.projectAnalysis.isNullOrEmpty()) aiResult.projectAnalysis
-                        else structure.extractedProjects.map { projStr -> com.example.aidrivencompetencyplatform.model.ProjectAnalysis(name = projStr, technologies = emptyList(), demonstratedSkills = emptyList()) },
+                    projectAnalysis = effectiveProjects,
                     rawResumeText = text,
                     targetRole = effectiveRole,
-                    detectedJobDescription = aiResult.detectedJobDescription ?: structure.detectedJobDescription
+                    detectedJobDescription = aiResult.detectedJobDescription ?: structure.detectedJobDescription,
+                    layoutInfo = layout
                 )
 
                 val atsBreakdown = enrichedResult.atsBreakdown ?: com.example.aidrivencompetencyplatform.model.AtsBreakdown()
@@ -1090,17 +1498,47 @@ class ResumeViewModel(
         val candidateInfo = structure.candidateInfo
         val extractedSkills = structure.extractedSkills
         val extractedProjects = structure.extractedProjects
+        val skillsList = extractedSkills.map { s ->
+            Skill(
+                name = s,
+                level = 80,
+                category = RoleSkillsData.getSkillCategory(s),
+                evidence = "Found in resume profile"
+            )
+        }
+
+        val projectsList = if (structure.projectAnalyses.isNotEmpty()) {
+            structure.projectAnalyses
+        } else {
+            extractedProjects.map { p ->
+                ProjectAnalysis(
+                    name = p,
+                    technologies = emptyList(),
+                    demonstratedSkills = emptyList(),
+                    strengths = listOf("Project highlighted in candidate resume"),
+                    weaknesses = emptyList(),
+                    improvementSuggestions = listOf("Add quantifiable outcome metrics and impact")
+                )
+            }
+        }
 
         val tempResult = ResumeAnalysisResult(
-            overallScore = 75,
-            atsScore = 75,
-            skillMatch = 70,
+            id = java.util.UUID.randomUUID().toString(),
+            overallScore = 0,
+            atsScore = 0,
+            skillMatch = 0,
             targetRole = targetRole,
             candidateName = candidateInfo.name,
             candidateEmail = candidateInfo.email,
             candidatePhone = candidateInfo.phone,
             candidateLocation = candidateInfo.location,
-            rawResumeText = text
+            rawResumeText = text,
+            summary = structure.summary ?: "",
+            extractedSkills = skillsList,
+            education = structure.education,
+            experience = structure.experience,
+            certifications = structure.certifications,
+            projectAnalysis = projectsList
         )
         val atsScoreResult = atsScoringEngine.calculateScore(tempResult, targetRole)
 
@@ -1116,26 +1554,6 @@ class ResumeViewModel(
                 parsing = atsScoreResult.parsingAccuracy.evidenceItems.map { AtsEvidence(it.label, it.isPositive, it.detail, it.suggestion) }
             )
         )
-
-        val skillsList = extractedSkills.map { s ->
-            Skill(
-                name = s,
-                level = 80,
-                category = RoleSkillsData.getSkillCategory(s),
-                evidence = "Found in resume profile"
-            )
-        }
-
-        val projectsList = extractedProjects.map { p ->
-            ProjectAnalysis(
-                name = p,
-                technologies = emptyList(),
-                demonstratedSkills = emptyList(),
-                strengths = listOf("Project highlighted in candidate resume"),
-                weaknesses = emptyList(),
-                improvementSuggestions = listOf("Add quantifiable outcome metrics and impact")
-            )
-        }
 
         val highPrioritySuggestions = mutableListOf<String>()
         val mediumPrioritySuggestions = mutableListOf<String>()
@@ -1157,14 +1575,15 @@ class ResumeViewModel(
             atsScore = atsScoreResult.overallScore,
             skillMatch = atsScoreResult.keywordCoverage.score,
             targetRole = targetRole,
-            summary = structure.sections.find { it.sectionName == "Summary" }?.summary ?: "",
+            summary = structure.summary ?: "",
             candidateName = candidateInfo.name,
             candidateEmail = candidateInfo.email,
             candidatePhone = candidateInfo.phone,
             candidateLocation = candidateInfo.location,
-            education = structure.sections.find { it.sectionName == "Education" }?.details ?: emptyList(),
-            experience = structure.sections.find { it.sectionName == "Work Experience" }?.details ?: emptyList(),
+            education = structure.education,
+            experience = structure.experience,
             extractedSkills = skillsList,
+            certifications = structure.certifications,
             projectAnalysis = projectsList,
             atsBreakdown = atsBreakdown,
             missingSections = atsScoreResult.resumeStructure.evidenceItems.filter { !it.isPositive }.map { it.label },
@@ -1177,9 +1596,9 @@ class ResumeViewModel(
             parsingAccuracyDetails = ParsingAccuracyDetails(
                 nameDetected = candidateInfo.name != null,
                 contactDetected = candidateInfo.email != null || candidateInfo.phone != null,
-                educationDetected = structure.sections.any { it.sectionName == "Education" },
+                educationDetected = structure.education.isNotEmpty(),
                 skillsDetected = extractedSkills.isNotEmpty(),
-                experienceDetected = structure.sections.any { it.sectionName == "Work Experience" },
+                experienceDetected = structure.experience.isNotEmpty(),
                 projectsDetected = extractedProjects.isNotEmpty()
             ),
             rawResumeText = text
@@ -1296,420 +1715,284 @@ class AiAssistantViewModel(
     }
 }
 
+data class ResumeOptimizationState(
+    val jdTitle: String = "",
+    val companyName: String? = null,
+    val suggestions: List<OptimizationSuggestion> = emptyList(),
+    val skillGaps: List<String> = emptyList(),
+    val keywordOpportunities: List<String> = emptyList(),
+    val isAnalysisComplete: Boolean = false,
+    val currentImprovementIndex: Int = 0,
+    val optimizedResumeData: ResumeAnalysisResult? = null
+)
+
 class JdMatcherViewModel(
     private val sessionManager: SessionManager,
-    private val geminiService: GeminiService
+    private val geminiService: GeminiService,
+    private val resumeParser: ResumeParser
 ) : ViewModel() {
 
-    private val _flowMode = MutableStateFlow(JdFlowMode.PROFILE_VIEW)
-    val flowMode: StateFlow<JdFlowMode> = _flowMode.asStateFlow()
+    private val _uiState = MutableStateFlow(JdMatcherUiState.INPUT)
+    val uiState: StateFlow<JdMatcherUiState> = _uiState.asStateFlow()
 
-    private val _profile = MutableStateFlow(ExtractedResumeProfile())
-    val profile: StateFlow<ExtractedResumeProfile> = _profile.asStateFlow()
+    private val _jobDescriptionInput = MutableStateFlow("")
+    val jobDescriptionInput: StateFlow<String> = _jobDescriptionInput.asStateFlow()
 
-    private val _baseJobDescription = MutableStateFlow(
-        JobDescriptionSection(
-            roleTitle = "Android Developer",
-            roleSummary = "Seeking a motivated Android Developer to build and maintain responsive mobile applications with Kotlin, Jetpack Compose, and modern architecture.",
-            responsibilities = listOf(
-                "Build reactive Android UI screens using Kotlin and Jetpack Compose.",
-                "Integrate backend REST APIs and handle offline caching with Room SQLite.",
-                "Implement clean MVVM architecture with StateFlow and Coroutines.",
-                "Write unit tests and optimize application performance."
-            ),
-            requiredSkills = listOf("Kotlin", "Android", "Jetpack Compose", "REST APIs", "Git"),
-            preferredSkills = listOf("Room Database", "Coroutines & Flow", "Firebase", "Material Design 3"),
-            qualifications = listOf(
-                "Bachelor's in Computer Science, Software Engineering, or equivalent practical experience.",
-                "Demonstrated portfolio of Android apps using modern Jetpack libraries."
-            )
-        )
-    )
-    val baseJobDescription: StateFlow<JobDescriptionSection> = _baseJobDescription.asStateFlow()
-
-    private val _stages = MutableStateFlow<List<JdStageInfo>>(emptyList())
-    val stages: StateFlow<List<JdStageInfo>> = _stages.asStateFlow()
-
-    private val _currentStageIndex = MutableStateFlow(0)
-    val currentStageIndex: StateFlow<Int> = _currentStageIndex.asStateFlow()
-
-    private val _poweredResult = MutableStateFlow<JdPoweredResult?>(null)
-    val poweredResult: StateFlow<JdPoweredResult?> = _poweredResult.asStateFlow()
+    private val _canonicalResume = MutableStateFlow<ResumeAnalysisResult?>(null)
+    val canonicalResume: StateFlow<ResumeAnalysisResult?> = _canonicalResume.asStateFlow()
 
     private val _hasStoredResume = MutableStateFlow(false)
     val hasStoredResume: StateFlow<Boolean> = _hasStoredResume.asStateFlow()
 
-    private val _expandedExplainId = MutableStateFlow<String?>(null)
-    val expandedExplainId: StateFlow<String?> = _expandedExplainId.asStateFlow()
+    val analysisStages: List<String> = listOf(
+        "1. Reading Job Description",
+        "2. Scanning Your Resume",
+        "3. Identifying Relevant Skills",
+        "4. Finding Important Keywords",
+        "5. Comparing Resume Content",
+        "6. Detecting Improvement Opportunities",
+        "7. Preparing Targeted Suggestions"
+    )
+
+    private val _analysisStageIndex = MutableStateFlow(0)
+    val analysisStageIndex: StateFlow<Int> = _analysisStageIndex.asStateFlow()
+
+    private val _optimizationState = MutableStateFlow(ResumeOptimizationState())
+    val optimizationState: StateFlow<ResumeOptimizationState> = _optimizationState.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     init {
-        extractProfileAndGenerateJd()
+        loadCanonicalResume()
     }
 
-    fun extractProfileAndGenerateJd() {
+    fun loadCanonicalResume() {
         val analysis = sessionManager.getLatestAnalysis()
-        loadAnalysisResult(analysis)
+        _canonicalResume.value = analysis
+        _hasStoredResume.value = analysis != null
     }
 
     fun loadAnalysis(id: String?) {
         if (id.isNullOrBlank()) {
-            extractProfileAndGenerateJd()
+            loadCanonicalResume()
             return
         }
         val analysis = sessionManager.getAnalysisById(id)
         if (analysis != null) {
-            loadAnalysisResult(analysis)
+            _canonicalResume.value = analysis
+            _hasStoredResume.value = true
         } else {
-            extractProfileAndGenerateJd()
+            loadCanonicalResume()
         }
     }
 
-    private fun loadAnalysisResult(analysis: ResumeAnalysisResult?) {
-        _hasStoredResume.value = analysis != null
+    fun onJobDescriptionInputChanged(input: String) {
+        _jobDescriptionInput.value = input
+        if (_errorMessage.value != null) {
+            _errorMessage.value = null
+        }
+    }
 
-        val detectedJd = analysis?.detectedJobDescription
-        if (detectedJd == null) {
-            _flowMode.value = JdFlowMode.NO_JD
+    fun clearInput() {
+        _jobDescriptionInput.value = ""
+        _errorMessage.value = null
+    }
+
+    fun analyzeJobDescription() {
+        val jdText = _jobDescriptionInput.value.trim()
+        if (jdText.isBlank()) {
+            _errorMessage.value = "Please paste a complete job description to analyze."
             return
         }
 
-        val targetRole = detectedJd.roleTitle.ifBlank {
-            analysis.targetRole ?: sessionManager.getTargetRole()?.takeIf { it.isNotBlank() } ?: "Software Engineer"
+        val resume = _canonicalResume.value ?: sessionManager.getLatestAnalysis()
+        if (resume == null) {
+            _errorMessage.value = "No resume data found. Please upload a resume first."
+            return
         }
+        _canonicalResume.value = resume
+        _hasStoredResume.value = true
 
-        val extracted = buildProfileFromAnalysis(analysis, targetRole)
-        _profile.value = extracted
-        _baseJobDescription.value = detectedJd
-        _flowMode.value = JdFlowMode.JD_DETECTED
-    }
-
-    private fun inferTargetRoleFromAnalysis(analysis: ResumeAnalysisResult?): String {
-        if (analysis == null) return "Android Developer"
-        val skills = analysis.extractedSkills?.map { it.name.lowercase() } ?: emptyList()
-        return when {
-            skills.any { it.contains("compose") || it.contains("android") || it.contains("kotlin") } -> "Android Developer"
-            skills.any { it.contains("spring") || it.contains("java") } -> "Java Developer"
-            skills.any { it.contains("react") && skills.any { s -> s.contains("node") } } -> "Full Stack Developer"
-            skills.any { it.contains("react") || it.contains("css") || it.contains("html") } -> "Frontend Developer"
-            skills.any { it.contains("pandas") || it.contains("power bi") || it.contains("tableau") } -> "Data Analyst"
-            skills.any { it.contains("machine learning") || it.contains("tensorflow") || it.contains("pytorch") } -> "Machine Learning Engineer"
-            skills.any { it.contains("sql") || it.contains("postgres") || it.contains("node") } -> "Backend Developer"
-            skills.any { it.contains("figma") || it.contains("wireframing") || it.contains("ux") } -> "UI/UX Designer"
-            else -> "Android Developer"
-        }
-    }
-
-    private fun buildProfileFromAnalysis(
-        analysis: ResumeAnalysisResult?,
-        targetRole: String
-    ): ExtractedResumeProfile {
-        val candidateName = analysis?.candidateName
-            ?: sessionManager.getUserName()
-            ?: "Candidate"
-
-        val edu = analysis?.education?.firstOrNull()?.takeIf { it.isNotBlank() }
-            ?: "Bachelor's in Computer Science / Information Technology"
-
-        val experienceLevel = when {
-            analysis?.experience.isNullOrEmpty() -> "Fresher"
-            analysis?.experience?.size == 1 -> "Entry Level (0-2 yrs)"
-            else -> "Mid Level (2-4 yrs)"
-        }
-
-        val required = RoleSkillsData.getRequiredSkills(targetRole)
-        val extractedSkills = analysis?.extractedSkills?.map { it.name } ?: emptyList()
-
-        val coreSkills = if (extractedSkills.isNotEmpty()) {
-            val matched = required.filter { req ->
-                RoleSkillsData.isSkillMatched(req, extractedSkills)
-            }
-            if (matched.isNotEmpty()) matched.take(6) else extractedSkills.take(6)
-        } else {
-            required.take(5)
-        }
-
-        val tools = listOf("Android Studio", "Gradle", "Git / GitHub", "Room DB", "Postman", "Firebase")
-            .filter { tool ->
-                extractedSkills.any { it.contains(tool, ignoreCase = true) } || true
-            }.take(5)
-
-        val projects = analysis?.projectAnalysis?.map { it.name }?.filter { it.isNotBlank() }
-            ?.ifEmpty { null }
-            ?: listOf("NoviQ Career Platform", "Native Android Application Suite")
-
-        val competencies = listOf(
-            "Clean MVVM Architecture",
-            "Declarative UI Composition",
-            "Reactive State Management",
-            "RESTful API Integration & Serialization"
-        )
-
-        val keywords = coreSkills.take(4) + listOf("Clean Code", "Unit Testing", "CI/CD")
-
-        return ExtractedResumeProfile(
-            targetRole = targetRole,
-            candidateName = candidateName,
-            education = edu,
-            experienceLevel = experienceLevel,
-            coreSkills = coreSkills,
-            toolsAndTech = tools,
-            projects = projects,
-            competencies = competencies,
-            careerDirection = "$targetRole Engineering & Scalable Systems",
-            importantKeywords = keywords
-        )
-    }
-
-    private fun generateRoleSpecificBaseJd(
-        targetRole: String,
-        profile: ExtractedResumeProfile
-    ): JobDescriptionSection {
-        val exp = profile.experienceLevel
-        val skills = profile.coreSkills
-
-        val summary = when {
-            targetRole.contains("Android", ignoreCase = true) ->
-                "We are seeking an ambitious $targetRole ($exp) to build high-performance mobile applications. You will work on crafting responsive, intuitive UI screens with Kotlin and Jetpack Compose, integrating RESTful microservices, and implementing robust local persistence."
-            targetRole.contains("Java", ignoreCase = true) ->
-                "Looking for a skilled $targetRole to design and implement resilient backend systems using modern Java, Spring Boot, and relational databases. You will develop scalable RESTful APIs and ensure code quality through automated testing."
-            targetRole.contains("Full Stack", ignoreCase = true) ->
-                "We are hiring a versatile $targetRole to contribute across client and server architectures. You will develop responsive frontends in React and engineer scalable backend services with Node.js and SQL."
-            targetRole.contains("Frontend", ignoreCase = true) ->
-                "Seeking a creative $targetRole to build pixel-perfect, accessible web interfaces. You will translate UI/UX designs into responsive components using React, TypeScript, and modern CSS."
-            targetRole.contains("Data Analyst", ignoreCase = true) ->
-                "Looking for an analytical $targetRole to transform complex datasets into actionable business intelligence using SQL, Python, Pandas, and interactive dashboards."
-            else ->
-                "We are hiring a dedicated $targetRole ($exp) to collaborate with engineering teams, design robust solutions, and deliver high-quality software features aligned with modern industry benchmarks."
-        }
-
-        val responsibilities = when {
-            targetRole.contains("Android", ignoreCase = true) -> listOf(
-                "Design and construct modern Android user interfaces using Kotlin and Jetpack Compose.",
-                "Integrate RESTful web APIs and manage offline data caching using Room SQLite.",
-                "Architect scalable application flows with MVVM, StateFlow, and Coroutines.",
-                "Collaborate with UI/UX designers to translate Figma wireframes into polished layouts.",
-                "Write automated unit tests and participate in active peer code reviews."
-            )
-            targetRole.contains("Java", ignoreCase = true) -> listOf(
-                "Develop enterprise microservices using Spring Boot, Hibernate, and RESTful architectures.",
-                "Design and optimize relational database schemas and complex SQL queries.",
-                "Implement multithreaded and asynchronous message processors.",
-                "Ensure enterprise security standards with JWT and OAuth2 integration."
-            )
-            targetRole.contains("Full Stack", ignoreCase = true) -> listOf(
-                "Develop modular frontend components with React, TypeScript, and state hydration.",
-                "Engineer secure backend endpoints using Node.js, Express, and SQL databases.",
-                "Deploy and monitor containerized services using Docker and CI/CD pipelines.",
-                "Optimize end-to-end network performance and client responsiveness."
-            )
-            else -> listOf(
-                "Participate in the full software development lifecycle from design to deployment.",
-                "Build and maintain maintainable, well-documented code using modern frameworks.",
-                "Collaborate with cross-functional product and design teams.",
-                "Perform unit testing, debugging, and continuous performance optimizations."
-            )
-        }
-
-        val preferred = when {
-            targetRole.contains("Android", ignoreCase = true) -> listOf(
-                "Room Database & Flow", "Firebase Cloud Messaging", "CI/CD & GitHub Actions", "Material 3 Design Tokens"
-            )
-            targetRole.contains("Java", ignoreCase = true) -> listOf(
-                "Docker / Kubernetes", "Kafka / RabbitMQ", "AWS Cloud Services", "JUnit & Mockito"
-            )
-            else -> listOf(
-                "Cloud Deployment (GCP/AWS)", "Automated CI/CD", "Performance Profiling", "Agile Methodologies"
-            )
-        }
-
-        val qualifications = listOf(
-            profile.education ?: "Relevant educational background",
-            "Hands-on experience or project portfolio demonstrating mastery in ${skills.take(3).joinToString(", ")}.",
-            "Strong understanding of software engineering fundamentals, data structures, and clean architecture."
-        )
-
-        return JobDescriptionSection(
-            roleTitle = targetRole,
-            roleSummary = summary,
-            responsibilities = responsibilities,
-            requiredSkills = skills,
-            preferredSkills = preferred,
-            qualifications = qualifications
-        )
-    }
-
-    fun updateBaseJd(updated: JobDescriptionSection) {
-        _baseJobDescription.value = updated
-    }
-
-    fun updateProfile(targetRole: String, experienceLevel: String, skills: List<String>) {
-        sessionManager.updateTargetRole(targetRole)
-        val current = _profile.value
-        val updated = current.copy(
-            targetRole = targetRole,
-            experienceLevel = experienceLevel,
-            coreSkills = skills
-        )
-        _profile.value = updated
-        _baseJobDescription.value = generateRoleSpecificBaseJd(targetRole, updated)
-    }
-
-    fun powerJobDescription(targetRole: String? = null) {
-        if (!targetRole.isNullOrBlank() && targetRole != _profile.value.targetRole) {
-            updateProfile(targetRole, _profile.value.experienceLevel ?: "Fresher", _profile.value.coreSkills)
-        }
-        powerTheJd()
-    }
-
-    fun powerTheJd() {
-        val targetRole = _profile.value.targetRole ?: "Android Developer"
-        val baseJd = _baseJobDescription.value
-
-        val stageTemplates = listOf(
-            JdStageInfo(
-                number = "01",
-                title = "Understanding Your Profile",
-                description = "Analyzing your resume, skills, projects and experience.",
-                status = JdStageStatus.PENDING
-            ),
-            JdStageInfo(
-                number = "02",
-                title = "Role Alignment",
-                description = "Aligning your profile with the selected target role.",
-                status = JdStageStatus.PENDING
-            ),
-            JdStageInfo(
-                number = "03",
-                title = "Skill Matching",
-                description = "Identifying the most relevant technical and professional skills.",
-                status = JdStageStatus.PENDING
-            ),
-            JdStageInfo(
-                number = "04",
-                title = "Requirement Optimization",
-                description = "Refining role responsibilities and qualification requirements.",
-                status = JdStageStatus.PENDING
-            ),
-            JdStageInfo(
-                number = "05",
-                title = "JD Enhancement",
-                description = "Improving clarity, relevance and role-specific keywords.",
-                status = JdStageStatus.PENDING
-            ),
-            JdStageInfo(
-                number = "06",
-                title = "Final JD",
-                description = "Generating your optimized Job Description.",
-                status = JdStageStatus.PENDING
-            )
-        )
-
-        _stages.value = stageTemplates
-        _flowMode.value = JdFlowMode.POWERING_PROGRESS
-        _currentStageIndex.value = 0
+        _uiState.value = JdMatcherUiState.ANALYZING
+        _errorMessage.value = null
+        _analysisStageIndex.value = 0
 
         viewModelScope.launch {
-            for (i in 0 until 6) {
-                _currentStageIndex.value = i
-                _stages.value = _stages.value.mapIndexed { index, stage ->
-                    when {
-                        index < i -> stage.copy(status = JdStageStatus.COMPLETED)
-                        index == i -> stage.copy(status = JdStageStatus.PROCESSING)
-                        else -> stage.copy(status = JdStageStatus.PENDING)
+            try {
+                val tickerJob = launch {
+                    for (i in 0 until analysisStages.size) {
+                        _analysisStageIndex.value = i
+                        delay(600L)
                     }
                 }
-                kotlinx.coroutines.delay(650)
+                
+                val result = geminiService.optimizeResume(jdText, resume)
+                tickerJob.cancel()
+                _analysisStageIndex.value = analysisStages.size
+                delay(300L)
+                
+                _optimizationState.value = ResumeOptimizationState(
+                    jdTitle = result.jdTitle,
+                    companyName = result.companyName,
+                    suggestions = result.suggestions,
+                    skillGaps = result.skillGaps,
+                    keywordOpportunities = result.keywordOpportunities,
+                    isAnalysisComplete = true,
+                    optimizedResumeData = resume
+                )
+                
+                _uiState.value = JdMatcherUiState.OPTIMIZING
+            } catch (e: Exception) {
+                Log.e("JdMatcherViewModel", "Optimization failed", e)
+                _errorMessage.value = e.message ?: "Failed to analyze resume. Please try again."
+                _uiState.value = JdMatcherUiState.ERROR
             }
-
-            // Mark all completed
-            _stages.value = _stages.value.map { it.copy(status = JdStageStatus.COMPLETED) }
-            kotlinx.coroutines.delay(400)
-
-            // Construct final powered Job Description
-            val optimizedResponsibilities = listOf(
-                "Architect and implement declarative, production-grade Android UI workflows using Kotlin and Jetpack Compose.",
-                "Integrate asynchronous RESTful services with reactive Kotlin Coroutines, StateFlow, and Room SQLite offline caching.",
-                "Enforce Clean Architecture and unidirectional data flow (MVI/MVVM) across modular features.",
-                "Optimize app startup latency, memory footprint, and frame render rates adhering to Material 3 design tokens.",
-                "Establish automated testing suites and CI workflows ensuring zero-regression code contributions."
-            )
-
-            val poweredSkills = (_profile.value.coreSkills + listOf("Kotlin Coroutines", "Room Database", "StateFlow", "Material 3")).distinct()
-            val preferredSkills = listOf(
-                "Firebase SDK & Push Notifications",
-                "Automated CI/CD (GitHub Actions / Fastlane)",
-                "ProGuard / R8 Code Shrinking",
-                "Unit & UI Testing (JUnit, MockK, Espresso)"
-            )
-
-            val optimizedJd = JobDescriptionSection(
-                roleTitle = targetRole,
-                roleSummary = "We are seeking a high-caliber $targetRole to drive the development of next-generation mobile experiences. You will leverage modern declarative frameworks, reactive state management, and robust networking architectures to ship impactful, production-ready software aligned with your verified competencies.",
-                responsibilities = optimizedResponsibilities,
-                requiredSkills = poweredSkills,
-                preferredSkills = preferredSkills,
-                qualifications = listOf(
-                    _profile.value.education ?: "Degree in Computer Science or related field",
-                    "Demonstrated portfolio of native Android applications showcasing clean architecture, Jetpack Compose, and offline resilience.",
-                    "Strong grasp of concurrency patterns, reactive programming, and industry-standard version control workflows."
-                )
-            )
-
-            val whatChangedItems = listOf(
-                JdExplainabilityItem(
-                    id = "skills_identified",
-                    title = "✓ ${poweredSkills.size} relevant skills identified",
-                    detail = "Mapped Kotlin, Jetpack Compose, Room SQLite, REST APIs, Git, Coroutines, and MVVM directly from your extracted profile to current industry hiring benchmarks.",
-                    tag = "Skill Coverage"
-                ),
-                JdExplainabilityItem(
-                    id = "responsibilities_opt",
-                    title = "✓ 4 responsibilities optimized",
-                    detail = "Reframed responsibilities around modern declarative UI, offline caching, and reactive architecture based on your project background and strengths.",
-                    tag = "Role Alignment"
-                ),
-                JdExplainabilityItem(
-                    id = "keywords_strengthened",
-                    title = "✓ 3 role-specific keywords strengthened",
-                    detail = "Elevated 'Kotlin Coroutines', 'Declarative UI', and 'Room SQLite Persistence' for maximum ATS parser recognition and keyword density.",
-                    tag = "Keyword Boost"
-                ),
-                JdExplainabilityItem(
-                    id = "redundant_removed",
-                    title = "✓ Redundant requirements removed",
-                    detail = "Eliminated legacy imperative XML boilerplate and obsolete tech stack requirements to focus strictly on modern production standards.",
-                    tag = "Clarity"
-                ),
-                JdExplainabilityItem(
-                    id = "structure_improved",
-                    title = "✓ JD structure improved",
-                    detail = "Reorganized into structured Role Summary, Core Responsibilities, Must-Have Competencies, and Preferred Qualifications for executive readability.",
-                    tag = "Formatting"
-                )
-            )
-
-            _poweredResult.value = JdPoweredResult(
-                targetRole = targetRole,
-                alignmentPercentage = 94,
-                jobDescription = optimizedJd,
-                whatChangedItems = whatChangedItems
-            )
-
-            _flowMode.value = JdFlowMode.POWERED_RESULT
         }
     }
 
-    fun toggleExplainItem(id: String) {
-        _expandedExplainId.value = if (_expandedExplainId.value == id) null else id
+    fun updateSuggestionState(suggestionId: String, newState: SuggestionState, manualText: String? = null) {
+        val currentSuggestions = _optimizationState.value.suggestions
+        val updatedSuggestions = currentSuggestions.map {
+            if (it.changeId == suggestionId) {
+                it.copy(state = newState, manualText = manualText)
+            } else it
+        }
+        
+        _optimizationState.value = _optimizationState.value.copy(suggestions = updatedSuggestions)
+        
+        // If accepted or edited, update the preview resume data immediately
+        if (newState == SuggestionState.ACCEPTED || newState == SuggestionState.EDITED) {
+            applyChangeToPreview(suggestionId, if (newState == SuggestionState.EDITED) manualText else null)
+        }
     }
 
-    fun powerAgain() {
-        val analysis = sessionManager.getLatestAnalysis()
-        if (analysis?.detectedJobDescription != null) {
-            _flowMode.value = JdFlowMode.JD_DETECTED
-        } else {
-            _flowMode.value = JdFlowMode.NO_JD
+    private fun applyChangeToPreview(suggestionId: String, manualText: String?) {
+        val suggestion = _optimizationState.value.suggestions.find { it.changeId == suggestionId } ?: return
+        val currentResume = _optimizationState.value.optimizedResumeData ?: return
+        
+        val newText = manualText ?: suggestion.suggestedText
+        val oldText = suggestion.originalText
+        
+        // Simple text replacement in relevant sections
+        val updatedResume = when (suggestion.section.uppercase()) {
+            "SUMMARY" -> currentResume.copy(summary = currentResume.summary?.replace(oldText, newText))
+            "EXPERIENCE" -> currentResume.copy(experience = currentResume.experience?.map { it.replace(oldText, newText) })
+            "PROJECTS" -> currentResume.copy(projectAnalysis = currentResume.projectAnalysis?.map { proj ->
+                val newName = if (proj.name.contains(oldText)) proj.name.replace(oldText, newText) else proj.name
+                val newStrengths = proj.strengths?.map { s -> if (s.contains(oldText)) s.replace(oldText, newText) else s }
+                proj.copy(name = newName, strengths = newStrengths)
+            })
+            "SKILLS" -> currentResume.copy(extractedSkills = currentResume.extractedSkills?.map { 
+                if (it.name.equals(oldText, ignoreCase = true)) it.copy(name = newText)
+                else it
+            })
+            else -> currentResume
         }
+        
+        _optimizationState.value = _optimizationState.value.copy(optimizedResumeData = updatedResume)
+    }
+
+    fun setCurrentImprovement(index: Int) {
+        if (index in _optimizationState.value.suggestions.indices) {
+            _optimizationState.value = _optimizationState.value.copy(currentImprovementIndex = index)
+        }
+    }
+
+    fun generateOptimizedResume() {
+        val currentResume = _optimizationState.value.optimizedResumeData ?: return
+        val suggestions = _optimizationState.value.suggestions
+        val layout = currentResume.layoutInfo ?: return
+        val pdfUriStr = layout.pdfUri ?: return
+        val pdfUri = Uri.parse(pdfUriStr)
+        
+        _uiState.value = JdMatcherUiState.ANALYZING
+        _analysisStageIndex.value = 0
+        
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // 1. Open original PDF
+                val context = com.example.aidrivencompetencyplatform.AstraApp.instance
+                val bytes = if (pdfUri.scheme == "file") {
+                    val file = java.io.File(pdfUri.path!!)
+                    if (file.exists()) file.readBytes() else null
+                } else {
+                    context.contentResolver.openInputStream(pdfUri)?.use { it.readBytes() }
+                } ?: throw Exception("Original resume file not found or inaccessible.")
+                
+                val document = PDDocument.load(bytes)
+                
+                // 2. Apply modifications
+                suggestions.filter { it.state == SuggestionState.ACCEPTED || it.state == SuggestionState.EDITED }.forEach { suggestion ->
+                    val newText = suggestion.manualText ?: suggestion.suggestedText
+                    
+                    // Modify each page
+                    for (pageIdx in 0 until document.numberOfPages) {
+                        val page = document.getPage(pageIdx)
+                        val rects = resumeParser.findTextRects(suggestion.originalText, layout, pageIdx)
+                        if (rects.isEmpty()) continue
+                        
+                        // Group by Y to handle lines
+                        rects.groupBy { it.y }.forEach { (_, linePosList) ->
+                            val lineLeft = linePosList.minOf { it.x }
+                            val lineTop = linePosList.minOf { it.y }
+                            val lineWidth = linePosList.maxOf { it.x + it.width } - lineLeft
+                            val lineHeight = linePosList.maxOf { it.y + it.height } - lineTop
+                            
+                            val pdfHeight = page.mediaBox.height
+                            
+                            // PDPageContentStream for the page
+                            val cs = PDPageContentStream(document, page, PDPageContentStream.AppendMode.APPEND, true, true)
+                            
+                            // White box over old text
+                            cs.setNonStrokingColor(255, 255, 255)
+                            // PdfBox Y is from bottom
+                            cs.addRect(lineLeft, pdfHeight - lineTop - lineHeight, lineWidth, lineHeight)
+                            cs.fill()
+                            
+                            // Add new text
+                            cs.beginText()
+                            cs.setFont(PDType1Font.HELVETICA, 10f)
+                            cs.newLineAtOffset(lineLeft, pdfHeight - lineTop - (lineHeight * 0.8f))
+                            cs.showText(newText)
+                            cs.endText()
+                            cs.close()
+                        }
+                    }
+                }
+                
+                // 3. Save to a temporary file
+                val outputFile = File(context.cacheDir, "Optimized_Resume_${System.currentTimeMillis()}.pdf")
+                document.save(outputFile)
+                document.close()
+                
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    val updatedResume = currentResume.copy(layoutInfo = layout.copy(pdfUri = Uri.fromFile(outputFile).toString()))
+                    _optimizationState.value = _optimizationState.value.copy(
+                        optimizedResumeData = updatedResume,
+                        isAnalysisComplete = true
+                    )
+                    _uiState.value = JdMatcherUiState.RESULT
+                }
+            } catch (e: Exception) {
+                Log.e("JdMatcherViewModel", "PDF Generation failed", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    _errorMessage.value = "Failed to generate optimized PDF: ${e.message}"
+                    _uiState.value = JdMatcherUiState.ERROR
+                }
+            }
+        }
+    }
+
+    fun resetToInput() {
+        _uiState.value = JdMatcherUiState.INPUT
+        _optimizationState.value = ResumeOptimizationState()
+        _errorMessage.value = null
+    }
+
+    fun retryAnalysis() {
+        analyzeJobDescription()
     }
 }
+
 

@@ -40,7 +40,23 @@ data class ResumeAnalysisResult(
     val candidatePhone: String? = null,
     val candidateLocation: String? = null,
     val rawResumeText: String? = null,
-    val detectedJobDescription: JobDescriptionSection? = null
+    val detectedJobDescription: JobDescriptionSection? = null,
+    val certifications: List<String>? = emptyList(),
+    val layoutInfo: ResumeLayout? = null
+)
+
+data class TextPosition(
+    val text: String,
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    val pageIndex: Int
+)
+
+data class ResumeLayout(
+    val textPositions: List<TextPosition> = emptyList(),
+    val pdfUri: String? = null
 )
 
 data class AtsBreakdown(
@@ -201,4 +217,90 @@ data class AnalysisHistoryRecord(
     val topSkills: List<String> = emptyList(),
     val fullResult: ResumeAnalysisResult? = null
 )
+
+data class RecommendedCourse(
+    val title: String,
+    val provider: String,
+    val description: String = "Learn this skill through this free resource.",
+    val courseUrl: String,
+    val isFree: Boolean = true,
+    val originalTitle: String = title,
+    val missingSkill: String = "",
+    val explanation: String = ""
+)
+
+data class JdMatchResult(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val jobTitle: String = "Target Role",
+    val companyName: String? = null,
+    val roleSummary: String = "",
+    val matchScore: Int = 0,
+    val matchedSkills: List<String> = emptyList(),
+    val missingSkills: List<String> = emptyList(),
+    val preferredSkillsMatched: List<String> = emptyList(),
+    val preferredSkillsMissing: List<String> = emptyList(),
+    val responsibilities: List<String> = emptyList(),
+    val experienceRequirement: String = "",
+    val candidateExperience: String = "",
+    val experienceMatchStatus: String = "Match", // Match, Partial Match, Gap, Not Specified
+    val experienceMatchExplanation: String = "",
+    val educationRequirement: String = "",
+    val candidateEducation: String = "",
+    val educationMatchStatus: String = "Match", // Match, Partial Match, Not Required
+    val educationMatchExplanation: String = "",
+    val certificationRequirement: String = "",
+    val candidateCertifications: String = "",
+    val certificationMatchStatus: String = "Not Required", // Match, Missing, Not Required
+    val certificationMatchExplanation: String = "",
+    val strengths: List<String> = emptyList(),
+    val priorityGaps: List<String> = emptyList(),
+    val recommendedActions: List<String> = emptyList(),
+    val freeLearningResources: List<RecommendedCourse> = emptyList()
+)
+
+enum class JdMatcherUiState {
+    INPUT,
+    ANALYZING,
+    OPTIMIZING, // NEW: Optimization mode with resume preview
+    RESULT,
+    ERROR
+}
+
+data class OptimizationSuggestion(
+    val changeId: String = java.util.UUID.randomUUID().toString(),
+    val section: String,
+    val originalText: String,
+    val suggestedText: String,
+    val changeType: ChangeType,
+    val reason: String,
+    val relatedKeyword: String? = null,
+    val relatedRequirement: String? = null,
+    val priority: SuggestionPriority = SuggestionPriority.MEDIUM,
+    val state: SuggestionState = SuggestionState.UNREVIEWED,
+    val manualText: String? = null,
+    val confidence: Int = 100,
+    val resumeEvidence: String? = null,
+    val supportedByResume: Boolean = true
+)
+
+enum class ChangeType {
+    WORD, PHRASE, SENTENCE, BULLET, SKILL, PROJECT, EXPERIENCE, SUMMARY, CERTIFICATION, OTHER
+}
+
+enum class SuggestionPriority {
+    CRITICAL, HIGH, MEDIUM, LOW
+}
+
+enum class SuggestionState {
+    UNREVIEWED, ACCEPTED, EDITED, DISMISSED, ORIGINAL_KEPT
+}
+
+data class ResumeOptimizationResult(
+    val jdTitle: String,
+    val companyName: String?,
+    val suggestions: List<OptimizationSuggestion>,
+    val skillGaps: List<String>,
+    val keywordOpportunities: List<String>
+)
+
 

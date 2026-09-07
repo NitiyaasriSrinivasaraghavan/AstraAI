@@ -2,6 +2,7 @@ package com.example.aidrivencompetencyplatform.data
 
 import android.util.Log
 import com.example.aidrivencompetencyplatform.model.*
+import com.example.aidrivencompetencyplatform.viewmodel.RoleSkillsData
 import kotlin.math.roundToInt
 
 class AtsScoringEngine {
@@ -21,7 +22,7 @@ class AtsScoringEngine {
         targetRole: String, 
         forcedOverallScore: Int? = null
     ): AtsScoreResult {
-        Log.d(TAG, "Calculating deterministic ATS scores for: $targetRole")
+        try { Log.d(TAG, "Calculating deterministic ATS scores for: $targetRole") } catch (_: Throwable) {}
 
         // Candidate personal details from resume
         val candidateName = sanitizeEntity(result.candidateName)
@@ -30,17 +31,7 @@ class AtsScoringEngine {
         val candidateLocation = sanitizeEntity(result.candidateLocation)
 
         // 1. Card 1: Keyword Coverage (35%)
-        val keywordCalcRaw = calculateKeywordCoverage(result, targetRole)
-        val savedKeywordScore = result.atsBreakdown?.keywordCoverage?.takeIf { it > 0 }
-        val keywordCalc = if (savedKeywordScore != null && savedKeywordScore != keywordCalcRaw.score) {
-            keywordCalcRaw.copy(
-                score = savedKeywordScore,
-                weightedContribution = savedKeywordScore * WEIGHT_KEYWORD,
-                calculationText = "$savedKeywordScore% (Weight 35%) = +${String.format(java.util.Locale.US, "%.1f", savedKeywordScore * WEIGHT_KEYWORD)} pts"
-            )
-        } else {
-            keywordCalcRaw
-        }
+        val keywordCalc = calculateKeywordCoverage(result, targetRole)
 
         // 2. Card 2: Resume Structure (25%)
         val structureCalcRaw = calculateResumeStructure(result, candidateName, candidateEmail)
@@ -150,12 +141,12 @@ class AtsScoringEngine {
         allRequired.forEach { req ->
             val reqLower = req.lowercase()
             val exact = userSkillsLower.any { it == reqLower }
-            val partial = !exact && userSkillsLower.any { it.contains(reqLower) || reqLower.contains(it) }
+            val matchedByRoleSkills = !exact && RoleSkillsData.isSkillMatched(req, userSkills)
             
             if (exact) {
                 matched.add(req)
                 evidence.add(AtsDetailItem(req, true, "Exact match detected in resume skills"))
-            } else if (partial) {
+            } else if (matchedByRoleSkills) {
                 matched.add(req)
                 evidence.add(AtsDetailItem(req, true, "Partial/semantic match detected"))
             } else {
@@ -168,7 +159,7 @@ class AtsScoringEngine {
         val score = if (totalKeywords > 0) {
             ((matchedCount.toDouble() / totalKeywords.toDouble()) * 100).roundToInt().coerceIn(0, 100)
         } else {
-            100
+            0
         }
 
         val weightedContribution = Math.round(score * WEIGHT_KEYWORD * 10.0) / 10.0
@@ -516,6 +507,12 @@ class AtsScoringEngine {
     private fun getBenchmarkForRole(role: String): RoleBenchmark {
         val roleLower = role.lowercase()
         return when {
+            roleLower.contains("cloud") || roleLower.contains("architect") || roleLower.contains("devops") || roleLower.contains("aws") -> RoleBenchmark(
+                "Cloud Architect",
+                listOf("AWS", "Azure", "Cloud Architecture", "GCP"),
+                listOf("Kubernetes", "Docker", "Terraform", "CI/CD"),
+                listOf("Linux", "Git", "Monitoring", "Security", "Networking")
+            )
             roleLower.contains("android") -> RoleBenchmark(
                 "Android Developer",
                 listOf("Kotlin", "Java", "Android SDK", "Jetpack Compose"),
