@@ -1864,6 +1864,8 @@ class JdMatcherViewModel(
         // If accepted or edited, update the preview resume data immediately
         if (newState == SuggestionState.ACCEPTED || newState == SuggestionState.EDITED) {
             applyChangeToPreview(suggestionId, if (newState == SuggestionState.EDITED) manualText else null)
+        } else if (newState == SuggestionState.DISMISSED || newState == SuggestionState.ORIGINAL_KEPT) {
+            revertChangeInPreview(suggestionId)
         }
     }
 
@@ -1874,7 +1876,7 @@ class JdMatcherViewModel(
         val newText = manualText ?: suggestion.suggestedText
         val oldText = suggestion.originalText
         
-        // Simple text replacement in relevant sections
+        // Text replacement in relevant sections
         val updatedResume = when (suggestion.section.uppercase()) {
             "SUMMARY" -> currentResume.copy(summary = currentResume.summary?.replace(oldText, newText))
             "EXPERIENCE" -> currentResume.copy(experience = currentResume.experience?.map { it.replace(oldText, newText) })
@@ -1886,6 +1888,37 @@ class JdMatcherViewModel(
             "SKILLS" -> currentResume.copy(extractedSkills = currentResume.extractedSkills?.map { 
                 if (it.name.equals(oldText, ignoreCase = true)) it.copy(name = newText)
                 else it
+            })
+            "CERTIFICATION", "CERTIFICATIONS" -> currentResume.copy(certifications = currentResume.certifications?.map {
+                if (it.contains(oldText)) it.replace(oldText, newText) else it
+            })
+            else -> currentResume
+        }
+        
+        _optimizationState.value = _optimizationState.value.copy(optimizedResumeData = updatedResume)
+    }
+
+    private fun revertChangeInPreview(suggestionId: String) {
+        val suggestion = _optimizationState.value.suggestions.find { it.changeId == suggestionId } ?: return
+        val currentResume = _optimizationState.value.optimizedResumeData ?: return
+        
+        val currentAppliedText = suggestion.manualText ?: suggestion.suggestedText
+        val originalText = suggestion.originalText
+        
+        val updatedResume = when (suggestion.section.uppercase()) {
+            "SUMMARY" -> currentResume.copy(summary = currentResume.summary?.replace(currentAppliedText, originalText))
+            "EXPERIENCE" -> currentResume.copy(experience = currentResume.experience?.map { it.replace(currentAppliedText, originalText) })
+            "PROJECTS" -> currentResume.copy(projectAnalysis = currentResume.projectAnalysis?.map { proj ->
+                val newName = if (proj.name.contains(currentAppliedText)) proj.name.replace(currentAppliedText, originalText) else proj.name
+                val newStrengths = proj.strengths?.map { s -> if (s.contains(currentAppliedText)) s.replace(currentAppliedText, originalText) else s }
+                proj.copy(name = newName, strengths = newStrengths)
+            })
+            "SKILLS" -> currentResume.copy(extractedSkills = currentResume.extractedSkills?.map { 
+                if (it.name.equals(currentAppliedText, ignoreCase = true)) it.copy(name = originalText)
+                else it
+            })
+            "CERTIFICATION", "CERTIFICATIONS" -> currentResume.copy(certifications = currentResume.certifications?.map {
+                if (it.contains(currentAppliedText)) it.replace(currentAppliedText, originalText) else it
             })
             else -> currentResume
         }
@@ -1901,73 +1934,25 @@ class JdMatcherViewModel(
 
     fun generateOptimizedResume() {
         val currentResume = _optimizationState.value.optimizedResumeData ?: return
-        val suggestions = _optimizationState.value.suggestions
-        val layout = currentResume.layoutInfo ?: return
-        val pdfUriStr = layout.pdfUri ?: return
-        val pdfUri = Uri.parse(pdfUriStr)
         
         _uiState.value = JdMatcherUiState.ANALYZING
         _analysisStageIndex.value = 0
         
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                // 1. Open original PDF
                 val context = com.example.aidrivencompetencyplatform.AstraApp.instance
-                val bytes = if (pdfUri.scheme == "file") {
-                    val file = java.io.File(pdfUri.path!!)
-                    if (file.exists()) file.readBytes() else null
-                } else {
-                    context.contentResolver.openInputStream(pdfUri)?.use { it.readBytes() }
-                } ?: throw Exception("Original resume file not found or inaccessible.")
-                
-                val document = PDDocument.load(bytes)
-                
-                // 2. Apply modifications
-                suggestions.filter { it.state == SuggestionState.ACCEPTED || it.state == SuggestionState.EDITED }.forEach { suggestion ->
-                    val newText = suggestion.manualText ?: suggestion.suggestedText
-                    
-                    // Modify each page
-                    for (pageIdx in 0 until document.numberOfPages) {
-                        val page = document.getPage(pageIdx)
-                        val rects = resumeParser.findTextRects(suggestion.originalText, layout, pageIdx)
-                        if (rects.isEmpty()) continue
-                        
-                        // Group by Y to handle lines
-                        rects.groupBy { it.y }.forEach { (_, linePosList) ->
-                            val lineLeft = linePosList.minOf { it.x }
-                            val lineTop = linePosList.minOf { it.y }
-                            val lineWidth = linePosList.maxOf { it.x + it.width } - lineLeft
-                            val lineHeight = linePosList.maxOf { it.y + it.height } - lineTop
-                            
-                            val pdfHeight = page.mediaBox.height
-                            
-                            // PDPageContentStream for the page
-                            val cs = PDPageContentStream(document, page, PDPageContentStream.AppendMode.APPEND, true, true)
-                            
-                            // White box over old text
-                            cs.setNonStrokingColor(255, 255, 255)
-                            // PdfBox Y is from bottom
-                            cs.addRect(lineLeft, pdfHeight - lineTop - lineHeight, lineWidth, lineHeight)
-                            cs.fill()
-                            
-                            // Add new text
-                            cs.beginText()
-                            cs.setFont(PDType1Font.HELVETICA, 10f)
-                            cs.newLineAtOffset(lineLeft, pdfHeight - lineTop - (lineHeight * 0.8f))
-                            cs.showText(newText)
-                            cs.endText()
-                            cs.close()
-                        }
-                    }
-                }
-                
-                // 3. Save to a temporary file
-                val outputFile = File(context.cacheDir, "Optimized_Resume_${System.currentTimeMillis()}.pdf")
-                document.save(outputFile)
-                document.close()
+                val pdfFile = com.example.aidrivencompetencyplatform.data.ResumePdfGenerator.generateCleanResumePdf(
+                    context = context,
+                    resume = currentResume,
+                    targetRole = _optimizationState.value.jdTitle
+                ) ?: throw Exception("Failed to generate PDF document.")
                 
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    val updatedResume = currentResume.copy(layoutInfo = layout.copy(pdfUri = Uri.fromFile(outputFile).toString()))
+                    val updatedResume = currentResume.copy(
+                        layoutInfo = (currentResume.layoutInfo ?: com.example.aidrivencompetencyplatform.model.ResumeLayout()).copy(
+                            pdfUri = Uri.fromFile(pdfFile).toString()
+                        )
+                    )
                     _optimizationState.value = _optimizationState.value.copy(
                         optimizedResumeData = updatedResume,
                         isAnalysisComplete = true
@@ -1988,6 +1973,10 @@ class JdMatcherViewModel(
         _uiState.value = JdMatcherUiState.INPUT
         _optimizationState.value = ResumeOptimizationState()
         _errorMessage.value = null
+    }
+
+    fun backToEditor() {
+        _uiState.value = JdMatcherUiState.OPTIMIZING
     }
 
     fun retryAnalysis() {

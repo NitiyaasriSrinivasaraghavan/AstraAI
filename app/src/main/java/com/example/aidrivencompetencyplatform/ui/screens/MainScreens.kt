@@ -4528,7 +4528,9 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                         ResumeOptimizationDashboard(
                             resume = resume,
                             optimizationState = optimizationState,
-                            onSuggestionClick = { selectedSuggestion = it },
+                            onUpdateSuggestion = { suggestionId, newState, manualText ->
+                                viewModel.updateSuggestionState(suggestionId, newState, manualText)
+                            },
                             onGeneratePdf = { viewModel.generateOptimizedResume() },
                             onPrevImprovement = { viewModel.setCurrentImprovement(optimizationState.currentImprovementIndex - 1) },
                             onNextImprovement = { viewModel.setCurrentImprovement(optimizationState.currentImprovementIndex + 1) }
@@ -4537,13 +4539,35 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                 }
 
                 JdMatcherUiState.RESULT -> {
-                    OptimizedResumePreview(
-                        resume = optimizationState.optimizedResumeData!!,
-                        jdTitle = optimizationState.jdTitle,
-                        onBack = { viewModel.resetToInput() },
-                        onShare = { /* Share logic */ },
-                        onSave = { /* Save logic */ }
-                    )
+                    val resumeData = optimizationState.optimizedResumeData
+                    if (resumeData != null) {
+                        OptimizedResumePreview(
+                            resume = resumeData,
+                            jdTitle = optimizationState.jdTitle,
+                            onBack = { viewModel.backToEditor() },
+                            onShare = {
+                                val pdfUriStr = resumeData.layoutInfo?.pdfUri
+                                if (pdfUriStr != null) {
+                                    try {
+                                        val uri = Uri.parse(pdfUriStr)
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/pdf"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share Optimized Resume"))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Could not share PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "No generated PDF file found to share.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onSave = {
+                                Toast.makeText(context, "Optimized Resume saved to cache!", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
                 }
 
                 JdMatcherUiState.ERROR -> {
@@ -4561,27 +4585,6 @@ fun JobDescriptionAnalyzerScreen(navController: NavController, viewModel: JdMatc
                             Text("Retry Analysis")
                         }
                     }
-                }
-            }
-
-            // Interactive Suggestion Panel
-            if (selectedSuggestion != null) {
-                ModalBottomSheet(
-                    onDismissRequest = { selectedSuggestion = null },
-                    containerColor = Surface,
-                    dragHandle = { BottomSheetDefaults.DragHandle() }
-                ) {
-                    SuggestionPanel(
-                        suggestion = selectedSuggestion!!,
-                        onKeepChange = { editedText ->
-                            viewModel.updateSuggestionState(selectedSuggestion!!.changeId, SuggestionState.ACCEPTED, editedText)
-                            selectedSuggestion = null
-                        },
-                        onDiscard = {
-                            viewModel.updateSuggestionState(selectedSuggestion!!.changeId, SuggestionState.DISMISSED)
-                            selectedSuggestion = null
-                        }
-                    )
                 }
             }
         }
@@ -7735,687 +7738,797 @@ fun ResumeScannerMockup(isScanning: Boolean) {
 fun ResumeOptimizationDashboard(
     resume: ResumeAnalysisResult,
     optimizationState: ResumeOptimizationState,
-    onSuggestionClick: (OptimizationSuggestion) -> Unit,
+    onUpdateSuggestion: (String, SuggestionState, String?) -> Unit,
     onGeneratePdf: () -> Unit,
     onPrevImprovement: () -> Unit,
     onNextImprovement: () -> Unit
 ) {
     val suggestions = optimizationState.suggestions
-    val totalImprovements = suggestions.size
+    val unreviewedCount = suggestions.count { it.state == SuggestionState.UNREVIEWED }
+    val acceptedCount = suggestions.count { it.state == SuggestionState.ACCEPTED || it.state == SuggestionState.EDITED }
+    val totalCount = suggestions.size
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Summary bar
-        Surface(color = Surface, shadowElevation = 4.dp) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("$totalImprovements targeted improvements found", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                    Text("Tap highlighted areas to review suggestions", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                }
-            }
-        }
+    var activeEditingSuggestionId by remember {
+        mutableStateOf<String?>(
+            suggestions.firstOrNull { it.state == SuggestionState.UNREVIEWED }?.changeId
+        )
+    }
 
-        // Resume View Area
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (resume.layoutInfo?.pdfUri != null) {
-                InteractiveResumeViewer(
-                    resume = resume,
-                    suggestions = suggestions,
-                    onSuggestionClick = onSuggestionClick,
-                    currentSuggestionIndex = optimizationState.currentImprovementIndex
-                )
-            } else {
-                // Fallback to text-based if no PDF
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+    var selectedSectionFilter by remember { mutableStateOf("All") }
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF1F5F9))
+    ) {
+        // 1. Top Status & Navigation Bar
+        Surface(
+            color = Color.White,
+            shadowElevation = 3.dp
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SummaryChip("${optimizationState.skillGaps.size} Gaps", WarningAmber)
-                            SummaryChip("${optimizationState.keywordOpportunities.size} Keywords", SuccessGreen)
-                            SummaryChip("${suggestions.count { it.state != SuggestionState.UNREVIEWED }} Reviewed", Primary)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Resume Editor",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFF0F172A)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (unreviewedCount > 0) Color(0xFFFFF1F2) else Color(0xFFF0FDF4),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (unreviewedCount > 0) Color(0xFFFECDD3) else Color(0xFFBBF7D0)
+                                )
+                            ) {
+                                Text(
+                                    if (unreviewedCount > 0) "$unreviewedCount to review" else "All reviewed ✓",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (unreviewedCount > 0) Color(0xFFE11D48) else Color(0xFF16A34A)
+                                )
+                            }
                         }
-                    }
-                    item {
-                        OptimizableResumeDocument(
-                            resume = resume,
-                            suggestions = suggestions,
-                            onSuggestionClick = onSuggestionClick
+                        Text(
+                            "$totalCount targeted improvements • $acceptedCount tailored",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B)
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(100.dp)) }
+
+                    // Prev / Next Navigation Buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(
+                            onClick = {
+                                val unreviewed = suggestions.filter { it.state == SuggestionState.UNREVIEWED }
+                                if (unreviewed.isNotEmpty()) {
+                                    val currentIdx = unreviewed.indexOfFirst { it.changeId == activeEditingSuggestionId }
+                                    val prevIdx = if (currentIdx > 0) currentIdx - 1 else unreviewed.size - 1
+                                    activeEditingSuggestionId = unreviewed[prevIdx].changeId
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Prev", style = MaterialTheme.typography.labelSmall)
+                        }
+
+                        Button(
+                            onClick = {
+                                val unreviewed = suggestions.filter { it.state == SuggestionState.UNREVIEWED }
+                                if (unreviewed.isNotEmpty()) {
+                                    val currentIdx = unreviewed.indexOfFirst { it.changeId == activeEditingSuggestionId }
+                                    val nextIdx = if (currentIdx >= 0 && currentIdx < unreviewed.size - 1) currentIdx + 1 else 0
+                                    activeEditingSuggestionId = unreviewed[nextIdx].changeId
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                        ) {
+                            Text("Next", style = MaterialTheme.typography.labelSmall)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Section Filter Chips
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val sections = listOf("All", "Summary", "Experience", "Skills", "Projects", "Education")
+                    items(sections) { sec ->
+                        FilterChip(
+                            selected = selectedSectionFilter == sec,
+                            onClick = { selectedSectionFilter = sec },
+                            label = { Text(sec, style = MaterialTheme.typography.labelSmall) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
                 }
             }
         }
 
-        // Bottom Action
-        Surface(color = Surface, shadowElevation = 8.dp) {
-            Box(modifier = Modifier.padding(16.dp)) {
+        // 2. The Interactive Resume Canvas (The Resume Itself is the Editor)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            ResumeBuilderCanvas(
+                resume = resume,
+                suggestions = suggestions,
+                activeEditingSuggestionId = activeEditingSuggestionId,
+                selectedSectionFilter = selectedSectionFilter,
+                onStartEditing = { suggestionId ->
+                    activeEditingSuggestionId = suggestionId
+                },
+                onKeepChange = { suggestionId, editedText ->
+                    onUpdateSuggestion(suggestionId, SuggestionState.ACCEPTED, editedText)
+                    val unreviewed = suggestions.filter { it.changeId != suggestionId && it.state == SuggestionState.UNREVIEWED }
+                    activeEditingSuggestionId = unreviewed.firstOrNull()?.changeId
+                },
+                onDiscard = { suggestionId ->
+                    onUpdateSuggestion(suggestionId, SuggestionState.DISMISSED, null)
+                    val unreviewed = suggestions.filter { it.changeId != suggestionId && it.state == SuggestionState.UNREVIEWED }
+                    activeEditingSuggestionId = unreviewed.firstOrNull()?.changeId
+                },
+                isReadOnly = false
+            )
+        }
+
+        // 3. Bottom Action Bar: Generate Optimized PDF
+        Surface(
+            color = Color.White,
+            shadowElevation = 8.dp
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
                 Button(
                     onClick = onGeneratePdf,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Primary)
                 ) {
-                    Text("Generate Optimized Resume", modifier = Modifier.padding(8.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SummaryChip(label: String, color: Color) {
-    Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.1f), border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.3f))) {
-        Text(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-fun InteractiveResumeViewer(
-    resume: ResumeAnalysisResult,
-    suggestions: List<OptimizationSuggestion>,
-    onSuggestionClick: (OptimizationSuggestion) -> Unit,
-    currentSuggestionIndex: Int
-) {
-    val layout = resume.layoutInfo ?: return
-    val pdfUriStr = layout.pdfUri ?: return
-    val pdfUri = Uri.parse(pdfUriStr)
-    val context = LocalContext.current
-    
-    val scrollState = rememberScrollState()
-    var pageCount by remember { mutableIntStateOf(0) }
-    val pageSizes = remember { mutableStateMapOf<Int, Size>() }
-    var renderError by remember { mutableStateOf<String?>(null) }
-    
-    LaunchedEffect(pdfUri) {
-        withContext(Dispatchers.IO) {
-            try {
-                val pfd = if (pdfUri.scheme == "file") {
-                    android.os.ParcelFileDescriptor.open(java.io.File(pdfUri.path!!), android.os.ParcelFileDescriptor.MODE_READ_ONLY)
-                } else {
-                    context.contentResolver.openFileDescriptor(pdfUri, "r")
-                }
-                
-                pfd?.use {
-                    val renderer = PdfRenderer(it)
-                    pageCount = renderer.pageCount
-                    renderer.close()
-                } ?: run { renderError = "Could not open resume file" }
-            } catch (e: Exception) {
-                Log.e("InteractiveResumeViewer", "Failed to count pages", e)
-                renderError = "Error loading resume: ${e.message}"
-            }
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFE5E5E5))) {
-        if (renderError != null) {
-            Column(
-                modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(Icons.Default.ErrorOutline, null, tint = ErrorRed, modifier = Modifier.size(48.dp))
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(renderError!!, textAlign = TextAlign.Center, color = TextSecondary)
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { renderError = null }) { Text("Retry") }
-            }
-        } else if (pageCount == 0) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Primary)
-        } else {
-            Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    for (i in 0 until pageCount) {
-                        Box(
-                            modifier = Modifier
-                                .shadow(8.dp, RoundedCornerShape(2.dp))
-                                .background(Color.White)
-                                .fillMaxWidth()
-                                .aspectRatio(if (pageSizes[i] != null) pageSizes[i]!!.width / pageSizes[i]!!.height else 0.707f)
-                        ) {
-                            PdfPageWithOverlays(
-                                pdfUri = pdfUri,
-                                pageIndex = i,
-                                suggestions = suggestions,
-                                layout = layout,
-                                onSuggestionClick = onSuggestionClick,
-                                onPageMeasured = { size -> pageSizes[i] = size },
-                                currentSuggestionIndex = currentSuggestionIndex
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(80.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ScanningOverlay() {
-    val infiniteTransition = rememberInfiniteTransition()
-    val scanY by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        )
-    )
-    
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.01f)
-                .align(Alignment.TopCenter)
-                .offset(y = 1000.dp * scanY)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Primary, Color.Transparent)))
-        )
-    }
-}
-
-@Composable
-fun PdfPageWithOverlays(
-    pdfUri: Uri,
-    pageIndex: Int,
-    suggestions: List<OptimizationSuggestion>,
-    layout: ResumeLayout,
-    onSuggestionClick: (OptimizationSuggestion) -> Unit,
-    onPageMeasured: (Size) -> Unit,
-    currentSuggestionIndex: Int
-) {
-    val context = LocalContext.current
-    val bitmapState = remember(pdfUri, pageIndex) { mutableStateOf<Bitmap?>(null) }
-    
-    var pageWidth by remember { mutableFloatStateOf(612f) }
-    var pageHeight by remember { mutableFloatStateOf(792f) }
-    
-    // Animation states
-    var startHighlightAnimation by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(300) // Small delay after page appearing
-        startHighlightAnimation = true
-    }
-
-    LaunchedEffect(pdfUri, pageIndex) {
-        withContext(Dispatchers.IO) {
-            try {
-                val pfd = if (pdfUri.scheme == "file") {
-                    android.os.ParcelFileDescriptor.open(java.io.File(pdfUri.path!!), android.os.ParcelFileDescriptor.MODE_READ_ONLY)
-                } else {
-                    context.contentResolver.openFileDescriptor(pdfUri, "r")
-                }
-
-                pfd?.use {
-                    val renderer = PdfRenderer(it)
-                    val page = renderer.openPage(pageIndex)
-                    
-                    pageWidth = page.width.toFloat()
-                    pageHeight = page.height.toFloat()
-                    onPageMeasured(Size(pageWidth, pageHeight))
-
-                    val bitmap = Bitmap.createBitmap(page.width * 2, page.height * 2, Bitmap.Config.ARGB_8888)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    bitmapState.value = bitmap
-                    
-                    page.close()
-                    renderer.close()
-                } ?: run {
-                    Log.e("PdfPageWithOverlays", "Failed to open ParcelFileDescriptor for $pdfUri")
-                }
-            } catch (e: Exception) {
-                Log.e("PdfPageWithOverlays", "Failed to render page $pageIndex: ${e.message}", e)
-            }
-        }
-    }
-    
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val canvasWidth = constraints.maxWidth.toFloat()
-        val canvasHeight = constraints.maxHeight.toFloat()
-        val density = LocalContext.current.resources.displayMetrics.density
-        
-        bitmapState.value?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        
-        // Red Sweep Animation Progress
-        val sweepProgress = animateFloatAsState(
-            targetValue = if (startHighlightAnimation) 1.2f else -0.2f,
-            animationSpec = tween(durationMillis = 1500, easing = LinearOutSlowInEasing)
-        )
-        
-        // Pulsing animation for highlights
-        val infiniteTransition = rememberInfiniteTransition()
-        val pulseAlpha by infiniteTransition.animateFloat(
-            initialValue = 0.15f,
-            targetValue = 0.25f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
-        
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val scaleX = canvasWidth / pageWidth
-            val scaleY = canvasHeight / pageHeight
-            
-            suggestions.forEachIndexed { index, suggestion ->
-                val rects = findTextRectsForSuggestion(suggestion, layout, pageIndex)
-                
-                rects.forEach { rect ->
-                    val isUnreviewed = suggestion.state == SuggestionState.UNREVIEWED
-                    
-                    if (isUnreviewed) {
-                        val drawRect = androidx.compose.ui.geometry.Rect(
-                            rect.left * scaleX, rect.top * scaleY,
-                            rect.right * scaleX, rect.bottom * scaleY
-                        )
-                        
-                        // Red Highlight Sweep Effect
-                        // We highlight only if sweepProgress has reached this vertical position
-                        // Or we can just use sweepProgress as a global X sweep.
-                        // User said: "Red highlight sweeps across affected text"
-                        
-                        val relativeTop = drawRect.top / canvasHeight
-                        val highlightAlpha = if (sweepProgress.value > relativeTop - 0.1f) pulseAlpha else 0f
-                        
-                        drawRoundRect(
-                            color = ErrorRed.copy(alpha = highlightAlpha),
-                            topLeft = Offset(drawRect.left - 2.dp.toPx(), drawRect.top - 1.dp.toPx()),
-                            size = Size(drawRect.width + 4.dp.toPx(), drawRect.height + 2.dp.toPx()),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
-                        )
-                        
-                        // Subtle red border sweep
-                        if (sweepProgress.value in relativeTop - 0.05f..relativeTop + 0.05f) {
-                            drawRoundRect(
-                                color = ErrorRed.copy(alpha = 0.6f),
-                                topLeft = Offset(drawRect.left - 2.dp.toPx(), drawRect.top - 1.dp.toPx()),
-                                size = Size(drawRect.width + 4.dp.toPx(), drawRect.height + 2.dp.toPx()),
-                                style = Stroke(width = 1.5.dp.toPx()),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Replacement Text Overlays (Seamless merging)
-        suggestions.filter { it.state == SuggestionState.ACCEPTED || it.state == SuggestionState.EDITED }.forEach { suggestion ->
-            val rects = findTextRectsForSuggestion(suggestion, layout, pageIndex)
-            if (rects.isNotEmpty()) {
-                val scaleX = canvasWidth / pageWidth
-                val scaleY = canvasHeight / pageHeight
-                
-                rects.forEach { lineRect ->
-                    // Cover original text with white background (matching resume usually)
-                    Box(
-                        modifier = Modifier
-                            .offset(
-                                x = (lineRect.left * scaleX / density).dp,
-                                y = (lineRect.top * scaleY / density).dp
-                            )
-                            .size(
-                                width = (lineRect.width * scaleX / density).dp,
-                                height = (lineRect.height * scaleY / density).dp
-                            )
-                            .background(Color.White) // Assuming white background for seamless merging
-                    )
-                }
-                
-                // Draw new text at the start position of the first rect
-                val firstRect = rects.first()
-                val totalWidth = rects.maxOf { it.right } - rects.minOf { it.left }
-                val totalHeight = rects.maxOf { it.bottom } - rects.minOf { it.top }
-                
-                Box(
-                    modifier = Modifier
-                        .offset(
-                            x = (rects.minOf { it.left } * scaleX / density).dp,
-                            y = (rects.minOf { it.top } * scaleY / density).dp
-                        )
-                        .size(
-                            width = (totalWidth * scaleX / density).dp,
-                            height = (totalHeight * scaleY / density).dp
-                        )
-                        .padding(horizontal = 1.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
+                    Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = suggestion.manualText ?: suggestion.suggestedText,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = (firstRect.height * scaleY / density * 0.75f).sp, // Slightly smaller than box to fit
-                            lineHeight = (firstRect.height * scaleY / density).sp,
-                            fontWeight = FontWeight.Normal,
-                            color = Color(0xFF222222) // Professional dark gray/black
-                        ),
-                        maxLines = rects.size,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        "Generate Optimized Resume",
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
         }
-        
-        // Interactive hit areas
-        suggestions.forEach { suggestion ->
-            if (suggestion.state == SuggestionState.UNREVIEWED) {
-                val rects = findTextRectsForSuggestion(suggestion, layout, pageIndex)
-                rects.forEach { rect ->
-                    val scaleX = canvasWidth / pageWidth
-                    val scaleY = canvasHeight / pageHeight
-                    
-                    Box(
-                        modifier = Modifier
-                            .offset(
-                                x = (rect.left * scaleX / density).dp,
-                                y = (rect.top * scaleY / density).dp
-                            )
-                            .size(
-                                width = (rect.width * scaleX / density).dp,
-                                height = (rect.height * scaleY / density).dp
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                onSuggestionClick(suggestion)
-                            }
-                    )
-                }
-            }
-        }
-    }
-}
-
-fun findTextRectsForSuggestion(suggestion: OptimizationSuggestion, layout: ResumeLayout, pageIndex: Int): List<Rect> {
-    val query = suggestion.originalText.lowercase().trim()
-    if (query.isEmpty()) return emptyList()
-    
-    val pagePositions = layout.textPositions.filter { it.pageIndex == pageIndex }
-    if (pagePositions.isEmpty()) return emptyList()
-
-    val fullText = pagePositions.joinToString("") { it.text }
-    val startIndex = fullText.lowercase().indexOf(query)
-    
-    if (startIndex == -1) return emptyList()
-    
-    val matchedPositions = mutableListOf<com.example.aidrivencompetencyplatform.model.TextPosition>()
-    var charCount = 0
-    for (pos in pagePositions) {
-        val nextCount = charCount + pos.text.length
-        if (nextCount > startIndex && charCount < startIndex + query.length) {
-            matchedPositions.add(pos)
-        }
-        charCount = nextCount
-        if (charCount >= startIndex + query.length) break
-    }
-    
-    if (matchedPositions.isEmpty()) return emptyList()
-
-    // Group by Y to handle multi-line highlights
-    return matchedPositions.groupBy { it.y }.values.map { linePos ->
-        Rect(
-            left = linePos.minOf { it.x },
-            top = linePos.minOf { it.y },
-            right = linePos.maxOf { it.x + it.width },
-            bottom = linePos.maxOf { it.y + it.height }
-        )
     }
 }
 
 @Composable
-fun OptimizableResumeDocument(
+fun ResumeBuilderCanvas(
     resume: ResumeAnalysisResult,
     suggestions: List<OptimizationSuggestion>,
-    onSuggestionClick: (OptimizationSuggestion) -> Unit
+    activeEditingSuggestionId: String?,
+    selectedSectionFilter: String = "All",
+    onStartEditing: (String) -> Unit,
+    onKeepChange: (String, String) -> Unit,
+    onDiscard: (String) -> Unit,
+    isReadOnly: Boolean = false
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-        color = Color.White,
-        shadowElevation = 2.dp,
-        shape = RoundedCornerShape(4.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-    ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            // Header
-            Text(resume.candidateName ?: "Candidate", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.Black)
-            Text("${resume.candidateEmail ?: ""} | ${resume.candidatePhone ?: ""} | ${resume.candidateLocation ?: ""}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Summary
-            ResumeSectionHeader("PROFESSIONAL SUMMARY")
-            HighlightableResumeText(
-                text = resume.summary ?: "",
-                section = "SUMMARY",
-                suggestions = suggestions,
-                onSuggestionClick = onSuggestionClick
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Experience
-            ResumeSectionHeader("WORK EXPERIENCE")
-            resume.experience?.forEach { exp ->
-                HighlightableResumeText(
-                    text = exp,
-                    section = "EXPERIENCE",
-                    suggestions = suggestions,
-                    onSuggestionClick = onSuggestionClick
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            
-            // Projects
-            ResumeSectionHeader("PROJECTS")
-            resume.projectAnalysis?.forEach { proj ->
-                Text(proj.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = Color.Black)
-                HighlightableResumeText(
-                    text = proj.strengths?.joinToString("; ") ?: "",
-                    section = "PROJECTS",
-                    suggestions = suggestions,
-                    onSuggestionClick = onSuggestionClick
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // Skills
-            ResumeSectionHeader("TECHNICAL SKILLS")
-            val skillsText = resume.extractedSkills?.joinToString(", ") { it.name } ?: ""
-            HighlightableResumeText(
-                text = skillsText,
-                section = "SKILLS",
-                suggestions = suggestions,
-                onSuggestionClick = onSuggestionClick
-            )
-        }
-    }
-}
-
-@Composable
-fun ResumeSectionHeader(title: String) {
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = Primary, letterSpacing = 1.sp)
-        HorizontalDivider(color = Primary.copy(alpha = 0.3f), thickness = 1.dp)
-        Spacer(modifier = Modifier.height(4.dp))
-    }
-}
-
-@Composable
-fun HighlightableResumeText(
-    text: String,
-    section: String,
-    suggestions: List<OptimizationSuggestion>,
-    onSuggestionClick: (OptimizationSuggestion) -> Unit
-) {
-    val relevantSuggestions = suggestions.filter { 
-        it.section.uppercase() == section.uppercase() && text.contains(it.originalText) 
-    }
-    
-    if (relevantSuggestions.isEmpty()) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.Black, lineHeight = 20.sp)
-    } else {
-        val annotatedString = buildAnnotatedString {
-            var currentIndex = 0
-            val sortedSuggestions = relevantSuggestions.sortedBy { text.indexOf(it.originalText) }
-            
-            for (suggestion in sortedSuggestions) {
-                val startIndex = text.indexOf(suggestion.originalText, currentIndex)
-                if (startIndex >= currentIndex) {
-                    append(text.substring(currentIndex, startIndex))
-                    
-                    val highlightColor = when (suggestion.state) {
-                        SuggestionState.ACCEPTED, SuggestionState.EDITED -> SuccessGreen.copy(alpha = 0.2f)
-                        SuggestionState.DISMISSED, SuggestionState.ORIGINAL_KEPT -> Color.Transparent
-                        else -> Primary.copy(alpha = 0.15f)
-                    }
-                    
-                    pushStringAnnotation(tag = "SUGGESTION", annotation = suggestion.changeId)
-                    withStyle(style = SpanStyle(
-                        background = highlightColor,
-                        fontWeight = if (suggestion.state == SuggestionState.UNREVIEWED) FontWeight.Bold else FontWeight.Normal,
-                        textDecoration = if (suggestion.state == SuggestionState.UNREVIEWED) androidx.compose.ui.text.style.TextDecoration.Underline else null
-                    )) {
-                        append(suggestion.originalText)
-                    }
-                    pop()
-                    currentIndex = startIndex + suggestion.originalText.length
-                }
-            }
-            append(text.substring(currentIndex))
-        }
-        
-        androidx.compose.foundation.text.ClickableText(
-            text = annotatedString,
-            style = MaterialTheme.typography.bodyMedium.copy(color = Color.Black, lineHeight = 20.sp),
-            onClick = { offset ->
-                annotatedString.getStringAnnotations(tag = "SUGGESTION", start = offset, end = offset)
-                    .firstOrNull()?.let { annotation ->
-                        suggestions.find { it.changeId == annotation.item }?.let { onSuggestionClick(it) }
-                    }
-            }
-        )
-    }
-}
-
-@Composable
-fun SuggestionPanel(
-    suggestion: OptimizationSuggestion,
-    onKeepChange: (String) -> Unit,
-    onDiscard: () -> Unit
-) {
-    var editedText by remember { mutableStateOf(suggestion.manualText ?: suggestion.suggestedText) }
-    
-    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(24.dp)
-            .navigationBarsPadding()
+            .widthIn(max = 700.dp)
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        shape = RoundedCornerShape(6.dp),
+        color = Color.White,
+        shadowElevation = 4.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
         ) {
-            Text("Suggested Improvement", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Text("ORIGINAL", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontWeight = FontWeight.Bold)
-        Surface(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            color = Color(0xFFF5F5F5),
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEEEEEE))
-        ) {
+            // Document Header: Candidate Info
             Text(
-                suggestion.originalText,
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                text = resume.candidateName?.ifBlank { "Candidate" } ?: "Candidate",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
             )
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Text("SUGGESTED (EDITABLE)", style = MaterialTheme.typography.labelSmall, color = Primary, fontWeight = FontWeight.Bold)
-        OutlinedTextField(
-            value = editedText,
-            onValueChange = { editedText = it },
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            shape = RoundedCornerShape(8.dp),
-            textStyle = MaterialTheme.typography.bodyMedium,
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = Primary.copy(alpha = 0.02f),
-                focusedContainerColor = Primary.copy(alpha = 0.02f),
-                unfocusedBorderColor = Primary.copy(alpha = 0.2f),
-                focusedBorderColor = Primary
+
+            val targetRole = resume.targetRole
+            if (!targetRole.isNullOrBlank()) {
+                Text(
+                    text = targetRole,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Primary
+                )
+            }
+
+            val contactInfoList = listOfNotNull(
+                resume.candidateEmail?.ifBlank { null },
+                resume.candidatePhone?.ifBlank { null },
+                resume.candidateLocation?.ifBlank { null }
             )
-        )
-        
-        Spacer(modifier = Modifier.height(20.dp))
-        
-        Text("WHY THIS CHANGE?", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
-        Text(suggestion.reason, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = onDiscard,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDDDDD))
-            ) {
-                Text("Discard", color = TextSecondary)
+            if (contactInfoList.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = contactInfoList.joinToString("  •  "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B)
+                )
             }
-            
-            Button(
-                onClick = { onKeepChange(editedText) },
-                modifier = Modifier.weight(1.5f),
-                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Keep Change", fontWeight = FontWeight.Bold)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 1. Professional Summary Section
+            if ((selectedSectionFilter == "All" || selectedSectionFilter == "Summary") && !resume.summary.isNullOrBlank()) {
+                ResumeSectionTitle("Professional Summary")
+                val summaryText = resume.summary ?: ""
+                val summarySuggestion = suggestions.find {
+                    it.section.uppercase() == "SUMMARY" && (summaryText.contains(it.originalText) || it.originalText.contains(summaryText))
+                }
+
+                InlineEditableResumeBlock(
+                    text = summaryText,
+                    originalText = summarySuggestion?.originalText ?: summaryText,
+                    matchingSuggestion = summarySuggestion,
+                    isEditing = summarySuggestion != null && activeEditingSuggestionId == summarySuggestion.changeId,
+                    onStartEditing = { summarySuggestion?.let { onStartEditing(it.changeId) } },
+                    onKeepChange = { newText -> summarySuggestion?.let { onKeepChange(it.changeId, newText) } },
+                    onDiscard = { summarySuggestion?.let { onDiscard(it.changeId) } },
+                    isReadOnly = isReadOnly,
+                    bulletPrefix = false
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            // 2. Work Experience Section
+            if ((selectedSectionFilter == "All" || selectedSectionFilter == "Experience") && !resume.experience.isNullOrEmpty()) {
+                ResumeSectionTitle("Work Experience")
+                resume.experience?.forEach { expItem ->
+                    val lines = expItem.lines().map { it.trim() }.filter { it.isNotBlank() }
+                    if (lines.isNotEmpty()) {
+                        // Header line (Job Title, Company, Dates)
+                        Text(
+                            text = lines.first(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A),
+                            modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+                        )
+
+                        // Bullet lines
+                        val bulletLines = if (lines.size > 1) lines.drop(1) else listOf(lines.first())
+                        bulletLines.forEach { rawBullet ->
+                            val cleanBullet = rawBullet.removePrefix("•").removePrefix("-").removePrefix("*").trim()
+                            val bulletSuggestion = suggestions.find {
+                                it.section.uppercase() == "EXPERIENCE" && (cleanBullet.contains(it.originalText) || it.originalText.contains(cleanBullet))
+                            }
+
+                            InlineEditableResumeBlock(
+                                text = cleanBullet,
+                                originalText = bulletSuggestion?.originalText ?: cleanBullet,
+                                matchingSuggestion = bulletSuggestion,
+                                isEditing = bulletSuggestion != null && activeEditingSuggestionId == bulletSuggestion.changeId,
+                                onStartEditing = { bulletSuggestion?.let { onStartEditing(it.changeId) } },
+                                onKeepChange = { newText -> bulletSuggestion?.let { onKeepChange(it.changeId, newText) } },
+                                onDiscard = { bulletSuggestion?.let { onDiscard(it.changeId) } },
+                                isReadOnly = isReadOnly,
+                                bulletPrefix = true
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // 3. Technical Skills Section
+            if ((selectedSectionFilter == "All" || selectedSectionFilter == "Skills") && !resume.extractedSkills.isNullOrEmpty()) {
+                ResumeSectionTitle("Technical Skills")
+                val skills = resume.extractedSkills ?: emptyList()
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    val skillSuggestions = suggestions.filter { it.section.uppercase() == "SKILLS" }
+                    val activeSkillSuggestion = skillSuggestions.find { it.changeId == activeEditingSuggestionId }
+
+                    if (activeSkillSuggestion != null && !isReadOnly) {
+                        // In-place editor for skill suggestion
+                        InlineEditableResumeBlock(
+                            text = activeSkillSuggestion.suggestedText,
+                            originalText = activeSkillSuggestion.originalText,
+                            matchingSuggestion = activeSkillSuggestion,
+                            isEditing = true,
+                            onStartEditing = { onStartEditing(activeSkillSuggestion.changeId) },
+                            onKeepChange = { newText -> onKeepChange(activeSkillSuggestion.changeId, newText) },
+                            onDiscard = { onDiscard(activeSkillSuggestion.changeId) },
+                            isReadOnly = isReadOnly,
+                            bulletPrefix = false
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Render Skills as Flow / Chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        skills.take(15).forEach { skill ->
+                            val matchingSkillSugg = skillSuggestions.find {
+                                it.originalText.contains(skill.name, ignoreCase = true) || skill.name.contains(it.originalText, ignoreCase = true)
+                            }
+                            val isTailored = matchingSkillSugg?.state == SuggestionState.ACCEPTED || matchingSkillSugg?.state == SuggestionState.EDITED
+                            val isPending = matchingSkillSugg?.state == SuggestionState.UNREVIEWED
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = when {
+                                    isPending -> Color(0xFFFFF1F2)
+                                    isTailored -> Color(0xFFF0FDF4)
+                                    else -> Color(0xFFF8FAFC)
+                                },
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    when {
+                                        isPending -> Color(0xFFFECDD3)
+                                        isTailored -> Color(0xFFBBF7D0)
+                                        else -> Color(0xFFE2E8F0)
+                                    }
+                                ),
+                                modifier = Modifier
+                                    .padding(vertical = 3.dp)
+                                    .clickable(enabled = matchingSkillSugg != null && !isReadOnly) {
+                                        matchingSkillSugg?.let { onStartEditing(it.changeId) }
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (isPending) {
+                                        Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFFE11D48), modifier = Modifier.size(12.dp))
+                                    } else if (isTailored) {
+                                        Icon(Icons.Default.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(12.dp))
+                                    }
+                                    Text(
+                                        skill.name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = when {
+                                            isPending -> Color(0xFFE11D48)
+                                            isTailored -> Color(0xFF16A34A)
+                                            else -> Color(0xFF334155)
+                                        },
+                                        fontWeight = if (isPending || isTailored) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            // 4. Key Projects Section
+            if ((selectedSectionFilter == "All" || selectedSectionFilter == "Projects") && !resume.projectAnalysis.isNullOrEmpty()) {
+                ResumeSectionTitle("Key Projects")
+                resume.projectAnalysis?.forEach { proj ->
+                    Text(
+                        text = proj.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+
+                    if (!proj.technologies.isNullOrEmpty()) {
+                        Text(
+                            text = "Technologies: ${proj.technologies.joinToString(", ")}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+
+                    proj.strengths?.forEach { strength ->
+                        val cleanStrength = strength.removePrefix("•").removePrefix("-").trim()
+                        val projSuggestion = suggestions.find {
+                            it.section.uppercase() == "PROJECTS" && (cleanStrength.contains(it.originalText) || it.originalText.contains(cleanStrength))
+                        }
+
+                        InlineEditableResumeBlock(
+                            text = cleanStrength,
+                            originalText = projSuggestion?.originalText ?: cleanStrength,
+                            matchingSuggestion = projSuggestion,
+                            isEditing = projSuggestion != null && activeEditingSuggestionId == projSuggestion.changeId,
+                            onStartEditing = { projSuggestion?.let { onStartEditing(it.changeId) } },
+                            onKeepChange = { newText -> projSuggestion?.let { onKeepChange(it.changeId, newText) } },
+                            onDiscard = { projSuggestion?.let { onDiscard(it.changeId) } },
+                            isReadOnly = isReadOnly,
+                            bulletPrefix = true
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // 5. Education Section
+            if ((selectedSectionFilter == "All" || selectedSectionFilter == "Education") && !resume.education.isNullOrEmpty()) {
+                ResumeSectionTitle("Education")
+                resume.education?.forEach { edu ->
+                    Text(
+                        text = "•  ${edu.trim()}",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF334155), lineHeight = 20.sp),
+                        modifier = Modifier.padding(vertical = 3.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            // 6. Certifications Section
+            if (!resume.certifications.isNullOrEmpty()) {
+                ResumeSectionTitle("Certifications")
+                resume.certifications?.forEach { cert ->
+                    Text(
+                        text = "•  ${cert.trim()}",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF334155), lineHeight = 20.sp),
+                        modifier = Modifier.padding(vertical = 3.dp)
+                    )
+                }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
 @Composable
-fun SuggestionBox(label: String, content: String, color: Color) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold)
+fun ResumeSectionTitle(title: String) {
+    Column(modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)) {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = Primary,
+            letterSpacing = 1.2.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        HorizontalDivider(color = Primary.copy(alpha = 0.25f), thickness = 1.dp)
+    }
+}
+
+@Composable
+fun InlineEditableResumeBlock(
+    text: String,
+    originalText: String,
+    matchingSuggestion: OptimizationSuggestion?,
+    isEditing: Boolean,
+    onStartEditing: () -> Unit,
+    onKeepChange: (String) -> Unit,
+    onDiscard: () -> Unit,
+    isReadOnly: Boolean = false,
+    bulletPrefix: Boolean = false
+) {
+    if (isEditing && matchingSuggestion != null && !isReadOnly) {
+        // IN-PLACE EDITING CARD (The Resume Itself is the Editor)
         Surface(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            color = color.copy(alpha = 0.05f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
             shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.2f))
+            color = Color(0xFFF8FAFC),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Primary),
+            shadowElevation = 3.dp
         ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                // Header badge
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.AutoAwesome, null, tint = Primary, modifier = Modifier.size(16.dp))
+                        Text(
+                            "Editing in Place for Job Alignment",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Primary
+                        )
+                    }
+                    if (!matchingSuggestion.relatedKeyword.isNullOrBlank()) {
+                        Surface(
+                            color = Primary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "Matches: ${matchingSuggestion.relatedKeyword}",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                var editedText by remember(matchingSuggestion) {
+                    mutableStateOf(matchingSuggestion.manualText ?: matchingSuggestion.suggestedText)
+                }
+
+                // In-place editable text field
+                OutlinedTextField(
+                    value = editedText,
+                    onValueChange = { editedText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0F172A), lineHeight = 20.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedBorderColor = Primary,
+                        unfocusedBorderColor = Color(0xFFCBD5E1)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Quick insertion chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SuggestionQuickChip(
+                        label = "✨ Use AI Suggestion",
+                        isActive = editedText == matchingSuggestion.suggestedText,
+                        onClick = { editedText = matchingSuggestion.suggestedText }
+                    )
+                    SuggestionQuickChip(
+                        label = "↺ Revert to Original",
+                        isActive = editedText == matchingSuggestion.originalText,
+                        onClick = { editedText = matchingSuggestion.originalText }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Contextual AI Explanation
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFFEFF6FF),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            "Why this change improves your match:",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF1E40AF)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            matchingSuggestion.reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Keep Change and Discard Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDiscard,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                    ) {
+                        Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = Color(0xFF64748B))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Discard", color = Color(0xFF475569))
+                    }
+
+                    Button(
+                        onClick = { onKeepChange(editedText) },
+                        modifier = Modifier.weight(1.4f),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                    ) {
+                        Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Keep Change", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+        }
+    } else if (matchingSuggestion != null && matchingSuggestion.state == SuggestionState.UNREVIEWED && !isReadOnly) {
+        // TARGETED HIGHLIGHT: Only affected content is highlighted
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp)
+                .clickable { onStartEditing() },
+            shape = RoundedCornerShape(6.dp),
+            color = Color(0xFFFFF1F2), // Subtle warm rose highlight
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECDD3))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                // Left accent bar
+                Box(
+                    modifier = Modifier
+                        .width(3.5.dp)
+                        .height(20.dp)
+                        .background(Color(0xFFE11D48), RoundedCornerShape(2.dp))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    if (bulletPrefix) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text("• ", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0F172A), lineHeight = 20.sp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0F172A), lineHeight = 20.sp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFFE11D48), modifier = Modifier.size(12.dp))
+                        Text(
+                            "Improvement available • Tap to edit in place",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFE11D48),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    } else if (matchingSuggestion != null && (matchingSuggestion.state == SuggestionState.ACCEPTED || matchingSuggestion.state == SuggestionState.EDITED) && !isReadOnly) {
+        // ACCEPTED / EDITED IN-PLACE (Soft Green Tailored Indicator)
+        val displayText = matchingSuggestion.manualText ?: matchingSuggestion.suggestedText
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp)
+                .clickable { onStartEditing() },
+            shape = RoundedCornerShape(6.dp),
+            color = Color(0xFFF0FDF4),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBBF7D0))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.5.dp)
+                        .height(20.dp)
+                        .background(Color(0xFF16A34A), RoundedCornerShape(2.dp))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    if (bulletPrefix) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text("• ", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Text(
+                                text = displayText,
+                                style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0F172A), lineHeight = 20.sp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = displayText,
+                            style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0F172A), lineHeight = 20.sp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(12.dp))
+                        Text(
+                            "Tailored for Job Description • Tap to adjust",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF16A34A),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        // NORMAL RESUME CONTENT: Zero highlights, clean and pristine typography
+        val displayText = if (matchingSuggestion?.state == SuggestionState.ACCEPTED || matchingSuggestion?.state == SuggestionState.EDITED) {
+            matchingSuggestion.manualText ?: matchingSuggestion.suggestedText
+        } else {
+            text
+        }
+
+        if (bulletPrefix) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text("• ", style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0F172A), fontWeight = FontWeight.Bold))
+                Text(
+                    text = displayText,
+                    style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF334155), lineHeight = 20.sp)
+                )
+            }
+        } else {
             Text(
-                content,
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary
+                text = displayText,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF334155), lineHeight = 20.sp)
             )
         }
+    }
+}
+
+@Composable
+fun SuggestionQuickChip(
+    label: String,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        color = if (isActive) Primary.copy(alpha = 0.12f) else Color(0xFFF1F5F9),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isActive) Primary else Color(0xFFCBD5E1)
+        )
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+            color = if (isActive) Primary else Color(0xFF475569)
+        )
     }
 }
 
@@ -8427,44 +8540,99 @@ fun OptimizedResumePreview(
     onShare: () -> Unit,
     onSave: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().background(Background)) {
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            contentAlignment = Alignment.Center
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF1F5F9))
+    ) {
+        // Status Top Banner
+        Surface(
+            color = Color.White,
+            shadowElevation = 3.dp
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Optimized Resume Ready", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Tailored for $jdTitle", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-            }
-        }
-        
-        Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)) {
-            if (resume.layoutInfo?.pdfUri != null) {
-                InteractiveResumeViewer(
-                    resume = resume,
-                    suggestions = emptyList(), // Final view
-                    onSuggestionClick = {},
-                    currentSuggestionIndex = -1
-                )
-            } else {
-                OptimizableResumeDocument(resume, emptyList(), {})
-            }
-        }
-        
-        Surface(color = Surface, shadowElevation = 8.dp) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.CheckCircle, null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                        Text(
+                            "Optimized Resume Ready",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                    }
+                    Text(
+                        "All accepted modifications applied cleanly for $jdTitle",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B)
+                    )
+                }
+            }
+        }
+
+        // Preview Canvas (The Resume Itself)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            ResumeBuilderCanvas(
+                resume = resume,
+                suggestions = emptyList(), // Read-only final preview
+                activeEditingSuggestionId = null,
+                onStartEditing = {},
+                onKeepChange = { _, _ -> },
+                onDiscard = {},
+                isReadOnly = true
+            )
+        }
+
+        // Bottom Action Bar
+        Surface(
+            color = Color.White,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
                     Text("Back to Editor")
                 }
-                Button(onClick = onSave, modifier = Modifier.weight(1.5f), colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
+
+                Button(
+                    onClick = onSave,
+                    modifier = Modifier.weight(1.3f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) {
                     Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text("Save PDF")
                 }
-                IconButton(onClick = onShare) {
+
+                IconButton(
+                    onClick = onShare,
+                    modifier = Modifier
+                        .background(Primary.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                ) {
                     Icon(Icons.Default.Share, null, tint = Primary)
                 }
             }
