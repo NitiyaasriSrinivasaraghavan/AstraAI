@@ -217,8 +217,8 @@ fun NovaInterviewerHeader(
                             NovaState.SPEAKING -> SoftGreen
                             NovaState.LISTENING -> ErrorRed.copy(alpha = 0.15f)
                             NovaState.THINKING -> WarningAmber.copy(alpha = 0.2f)
-                            NovaState.ENCOURAGING -> SuccessGreen.copy(alpha = 0.2f)
-                            NovaState.IDLE -> SurfaceVariant
+                            NovaState.ENCOURAGING, NovaState.EXCITED -> SuccessGreen.copy(alpha = 0.2f)
+                            else -> SurfaceVariant
                         }
                     ) {
                         Row(
@@ -230,7 +230,11 @@ fun NovaInterviewerHeader(
                                 NovaState.LISTENING -> "🎤 Listening..."
                                 NovaState.THINKING -> "✨ Thinking..."
                                 NovaState.ENCOURAGING -> "🌟 Encouraging"
-                                NovaState.IDLE -> "🟢 Idle"
+                                NovaState.EXCITED -> "⭐ Excited"
+                                NovaState.SURPRISED -> "😮 Surprised"
+                                NovaState.WINKING -> "😉 Winking"
+                                NovaState.HAPPY -> "😊 Happy"
+                                else -> "🟢 Ready"
                             }
                             Text(
                                 text = statusText,
@@ -240,8 +244,8 @@ fun NovaInterviewerHeader(
                                     NovaState.SPEAKING -> PrimaryDark
                                     NovaState.LISTENING -> ErrorRed
                                     NovaState.THINKING -> PrimaryDark
-                                    NovaState.ENCOURAGING -> SuccessGreen
-                                    NovaState.IDLE -> TextSecondary
+                                    NovaState.ENCOURAGING, NovaState.EXCITED -> SuccessGreen
+                                    else -> TextSecondary
                                 }
                             )
                         }
@@ -254,8 +258,8 @@ fun NovaInterviewerHeader(
                     NovaState.SPEAKING -> "Asking question / speaking..."
                     NovaState.LISTENING -> "Listening to your answer..."
                     NovaState.THINKING -> "Processing response & generating next step..."
-                    NovaState.ENCOURAGING -> "Great progress so far!"
-                    NovaState.IDLE -> if (isInterviewMode) "Target Role: $targetRole" else "Persistent Career & Competency Guide"
+                    NovaState.ENCOURAGING, NovaState.EXCITED -> "Great progress so far!"
+                    else -> if (isInterviewMode) "Target Role: $targetRole" else "Persistent Career & Competency Guide"
                 }
                 Text(
                     text = subtitle,

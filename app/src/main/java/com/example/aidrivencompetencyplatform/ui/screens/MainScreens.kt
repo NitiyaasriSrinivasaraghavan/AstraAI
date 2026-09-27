@@ -595,7 +595,7 @@ fun MainDashboardScreen(
                         InterviewPreparationEntryCard(
                             targetRole = targetRole.ifBlank { "Software Engineer" },
                             onStartInterviewClick = {
-                                val route = Screen.AiAssistant.route + "?mode=INTERVIEW_PREPARATION" + (latestAnalysis?.id?.let { "&analysisId=$it" } ?: "")
+                                val route = Screen.InterviewPrep.route + (latestAnalysis?.id?.let { "?analysisId=$it" } ?: "")
                                 navController.navigate(route)
                             }
                         )
@@ -8274,7 +8274,7 @@ fun ResumeModificationReportView(
                     }
 
                     Button(
-                        onClick = { navController.navigate(Screen.AiAssistant.route + "?mode=INTERVIEW_PREPARATION&analysisId=${report.analysisId}") },
+                        onClick = { navController.navigate(Screen.InterviewPrep.route + "?analysisId=${report.analysisId}") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -10670,7 +10670,7 @@ fun TechnicalMcqResultScreen(
                         Button(
                             onClick = {
                                 val targetId = analysisId ?: state.currentAnalysisId
-                                val route = Screen.AiAssistant.route + "?mode=INTERVIEW_PREPARATION" + (if (!targetId.isNullOrBlank()) "&analysisId=$targetId" else "")
+                                val route = Screen.InterviewPrep.route + (if (!targetId.isNullOrBlank()) "?analysisId=$targetId" else "")
                                 navController.navigate(route)
                             },
                             modifier = Modifier

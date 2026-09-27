@@ -2270,6 +2270,10 @@ class InterviewViewModel(
 
     // Map to store user answers locally during the session
     private val _userAnswers = MutableStateFlow<Map<String, String>>(emptyMap())
+    val userAnswers: StateFlow<Map<String, String>> = _userAnswers.asStateFlow()
+
+    private val _exchanges = MutableStateFlow<List<InterviewExchange>>(emptyList())
+    val exchanges: StateFlow<List<InterviewExchange>> = _exchanges.asStateFlow()
 
     init {
         refreshContext()
@@ -2278,31 +2282,41 @@ class InterviewViewModel(
     fun refreshContext() {
         val latest = sessionManager.getLatestAnalysis()
         val role = latest?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
+        val candidateName = latest?.candidateName ?: sessionManager.getUserName()
         
         // If the latest analysis already has a completed interview summary, load it as a locked snapshot
         if (latest?.interviewSummary != null) {
             _state.value = _state.value.copy(
                 targetRole = role,
+                candidateName = candidateName,
                 questions = latest.interviewQuestions,
                 summary = latest.interviewSummary,
-                isComplete = true
+                isComplete = true,
+                currentNovaExpression = NovaState.ENCOURAGING
             )
             _userAnswers.value = latest.userAnswers
         } else {
-            _state.value = _state.value.copy(targetRole = role)
+            _state.value = _state.value.copy(
+                targetRole = role,
+                candidateName = candidateName,
+                currentNovaExpression = NovaState.HAPPY
+            )
         }
     }
 
     fun loadHistoryAnalysis(analysisId: String) {
         val analysis = sessionManager.getAnalysisById(analysisId)
         if (analysis != null) {
+            val role = analysis.targetRole ?: "Android Developer"
+            val candidateName = analysis.candidateName ?: sessionManager.getUserName()
             _state.value = _state.value.copy(
-                targetRole = analysis.targetRole ?: "Android Developer",
+                targetRole = role,
+                candidateName = candidateName,
                 questions = analysis.interviewQuestions,
                 summary = analysis.interviewSummary,
-                isComplete = analysis.interviewSummary != null
+                isComplete = analysis.interviewSummary != null,
+                currentNovaExpression = if (analysis.interviewSummary != null) NovaState.ENCOURAGING else NovaState.HAPPY
             )
-            // Restore user answers if available
             _userAnswers.value = analysis.userAnswers
         } else {
             refreshContext()
@@ -2311,24 +2325,67 @@ class InterviewViewModel(
 
     fun startInterview() {
         val latest = sessionManager.getLatestAnalysis()
-        if (latest == null) {
-            _state.value = _state.value.copy(errorMessage = "Please upload your resume first to generate personalized questions.")
-            return
-        }
+        val role = latest?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
+        val candidateName = latest?.candidateName ?: sessionManager.getUserName()
 
-        // Clean start for new interview - Requirement #18
+        // Clean start for character-led interview
         _userAnswers.value = emptyMap()
-        _state.value = InterviewSessionState(targetRole = latest.targetRole ?: "Android Developer", isLoading = true)
+        _exchanges.value = emptyList()
+        _state.value = InterviewSessionState(
+            targetRole = role,
+            candidateName = candidateName,
+            isLoading = true,
+            currentNovaExpression = NovaState.HAPPY
+        )
 
         viewModelScope.launch {
             try {
-                val jd = latest.jdText 
-                val questions = geminiService.generateInterviewQuestions(_state.value.targetRole, latest, jd)
-                
+                val jd = latest?.jdText
+                val questions = if (latest != null) {
+                    geminiService.generateInterviewQuestions(role, latest, jd)
+                } else {
+                    emptyList()
+                }
+
+                val finalQuestions = if (questions.isNotEmpty()) {
+                    questions.take(5)
+                } else {
+                    // Fallback questions if offline or no resume
+                    listOf(
+                        InterviewQuestion(
+                            text = "To start our discussion, could you introduce yourself and tell me about your background with $role?",
+                            type = InterviewQuestionType.TECHNICAL,
+                            category = "Introduction & Overview"
+                        ),
+                        InterviewQuestion(
+                            text = "Could you walk me through a challenging technical problem you solved recently and your approach to debugging it?",
+                            type = InterviewQuestionType.PROBLEM_SOLVING,
+                            category = "Problem Solving"
+                        ),
+                        InterviewQuestion(
+                            text = "How do you ensure high performance, scalability, and clean architecture in your code?",
+                            type = InterviewQuestionType.TECHNICAL,
+                            category = "Architecture & Quality"
+                        ),
+                        InterviewQuestion(
+                            text = "Can you share a time when project requirements changed rapidly and how you adapted to deliver on time?",
+                            type = InterviewQuestionType.BEHAVIORAL,
+                            category = "Adaptability & Delivery"
+                        ),
+                        InterviewQuestion(
+                            text = "What engineering practices or technologies are you most excited to learn or deepen your expertise in next?",
+                            type = InterviewQuestionType.TECHNICAL,
+                            category = "Growth & Vision"
+                        )
+                    )
+                }
+
                 _state.value = _state.value.copy(
-                    questions = questions.take(5), // Requirement #8
+                    questions = finalQuestions,
                     currentQuestionIndex = 0,
-                    isLoading = false
+                    isLoading = false,
+                    currentNovaExpression = NovaState.HAPPY,
+                    lastNovaFeedback = null
                 )
             } catch (e: Exception) {
                 Log.e("InterviewViewModel", "Failed to generate questions", e)
@@ -2340,29 +2397,117 @@ class InterviewViewModel(
         }
     }
 
+    fun markIntroFinished() {
+        _state.value = _state.value.copy(isIntroFinished = true)
+    }
+
+    fun setNovaExpression(expression: NovaState) {
+        _state.value = _state.value.copy(currentNovaExpression = expression)
+    }
+
     fun submitAnswer(answer: String) {
         if (answer.isBlank()) return
-        
+
         val currentIdx = _state.value.currentQuestionIndex
         val question = _state.value.questions.getOrNull(currentIdx) ?: return
-        
-        // Store answer locally - Requirement #9
+        val latest = sessionManager.getLatestAnalysis()
+
+        // 1. Store answer locally
         val updatedAnswers = _userAnswers.value.toMutableMap()
         updatedAnswers[question.id] = answer
         _userAnswers.value = updatedAnswers
 
-        // Advance or Finish
-        if (currentIdx < _state.value.questions.size - 1) {
-            _state.value = _state.value.copy(currentQuestionIndex = currentIdx + 1)
-        } else {
-            generateFinalReport()
+        // 2. Put Nova into Thinking state immediately
+        _state.value = _state.value.copy(
+            isEvaluating = true,
+            currentNovaExpression = NovaState.THINKING
+        )
+
+        viewModelScope.launch {
+            try {
+                if (currentIdx < _state.value.questions.size - 1) {
+                    // Evaluate response using Gemini adaptive engine
+                    val adaptive = try {
+                        geminiService.evaluateAnswerAndGenerateAdaptiveQuestion(
+                            targetRole = _state.value.targetRole,
+                            resumeData = latest,
+                            questionNumber = currentIdx + 1,
+                            currentQuestion = question,
+                            candidateAnswer = answer,
+                            conversationHistory = _exchanges.value
+                        )
+                    } catch (e: Exception) {
+                        Log.w("InterviewViewModel", "Adaptive call fallback: ${e.message}")
+                        null
+                    }
+
+                    // Dynamically map Nova's expression to answer quality & personality
+                    val newExpression = when {
+                        adaptive?.evaluation?.strengths?.isNotEmpty() == true -> {
+                            if (currentIdx % 2 == 0) NovaState.EXCITED else NovaState.ENCOURAGING
+                        }
+                        adaptive?.nextQuestion?.isFollowUp == true -> NovaState.WINKING
+                        answer.length > 220 -> NovaState.ENCOURAGING
+                        else -> NovaState.HAPPY
+                    }
+
+                    val spokenFeedback = adaptive?.interviewerSpokenResponse?.ifBlank { null }
+                        ?: "Thanks for that response! Let's explore the next question."
+
+                    // Record exchange
+                    val newExchange = InterviewExchange(
+                        question = question,
+                        answer = answer,
+                        evaluation = adaptive?.evaluation
+                    )
+                    _exchanges.value = _exchanges.value + newExchange
+
+                    // Update evaluations map
+                    val updatedEvals = _state.value.evaluations.toMutableMap()
+                    if (adaptive?.evaluation != null) {
+                        updatedEvals[question.id] = adaptive.evaluation
+                    }
+
+                    // If adaptive provided a relevant follow-up question, adapt the next question
+                    val updatedQuestions = _state.value.questions.toMutableList()
+                    if (adaptive?.nextQuestion != null && adaptive.nextQuestion.isFollowUp) {
+                        updatedQuestions[currentIdx + 1] = adaptive.nextQuestion
+                    }
+
+                    _state.value = _state.value.copy(
+                        questions = updatedQuestions,
+                        currentQuestionIndex = currentIdx + 1,
+                        lastNovaFeedback = spokenFeedback,
+                        currentNovaExpression = newExpression,
+                        evaluations = updatedEvals,
+                        isEvaluating = false
+                    )
+                } else {
+                    // Final question reached -> generate comprehensive performance summary
+                    generateFinalReport()
+                }
+            } catch (e: Exception) {
+                Log.e("InterviewViewModel", "Error evaluating answer", e)
+                _state.value = _state.value.copy(
+                    currentQuestionIndex = (currentIdx + 1).coerceAtMost(_state.value.questions.size - 1),
+                    currentNovaExpression = NovaState.HAPPY,
+                    isEvaluating = false
+                )
+                if (currentIdx >= _state.value.questions.size - 1) {
+                    generateFinalReport()
+                }
+            }
         }
     }
 
     private fun generateFinalReport() {
         val latest = sessionManager.getLatestAnalysis() ?: return
-        _state.value = _state.value.copy(isLoading = true, isEvaluating = true)
-        
+        _state.value = _state.value.copy(
+            isLoading = true,
+            isEvaluating = true,
+            currentNovaExpression = NovaState.THINKING
+        )
+
         viewModelScope.launch {
             try {
                 val summary = geminiService.generateFinalInterviewReport(
@@ -2371,26 +2516,29 @@ class InterviewViewModel(
                     targetRole = _state.value.targetRole,
                     resumeData = latest
                 )
-                
-                // Update persistent analysis result with the immutable snapshot - Requirement #3
+
+                // Update persistent analysis result with the snapshot
                 val updatedAnalysis = latest.copy(
                     interviewQuestions = _state.value.questions,
                     userAnswers = _userAnswers.value,
                     interviewSummary = summary
                 )
                 sessionManager.saveLatestAnalysis(updatedAnalysis)
-                
+
                 _state.value = _state.value.copy(
                     isComplete = true,
                     summary = summary,
                     isLoading = false,
-                    isEvaluating = false
+                    isEvaluating = false,
+                    currentNovaExpression = NovaState.EXCITED,
+                    lastNovaFeedback = "Fantastic job! Your mock interview is complete. Here is your personalized performance breakdown."
                 )
             } catch (e: Exception) {
                 Log.e("InterviewViewModel", "Failed to generate summary", e)
                 _state.value = _state.value.copy(
                     isLoading = false,
                     isEvaluating = false,
+                    currentNovaExpression = NovaState.ENCOURAGING,
                     errorMessage = "Failed to generate performance report: ${e.localizedMessage}"
                 )
             }

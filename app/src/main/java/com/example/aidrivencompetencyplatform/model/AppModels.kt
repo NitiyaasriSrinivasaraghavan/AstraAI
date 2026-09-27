@@ -289,7 +289,11 @@ data class InterviewSessionState(
     val isLoading: Boolean = false,
     val isEvaluating: Boolean = false,
     val errorMessage: String? = null,
-    val targetRole: String = ""
+    val targetRole: String = "",
+    val lastNovaFeedback: String? = null,
+    val currentNovaExpression: NovaState = NovaState.HAPPY,
+    val candidateName: String? = null,
+    val isIntroFinished: Boolean = false
 )
 
 data class TechnicalMcq(
@@ -530,10 +534,14 @@ data class ResumeOptimizationResult(
 
 enum class NovaState {
     IDLE,
+    HAPPY,
     SPEAKING,
     LISTENING,
     THINKING,
-    ENCOURAGING
+    ENCOURAGING,
+    EXCITED,
+    SURPRISED,
+    WINKING
 }
 
 

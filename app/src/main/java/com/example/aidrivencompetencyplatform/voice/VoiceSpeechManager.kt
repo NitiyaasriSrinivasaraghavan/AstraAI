@@ -55,6 +55,7 @@ class VoiceSpeechManager(private val context: Context) {
 
     private val _currentUtteranceId = MutableStateFlow<String?>(null)
     val currentUtteranceId: StateFlow<String?> = _currentUtteranceId.asStateFlow()
+    private val utteranceCallbacks = mutableMapOf<String, () -> Unit>()
 
     init {
         initTts()
@@ -69,8 +70,8 @@ class VoiceSpeechManager(private val context: Context) {
                         textToSpeech?.language = Locale.getDefault()
                     }
                     // Configure natural, warm, friendly AI career companion voice parameters
-                    textToSpeech?.setSpeechRate(0.95f)
-                    textToSpeech?.setPitch(1.0f)
+                    textToSpeech?.setSpeechRate(0.96f)
+                    textToSpeech?.setPitch(1.08f)
                     isTtsInitialized = true
                     setupTtsListener()
                 } else {
@@ -102,8 +103,11 @@ class VoiceSpeechManager(private val context: Context) {
                         _isSpeaking.value = false
                         _currentUtteranceId.value = null
                         if (_novaState.value == NovaState.SPEAKING) {
-                            _novaState.value = NovaState.IDLE
+                            _novaState.value = NovaState.HAPPY
                         }
+                    }
+                    if (utteranceId != null) {
+                        utteranceCallbacks.remove(utteranceId)?.invoke()
                     }
                 }
             }
@@ -114,8 +118,11 @@ class VoiceSpeechManager(private val context: Context) {
                         _isSpeaking.value = false
                         _currentUtteranceId.value = null
                         if (_novaState.value == NovaState.SPEAKING) {
-                            _novaState.value = NovaState.IDLE
+                            _novaState.value = NovaState.HAPPY
                         }
+                    }
+                    if (utteranceId != null) {
+                        utteranceCallbacks.remove(utteranceId)
                     }
                 }
             }
@@ -342,8 +349,15 @@ class VoiceSpeechManager(private val context: Context) {
         }
     }
 
-    fun speak(text: String, utteranceId: String = UUID.randomUUID().toString()) {
-        if (text.isBlank()) return
+    fun speak(
+        text: String,
+        utteranceId: String = UUID.randomUUID().toString(),
+        onDone: (() -> Unit)? = null
+    ) {
+        if (text.isBlank()) {
+            onDone?.invoke()
+            return
+        }
 
         if (!isTtsInitialized || textToSpeech == null) {
             initTts()
@@ -359,12 +373,16 @@ class VoiceSpeechManager(private val context: Context) {
                 stopSpeaking()
                 return
             }
+            if (onDone != null) {
+                utteranceCallbacks[utteranceId] = onDone
+            }
             _novaState.value = NovaState.SPEAKING
             textToSpeech?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         } catch (e: Exception) {
             _isSpeaking.value = false
             _currentUtteranceId.value = null
-            _novaState.value = NovaState.IDLE
+            _novaState.value = NovaState.HAPPY
+            utteranceCallbacks.remove(utteranceId)
             Log.e("VoiceSpeechManager", "TTS speak failed", e)
         }
     }

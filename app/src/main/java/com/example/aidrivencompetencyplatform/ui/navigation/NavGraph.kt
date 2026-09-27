@@ -103,7 +103,10 @@ fun AppNavGraph(navController: NavHostController) {
             val viewModel: AiAssistantViewModel = viewModel(factory = factory)
             LaunchedEffect(mode, analysisId) {
                 if (mode == "INTERVIEW_PREPARATION" || mode == "interview") {
-                    viewModel.startInterview(analysisId)
+                    val targetRoute = Screen.InterviewPrep.route + (if (!analysisId.isNullOrBlank()) "?analysisId=$analysisId" else "")
+                    navController.navigate(targetRoute) {
+                        popUpTo(Screen.AiAssistant.route) { inclusive = true }
+                    }
                 }
             }
             AiAssistantScreen(navController, viewModel)
