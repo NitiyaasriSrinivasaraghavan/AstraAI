@@ -18,14 +18,12 @@ class SessionManager(context: Context) {
     private val gson = Gson()
 
     init {
-        // Delete all existing users and their analysis history from the application once for clean testing
-        if (!prefs.getBoolean("has_cleared_all_legacy_data_v6", false)) {
-            prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v6", true).commit()
-        }
+        // Delete all existing users and their analysis history from the application as requested
+        deleteAllUsersAndHistory()
     }
 
     fun deleteAllUsersAndHistory() {
-        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v6", true).commit()
+        prefs.edit().clear().putBoolean("has_cleared_all_legacy_data_v12", true).commit()
     }
 
     companion object {
@@ -69,6 +67,51 @@ class SessionManager(context: Context) {
             .putString(KEY_ANALYSIS_RECORD_PREFIX + analysisId, json)
             .putString(KEY_LATEST_ANALYSIS + normalizedEmail, json)
             .apply()
+    }
+
+    fun saveAnalysis(result: ResumeAnalysisResult) {
+        val email = getCurrentEmail() ?: return
+        val normalizedEmail = normalizeEmail(email)
+        val analysisId = result.id
+        if (analysisId.isBlank()) {
+            saveLatestAnalysis(result)
+            return
+        }
+
+        val json = gson.toJson(result)
+        val editor = prefs.edit().putString(KEY_ANALYSIS_RECORD_PREFIX + analysisId, json)
+
+        // Update in analysis history list if present
+        val currentHistory = getAnalysisHistory(normalizedEmail).toMutableList()
+        val index = currentHistory.indexOfFirst { it.id == analysisId }
+        if (index != -1) {
+            val oldRecord = currentHistory[index]
+            currentHistory[index] = oldRecord.copy(fullResult = result)
+            editor.putString(KEY_ANALYSIS_HISTORY + normalizedEmail, gson.toJson(currentHistory))
+        } else {
+            val role = result.targetRole ?: getTargetRole(normalizedEmail) ?: "Android Developer"
+            val topSkills = (result.extractedSkills ?: emptyList()).map { it.name }.take(4)
+            val historyRecord = AnalysisHistoryRecord(
+                id = analysisId,
+                targetRole = role,
+                atsScore = result.atsScore,
+                skillMatch = result.skillMatch,
+                candidateName = result.candidateName ?: getUserName(normalizedEmail),
+                fileName = "Resume.pdf",
+                topSkills = topSkills,
+                fullResult = result
+            )
+            currentHistory.add(0, historyRecord)
+            editor.putString(KEY_ANALYSIS_HISTORY + normalizedEmail, gson.toJson(currentHistory.distinctBy { it.id }.take(15)))
+        }
+
+        // If this analysis is also the latest analysis, update latest as well
+        val latest = getLatestAnalysis(normalizedEmail)
+        if (latest?.id == analysisId) {
+            editor.putString(KEY_LATEST_ANALYSIS + normalizedEmail, json)
+        }
+
+        editor.apply()
     }
 
     fun getAnalysisHistory(specificEmail: String? = null): List<AnalysisHistoryRecord> {
@@ -181,6 +224,33 @@ class SessionManager(context: Context) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * Checks if a JD analysis already exists for a specific resume and JD text.
+     */
+    fun findExistingJdAnalysis(resumeId: String, jdText: String): ResumeAnalysisResult? {
+        val history = getAnalysisHistory()
+        // We look for a record that has the same JD text (trimmed) and was based on the same resume ID
+        // Note: AnalysisHistoryRecord.fullResult contains modificationReport if it was a JD analysis
+        return history.mapNotNull { it.fullResult }
+            .find { 
+                it.jdText?.trim() == jdText.trim() && 
+                (it.id == resumeId || it.rawResumeText == getAnalysisById(resumeId)?.rawResumeText) 
+            }
+    }
+
+    /**
+     * Checks if a resume has already been analyzed for a specific role.
+     */
+    fun findExistingResumeAnalysis(resumeText: String, targetRole: String): ResumeAnalysisResult? {
+        val history = getAnalysisHistory()
+        return history.mapNotNull { it.fullResult }
+            .find { 
+                it.targetRole == targetRole && 
+                it.rawResumeText == resumeText &&
+                it.modificationReport == null // It's a pure resume analysis, not a JD match
+            }
     }
 
     private fun normalizeEmail(email: String): String {

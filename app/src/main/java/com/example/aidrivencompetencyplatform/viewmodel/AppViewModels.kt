@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.aidrivencompetencyplatform.data.AtsScoringEngine
 import com.example.aidrivencompetencyplatform.data.DeterministicResumeStructure
 import com.example.aidrivencompetencyplatform.data.GeminiService
+import com.example.aidrivencompetencyplatform.data.InterviewService
 import com.example.aidrivencompetencyplatform.data.PreferenceManager
 import com.example.aidrivencompetencyplatform.data.ResumeParser
 import com.example.aidrivencompetencyplatform.data.SessionManager
@@ -554,25 +555,34 @@ object RoleSkillsData {
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "android sdk" || s == "android studio" || s == "android" -> RecommendedCourse(
-                title = "Android App Development with Kotlin",
+            s == "android sdk" -> RecommendedCourse(
+                title = "Android SDK Fundamentals",
                 provider = "Google Developers Training",
-                description = "Learn Activity/Fragment lifecycles, background tasks, WorkManager, and Android system services.",
+                description = "Learn the core components of the Android SDK, Activity lifecycles, and system services.",
                 courseUrl = "https://developer.android.com/courses",
-                originalTitle = "Android App Development with Kotlin",
+                originalTitle = "Android SDK & Platform Tools",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "room database" || s == "room" -> RecommendedCourse(
-                title = "Room Database & Persistence",
+            s == "android studio" -> RecommendedCourse(
+                title = "Android Studio User Guide",
+                provider = "Google Android Developers",
+                description = "Learn to navigate the official Android IDE, use debugging tools, and manage project structures.",
+                courseUrl = "https://developer.android.com/studio/intro",
+                originalTitle = "Android Studio Guide",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "room database" -> RecommendedCourse(
+                title = "Persisting Data with Room Database",
                 provider = "Android Developers Codelabs",
                 description = "Learn SQLite persistence, DAOs, entities, and Flow-based reactive queries in Android.",
                 courseUrl = "https://developer.android.com/codelabs/basic-android-kotlin-compose-persisting-data-room",
-                originalTitle = "Persisting Data with Room Database",
+                originalTitle = "Room Database & Persistence",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "java" || s == "oop" || s == "collections" || s == "multithreading" || s == "exception handling" -> RecommendedCourse(
+            s == "java" -> RecommendedCourse(
                 title = "Java Programming Fundamentals",
                 provider = "University of Helsinki (MOOC.fi)",
                 description = "Master object-oriented programming, data structures, multithreading, and enterprise Java principles.",
@@ -581,39 +591,48 @@ object RoleSkillsData {
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "spring" || s == "spring boot" || s == "hibernate" -> RecommendedCourse(
-                title = "Spring Boot Microservices",
+            s == "spring" -> RecommendedCourse(
+                title = "Spring Framework Essentials",
+                provider = "Spring.io Official",
+                description = "Learn the core features of the Spring Framework including dependency injection and data access.",
+                courseUrl = "https://spring.io/projects/spring-framework",
+                originalTitle = "Spring Framework Documentation",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "spring boot" -> RecommendedCourse(
+                title = "Spring Boot Fundamentals",
                 provider = "Spring.io Official Guides",
-                description = "Build production-ready RESTful web services, dependency injection, and data persistence with Spring Boot.",
+                description = "Build production-ready RESTful web services and auto-configuration with Spring Boot.",
                 courseUrl = "https://spring.io/guides/gs/spring-boot/",
-                originalTitle = "Building Microservices with Spring Boot",
+                originalTitle = "Spring Boot Microservices",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "python" -> RecommendedCourse(
-                title = "Python Programming Fundamentals",
+                title = "CS50's Introduction to Programming with Python",
                 provider = "Harvard University (edX / Free)",
                 description = "Learn foundational and advanced Python syntax, data structures, libraries, and automated testing.",
                 courseUrl = "https://cs50.harvard.edu/python/",
-                originalTitle = "CS50's Introduction to Programming with Python",
+                originalTitle = "Python Programming Fundamentals",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "sql" || s == "sqlite" || s == "jdbc" -> RecommendedCourse(
-                title = "SQL & Relational Databases",
-                provider = "Khan Academy & Mode Analytics",
+            s == "sql" -> RecommendedCourse(
+                title = "Intro to SQL: Querying and Managing Data",
+                provider = "Khan Academy",
                 description = "Master relational database querying, joins, aggregations, subqueries, and table indexing.",
                 courseUrl = "https://www.khanacademy.org/computing/computer-programming/sql",
-                originalTitle = "Intro to SQL: Querying and Managing Data",
+                originalTitle = "SQL & Relational Databases",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "postgresql" -> RecommendedCourse(
-                title = "PostgreSQL Developer Guide",
+                title = "PostgreSQL Tutorial for Developers",
                 provider = "PostgreSQL Official / Tutorial",
                 description = "Learn advanced SQL queries, JSONB indexing, ACID transactions, and performance tuning in Postgres.",
                 courseUrl = "https://www.postgresqltutorial.com/",
-                originalTitle = "PostgreSQL Tutorial for Developers",
+                originalTitle = "PostgreSQL Developer Guide",
                 missingSkill = skill,
                 explanation = defaultExp
             )
@@ -626,147 +645,120 @@ object RoleSkillsData {
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "react" || s == "react.js" -> RecommendedCourse(
-                title = "React Fundamentals",
+            s == "react" -> RecommendedCourse(
+                title = "React Official Interactive Tutorial",
                 provider = "React.dev (Meta Open Source)",
                 description = "Learn modern component architecture, hooks (useState, useEffect), and reactive state rendering.",
                 courseUrl = "https://react.dev/learn",
-                originalTitle = "React Official Interactive Tutorial",
-                missingSkill = skill,
-                explanation = defaultExp
-            )
-            s == "node.js" || s == "express.js" || s == "node" || s == "express" -> RecommendedCourse(
-                title = "Node.js & Express Backend",
-                provider = "freeCodeCamp",
-                description = "Learn server-side JavaScript, Express routing, middleware, authentication, and REST APIs.",
-                courseUrl = "https://www.freecodecamp.org/learn/back-end-development-and-apis/",
-                originalTitle = "Back End Development and APIs with Node.js",
+                originalTitle = "React Fundamentals",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "javascript" -> RecommendedCourse(
-                title = "JavaScript Fundamentals",
+                title = "JavaScript Algorithms and Data Structures",
                 provider = "freeCodeCamp",
                 description = "Master ES6+ syntax, asynchronous JavaScript (Promises/Async-Await), and DOM manipulation.",
                 courseUrl = "https://www.freecodecamp.org/learn/javascript-algorithms-and-data-structures-v8/",
-                originalTitle = "JavaScript Algorithms and Data Structures",
+                originalTitle = "JavaScript Fundamentals",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "typescript" -> RecommendedCourse(
-                title = "TypeScript Fundamentals",
+                title = "TypeScript Handbook & Practical Guide",
                 provider = "Microsoft TypeScript Official",
                 description = "Master static typing, generics, utility types, and type inference for robust application design.",
                 courseUrl = "https://www.typescriptlang.org/docs/handbook/intro.html",
-                originalTitle = "TypeScript Handbook & Practical Guide",
+                originalTitle = "TypeScript Fundamentals",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "html" || s == "css" || s == "responsive design" -> RecommendedCourse(
-                title = "Responsive Web Design Fundamentals",
-                provider = "freeCodeCamp",
-                description = "Learn HTML5 semantic structuring, CSS Flexbox, Grid, and mobile-first responsive design.",
-                courseUrl = "https://www.freecodecamp.org/learn/2022/responsive-web-design/",
-                originalTitle = "Responsive Web Design Certification",
-                missingSkill = skill,
-                explanation = defaultExp
-            )
-            s == "git" || s == "github" -> RecommendedCourse(
-                title = "Git & GitHub Version Control",
+            s == "git" -> RecommendedCourse(
+                title = "Version Control with Git & GitHub",
                 provider = "Git-SCM Documentation & freeCodeCamp",
                 description = "Learn branching, merge strategies, interactive rebasing, pull requests, and CI workflows.",
                 courseUrl = "https://git-scm.com/doc",
-                originalTitle = "Version Control with Git & GitHub",
+                originalTitle = "Git & GitHub Version Control",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "docker" -> RecommendedCourse(
-                title = "Docker & Containerization",
+                title = "Docker for Beginners & Containerization",
                 provider = "Docker Official Documentation",
                 description = "Learn Dockerfile authoring, multi-stage builds, container networking, and Docker Compose.",
                 courseUrl = "https://docs.docker.com/get-started/",
-                originalTitle = "Docker for Beginners & Containerization",
+                originalTitle = "Docker & Containerization",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "machine learning" || s == "scikit-learn" || s == "model evaluation" -> RecommendedCourse(
-                title = "Machine Learning Fundamentals",
+            s == "machine learning" -> RecommendedCourse(
+                title = "Intro to Machine Learning with Python",
                 provider = "Kaggle Learn / freeCodeCamp",
                 description = "Learn supervised learning, regression, classification, cross-validation, and model evaluation.",
                 courseUrl = "https://www.kaggle.com/learn/intro-to-machine-learning",
-                originalTitle = "Intro to Machine Learning with Python",
+                originalTitle = "Machine Learning Fundamentals",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "deep learning" || s == "pytorch" -> RecommendedCourse(
-                title = "PyTorch Deep Learning",
-                provider = "PyTorch.org Official Tutorials",
-                description = "Learn neural networks, backpropagation, CNNs, RNNs, and Transformers with PyTorch.",
-                courseUrl = "https://pytorch.org/tutorials/",
-                originalTitle = "Deep Learning with PyTorch Tutorial",
+            s == "scikit-learn" -> RecommendedCourse(
+                title = "Machine Learning with scikit-learn",
+                provider = "Scikit-Learn Official / freeCodeCamp",
+                description = "Learn to build machine learning models using the scikit-learn library in Python.",
+                courseUrl = "https://scikit-learn.org/stable/tutorial/index.html",
+                originalTitle = "Scikit-Learn Tutorial",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "tensorflow" -> RecommendedCourse(
                 title = "TensorFlow Core Fundamentals",
-                provider = "Google TensorFlow",
-                description = "Build and train neural networks, Keras sequential models, and model export pipelines.",
+                provider = "TensorFlow.org / Google",
+                description = "Build and train neural networks using the Keras API and core TensorFlow components.",
                 courseUrl = "https://www.tensorflow.org/tutorials",
-                originalTitle = "TensorFlow Core Tutorials",
+                originalTitle = "TensorFlow Official Tutorials",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "pandas" || s == "numpy" || s == "data cleaning" -> RecommendedCourse(
-                title = "Pandas Data Manipulation",
+            s == "pytorch" -> RecommendedCourse(
+                title = "Deep Learning with PyTorch Tutorial",
+                provider = "PyTorch.org Official Tutorials",
+                description = "Learn neural networks, backpropagation, CNNs, RNNs, and Transformers with PyTorch.",
+                courseUrl = "https://pytorch.org/tutorials/",
+                originalTitle = "PyTorch Deep Learning Fundamentals",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "pandas" -> RecommendedCourse(
+                title = "Pandas & Data Manipulation Course",
                 provider = "Kaggle Learn",
-                description = "Master DataFrame transformations, exploratory data analysis, filtering, and indexing.",
+                description = "Master DataFrame transformations, exploratory data analysis, filtering, and indexing in Pandas.",
                 courseUrl = "https://www.kaggle.com/learn/pandas",
-                originalTitle = "Pandas & Data Manipulation Course",
+                originalTitle = "Pandas Data Manipulation",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "power bi" -> RecommendedCourse(
-                title = "Power BI Guided Learning",
-                provider = "Microsoft Learn",
-                description = "Learn data modeling, DAX formulas, interactive visual dashboards, and report publication.",
-                courseUrl = "https://learn.microsoft.com/en-us/training/powerplatform/power-bi",
-                originalTitle = "Microsoft Power BI Guided Learning",
+            s == "numpy" -> RecommendedCourse(
+                title = "Numerical Computing with NumPy",
+                provider = "NumPy.org / freeCodeCamp",
+                description = "Learn the fundamentals of NumPy for efficient numerical computing and array processing in Python.",
+                courseUrl = "https://numpy.org/doc/stable/user/absolute_beginners.html",
+                originalTitle = "NumPy Fundamentals",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "tableau" -> RecommendedCourse(
-                title = "Tableau Analytics & Dashboards",
-                provider = "Tableau Official Learning",
-                description = "Build interactive business dashboards, geospatial maps, and predictive trend charts.",
-                courseUrl = "https://www.tableau.com/learn/training",
-                originalTitle = "Tableau Free Training & Data Visuals",
-                missingSkill = skill,
-                explanation = defaultExp
-            )
-            s == "statistics" || s == "probability" -> RecommendedCourse(
-                title = "Statistics & Probability",
-                provider = "Khan Academy",
-                description = "Learn descriptive statistics, probability distributions, hypothesis testing, and regression analysis.",
-                courseUrl = "https://www.khanacademy.org/math/statistics-probability",
-                originalTitle = "Statistics and Probability for Data Science",
-                missingSkill = skill,
-                explanation = defaultExp
-            )
-            s == "data visualization" -> RecommendedCourse(
-                title = "Data Visualization Fundamentals",
-                provider = "Kaggle Learn",
-                description = "Create impactful charts using Seaborn, Matplotlib, and plot styling best practices.",
-                courseUrl = "https://www.kaggle.com/learn/data-visualization",
-                originalTitle = "Data Visualization Micro-Course",
-                missingSkill = skill,
-                explanation = defaultExp
-            )
-            s == "model deployment" || s == "mlops" -> RecommendedCourse(
-                title = "MLOps & Model Deployment",
-                provider = "Google Cloud / freeCodeCamp",
+            s == "model deployment" -> RecommendedCourse(
+                title = "Machine Learning Model Deployment Guide",
+                provider = "freeCodeCamp",
                 description = "Deploy ML models as scalable REST endpoints using FastAPI, Docker, and cloud runtimes.",
                 courseUrl = "https://www.freecodecamp.org/news/how-to-deploy-machine-learning-models/",
-                originalTitle = "Machine Learning Model Deployment Guide",
+                originalTitle = "Model Deployment Fundamentals",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "mlops" -> RecommendedCourse(
+                title = "MLOps Fundamentals",
+                provider = "Google Cloud / freeCodeCamp",
+                description = "Learn the lifecycle of machine learning models from data engineering to production operations.",
+                courseUrl = "https://www.freecodecamp.org/news/what-is-mlops/",
+                originalTitle = "MLOps & Model Deployment",
                 missingSkill = skill,
                 explanation = defaultExp
             )
@@ -788,48 +780,120 @@ object RoleSkillsData {
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "figma" || s == "wireframing" || s == "prototyping" || s == "design systems" || s == "user flows" || s == "interaction design" || s == "visual design" || s == "typography" || s == "color theory" || s == "usability testing" || s == "user research" -> RecommendedCourse(
-                title = "Figma & UI/UX Design",
+            s == "figma" -> RecommendedCourse(
+                title = "Figma for Beginners & UI/UX Design",
                 provider = "Figma Official Resource Library",
-                description = "Master wireframing, interactive prototyping, auto-layout, design tokens, and usability testing.",
+                description = "Master wireframing, interactive prototyping, auto-layout, and design tokens in Figma.",
                 courseUrl = "https://www.figma.com/resource-library/learn-figma/",
-                originalTitle = "Figma for Beginners & UI/UX Design",
+                originalTitle = "Figma & UI/UX Design",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "rest apis" || s == "json" -> RecommendedCourse(
-                title = "REST API Architecture",
+            s == "wireframing" -> RecommendedCourse(
+                title = "Wireframing Guide for Beginners",
+                provider = "Figma Official",
+                description = "Learn the principles of low-fidelity design and how to structure page layouts effectively.",
+                courseUrl = "https://www.figma.com/resource-library/wireframing-guide/",
+                originalTitle = "Wireframing Fundamentals",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "prototyping" -> RecommendedCourse(
+                title = "Interactive Prototyping Essentials",
+                provider = "Figma Official",
+                description = "Learn to create interactive flows and user tests with high-fidelity prototypes in Figma.",
+                courseUrl = "https://www.figma.com/resource-library/prototyping-guide/",
+                originalTitle = "Prototyping Fundamentals",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "rest apis" -> RecommendedCourse(
+                title = "RESTful API Design and Web Architecture",
                 provider = "MDN Web Docs",
-                description = "Learn HTTP methods, status codes, REST conventions, JSON serialization, and API security.",
+                description = "Learn HTTP methods, status codes, REST conventions, and API security principles.",
                 courseUrl = "https://developer.mozilla.org/en-US/docs/Learn/Server-side/First_steps/Web_frameworks",
-                originalTitle = "RESTful API Design and Web Architecture",
+                originalTitle = "REST API Architecture",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "material design" || s == "xml" -> RecommendedCourse(
-                title = "Material Design Guidelines",
+            s == "json" -> RecommendedCourse(
+                title = "JSON Fundamentals",
+                provider = "MDN Web Docs",
+                description = "Learn how to parse, manipulate, and structure data in the JSON format for web and mobile apps.",
+                courseUrl = "https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Objects/JSON",
+                originalTitle = "Working with JSON Data",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "material design" -> RecommendedCourse(
+                title = "Material Design 3 Architecture & Guidelines",
                 provider = "Google Material Design",
                 description = "Learn accessible UI styling, dynamic color, typography scales, and component guidelines.",
                 courseUrl = "https://m3.material.io/",
-                originalTitle = "Material Design 3 Architecture & Guidelines",
+                originalTitle = "Material Design Guidelines",
                 missingSkill = skill,
                 explanation = defaultExp
             )
-            s == "gradle" || s == "maven" -> RecommendedCourse(
-                title = "Gradle & Maven Automation",
+            s == "xml" -> RecommendedCourse(
+                title = "Android XML Layouts",
+                provider = "Google Android Developers",
+                description = "Learn the fundamentals of structuring Android UI with XML (legacy View-based approach).",
+                courseUrl = "https://developer.android.com/develop/ui/views/layout/declaring-layout",
+                originalTitle = "XML Layouts in Android",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "gradle" -> RecommendedCourse(
+                title = "Build Automation with Gradle",
                 provider = "Gradle Guides / Baeldung",
                 description = "Learn build lifecycles, dependency management, plugins, and multi-module configurations.",
                 courseUrl = "https://docs.gradle.org/current/userguide/getting_started.html",
-                originalTitle = "Build Automation with Gradle & Maven",
+                originalTitle = "Gradle & Maven Automation",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "maven" -> RecommendedCourse(
+                title = "Maven Build Tool Guide",
+                provider = "Apache Maven Official",
+                description = "Learn project management and dependency resolution using the Maven build tool.",
+                courseUrl = "https://maven.apache.org/guides/getting-started/",
+                originalTitle = "Gradle & Maven Automation",
                 missingSkill = skill,
                 explanation = defaultExp
             )
             s == "authentication" -> RecommendedCourse(
-                title = "Web Security & Auth",
+                title = "Web Security & Authentication Fundamentals",
                 provider = "MDN Web Docs",
                 description = "Learn JWT tokens, OAuth 2.0 flows, session management, and credential security.",
                 courseUrl = "https://developer.mozilla.org/en-US/docs/Learn/Server-side/First_steps/Website_security",
-                originalTitle = "Web Security & Authentication Fundamentals",
+                originalTitle = "Web Security & Auth",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "statistics" -> RecommendedCourse(
+                title = "Statistics and Probability for Data Science",
+                provider = "Khan Academy",
+                description = "Learn descriptive statistics, probability distributions, and hypothesis testing.",
+                courseUrl = "https://www.khanacademy.org/math/statistics-probability",
+                originalTitle = "Statistics & Probability",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "probability" -> RecommendedCourse(
+                title = "Intro to Probability",
+                provider = "Harvard University (edX)",
+                description = "Learn the mathematical foundations of probability and its application in data science.",
+                courseUrl = "https://www.edx.org/course/introduction-to-probability",
+                originalTitle = "Statistics & Probability",
+                missingSkill = skill,
+                explanation = defaultExp
+            )
+            s == "data visualization" -> RecommendedCourse(
+                title = "Data Visualization Fundamentals",
+                provider = "Kaggle Learn",
+                description = "Create impactful charts using Seaborn, Matplotlib, and plot styling best practices.",
+                courseUrl = "https://www.kaggle.com/learn/data-visualization",
+                originalTitle = "Data Visualization Micro-Course",
                 missingSkill = skill,
                 explanation = defaultExp
             )
@@ -1293,6 +1357,30 @@ class ResumeViewModel(
                     throw Exception("Could not extract any text from the selected file. Please ensure the file is not empty or corrupted.")
                 }
 
+                // Requirement #2 & #9: Prevent duplicate resume analyses
+                val existing = sessionManager.findExistingResumeAnalysis(text, effectiveRole)
+                if (existing != null) {
+                    Log.d("ResumeAnalysisDebug", "Found existing matching analysis. Reusing snapshot.")
+                    
+                    // Restore state from existing snapshot
+                    _analysisResult.value = existing
+                    
+                    // Simulate completion progress for UI smoothness
+                    _interactiveState.value = _interactiveState.value.copy(
+                        atsComplete = true,
+                        skillGapComplete = true,
+                        jdMatchingComplete = true,
+                        isComplete = true,
+                        stage = 7,
+                        atsScore = existing.atsScore,
+                        skillMatch = existing.skillMatch
+                    )
+                    
+                    _isLoading.value = false
+                    _loadingStage.value = "Retrieved existing analysis."
+                    return@launch
+                }
+
                 // 3. PARSING STAGE
                 _loadingStage.value = "Parsing candidate profile..."
                 _stageIndex.value = 2
@@ -1328,7 +1416,7 @@ class ResumeViewModel(
                 // If Gemini succeeded (did not return synthesize result), we trust its classification of empty lists.
                 val isSynthesized = aiResult.summary == "Synthesized Analysis" // Heuristic for fallback
 
-                fun sanitizeCandidate(value: String?): String? {
+                fun sanitizeCandidate(value: String?, isNameField: Boolean = false): String? {
                     if (value.isNullOrBlank()) return null
                     val clean = value.trim()
                     val lower = clean.lowercase()
@@ -1336,24 +1424,66 @@ class ResumeViewModel(
                         "null", "none", "n/a", "na", "not detected", "not specified",
                         "not provided", "not found", "unknown", "nil", "-", "--", "undefined", "empty"
                     )
-                    return if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) null else clean
+                    if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) return null
+                    if (isNameField && ResumeParser.isDegreeOrEducationTitle(clean)) return null
+                    return clean
                 }
 
-                val candidateName = sanitizeCandidate(aiResult.candidateName) ?: sanitizeCandidate(structure.candidateInfo.name)
+                val candidateName = sanitizeCandidate(structure.candidateInfo.name, isNameField = true)
+                    ?: sanitizeCandidate(aiResult.candidateName, isNameField = true)
+                    ?: "Candidate"
                 val candidateEmail = sanitizeCandidate(aiResult.candidateEmail) ?: sanitizeCandidate(structure.candidateInfo.email)
                 val candidatePhone = sanitizeCandidate(aiResult.candidatePhone) ?: sanitizeCandidate(structure.candidateInfo.phone)
                 val candidateLocation = sanitizeCandidate(aiResult.candidateLocation) ?: sanitizeCandidate(structure.candidateInfo.location)
+                
+                val effectivePersonalInfo = if (!aiResult.personalInfo.isNullOrEmpty() && !isSynthesized) {
+                    aiResult.personalInfo
+                } else if (structure.personalInfo.isNotEmpty()) {
+                    structure.personalInfo
+                } else {
+                    emptyList()
+                }
 
                 val effectiveSummary = aiResult.summary?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) && !it.equals("Synthesized Analysis", ignoreCase = true) }
                     ?: structure.summary?.takeIf { it.isNotBlank() }
                     ?: ""
 
-                // Reconcile Education so 10th, 12th, and College qualifications are never truncated
-                val effectiveEducation = if (!aiResult.education.isNullOrEmpty() && !isSynthesized) {
+                fun isFormalEducationEntry(entry: String): Boolean {
+                    if (entry.isBlank()) return false
+                    val lw = entry.lowercase().trim()
+                    
+                    // Reject non-academic indicators: online courses, certifications, workshops, training, bootcamps
+                    val nonAcademicIndicators = listOf(
+                        "nptel", "coursera", "udemy", "edx", "linkedin learning", "udacity",
+                        "certification in", "certificate course", "certified in", "course in",
+                        "completed course", "workshop on", "workshop in", "bootcamp",
+                        "training program", "short-term course", "training in"
+                    )
+                    if (nonAcademicIndicators.any { lw.contains(it) }) {
+                        return false
+                    }
+                    
+                    // Check for legitimate academic qualification keywords
+                    val academicKeywords = listOf(
+                        "bachelor", "b.tech", "b.e", "b.sc", "bca", "b.com", "bba", "b.s", "b.a",
+                        "master", "m.tech", "m.e", "m.sc", "mca", "mba", "m.s", "m.a", "ph.d", "phd", "doctorate",
+                        "diploma", "polytechnic",
+                        "10th", "12th", "sslc", "hsc", "class x", "class xii", "cbse", "icse",
+                        "matriculation", "secondary school", "higher secondary", "intermediate",
+                        "puc", "pre-university", "schooling", "university", "college", "institute of technology"
+                    )
+                    return academicKeywords.any { lw.contains(it) }
+                }
+
+                // Reconcile Education: strictly retain ONLY formal academic qualifications (10th, 12th, Diploma, College)
+                val validatedAiEducation = (aiResult.education ?: emptyList()).filter { isFormalEducationEntry(it) }
+                val validatedDetEducation = structure.education.filter { isFormalEducationEntry(it) }
+
+                val effectiveEducation = if (validatedAiEducation.isNotEmpty() && !isSynthesized) {
                     val combined = mutableListOf<String>()
-                    combined.addAll(aiResult.education)
-                    // Check if deterministic parser captured 10th/12th that AI might have missed
-                    structure.education.forEach { detEdu ->
+                    combined.addAll(validatedAiEducation)
+                    // Check if deterministic parser captured 10th/12th/qualifications that AI might have missed
+                    validatedDetEducation.forEach { detEdu ->
                         val detLower = detEdu.lowercase()
                         val isSchoolTier = detLower.contains("10th") || detLower.contains("12th") || 
                                           detLower.contains("sslc") || detLower.contains("hsc") || 
@@ -1364,13 +1494,13 @@ class ResumeViewModel(
                             (isSchoolTier && (exLower.contains("10th") || exLower.contains("12th") || exLower.contains("sslc") || exLower.contains("hsc"))) ||
                             exLower.contains(detLower.take(15))
                         }
-                        if (isSchoolTier && !alreadyPresent) {
+                        if (!alreadyPresent) {
                             combined.add(detEdu)
                         }
                     }
                     combined
-                } else if (structure.education.isNotEmpty()) {
-                    structure.education
+                } else if (validatedDetEducation.isNotEmpty()) {
+                    validatedDetEducation
                 } else {
                     emptyList()
                 }
@@ -1385,24 +1515,51 @@ class ResumeViewModel(
                 }
 
                 // Projects: strict isolation (only genuine projects)
-                val effectiveProjects = if (!aiResult.projectAnalysis.isNullOrEmpty() && !isSynthesized) {
-                    aiResult.projectAnalysis
-                } else if (structure.projectAnalyses.isNotEmpty()) {
-                    structure.projectAnalyses
-                } else if (structure.extractedProjects.isNotEmpty()) {
-                    structure.extractedProjects.map { projStr ->
-                        ProjectAnalysis(
-                            name = projStr,
-                            technologies = emptyList(),
-                            demonstratedSkills = emptyList(),
-                            strengths = listOf("Project verified from resume"),
-                            weaknesses = emptyList(),
-                            improvementSuggestions = listOf("Add measurable performance metrics")
-                        )
+                val hasProjectSection = structure.sections.any { it.sectionName.equals("Projects", ignoreCase = true) && it.isFound } ||
+                    structure.extractedProjects.isNotEmpty() ||
+                    Regex("(?i)\\b(?:projects?|academic\\s+projects?|personal\\s+projects?|key\\s+projects?|selected\\s+projects?|project\\s+experience)\\b").containsMatchIn(text)
+
+                val effectiveProjects = if (hasProjectSection) {
+                    if (!aiResult.projectAnalysis.isNullOrEmpty() && !isSynthesized) {
+                        aiResult.projectAnalysis
+                    } else if (structure.projectAnalyses.isNotEmpty()) {
+                        structure.projectAnalyses
+                    } else if (structure.extractedProjects.isNotEmpty()) {
+                        structure.extractedProjects.map { projStr ->
+                            ProjectAnalysis(
+                                name = projStr,
+                                technologies = emptyList(),
+                                demonstratedSkills = emptyList(),
+                                strengths = listOf("Project verified from resume"),
+                                weaknesses = emptyList(),
+                                improvementSuggestions = listOf("Add measurable performance metrics")
+                            )
+                        }
+                    } else {
+                        emptyList()
                     }
                 } else {
                     emptyList()
                 }
+
+                // Skills: Merge and preserve ALL explicitly detected skills from AI and deterministic parser
+                val allSkillNames = LinkedHashSet<String>()
+                val mergedSkills = mutableListOf<com.example.aidrivencompetencyplatform.model.Skill>()
+                if (!aiResult.extractedSkills.isNullOrEmpty() && !isSynthesized) {
+                    aiResult.extractedSkills.forEach { s ->
+                        if (allSkillNames.add(s.name.lowercase().trim())) {
+                            mergedSkills.add(s)
+                        }
+                    }
+                }
+                structure.extractedSkills.forEach { skillStr ->
+                    val clean = skillStr.trim()
+                    if (clean.isNotBlank() && allSkillNames.add(clean.lowercase())) {
+                        mergedSkills.add(com.example.aidrivencompetencyplatform.model.Skill(name = clean, level = 80, category = RoleSkillsData.getSkillCategory(clean)))
+                    }
+                }
+                val effectiveSkills = if (mergedSkills.isNotEmpty()) mergedSkills
+                    else structure.extractedSkills.map { com.example.aidrivencompetencyplatform.model.Skill(name = it, level = 80, category = RoleSkillsData.getSkillCategory(it)) }
 
                 val enrichedResult = aiResult.copy(
                     id = java.util.UUID.randomUUID().toString(),
@@ -1410,11 +1567,11 @@ class ResumeViewModel(
                     candidateEmail = candidateEmail,
                     candidatePhone = candidatePhone,
                     candidateLocation = candidateLocation,
+                    personalInfo = effectivePersonalInfo,
                     summary = effectiveSummary,
                     education = effectiveEducation,
                     experience = effectiveExperience,
-                    extractedSkills = if (!aiResult.extractedSkills.isNullOrEmpty() && !isSynthesized) aiResult.extractedSkills
-                        else structure.extractedSkills.map { skillStr -> com.example.aidrivencompetencyplatform.model.Skill(name = skillStr, level = 80, category = RoleSkillsData.getSkillCategory(skillStr)) },
+                    extractedSkills = effectiveSkills,
                     projectAnalysis = effectiveProjects,
                     rawResumeText = text,
                     targetRole = effectiveRole,
@@ -1627,13 +1784,25 @@ class ResumeViewModel(
 
 class AiAssistantViewModel(
     private val sessionManager: SessionManager,
-    private val geminiService: GeminiService
+    private val geminiService: GeminiService,
+    private val interviewService: InterviewService
 ) : ViewModel() {
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages
 
-    private val _isInterviewMode = MutableStateFlow(false)
-    val isInterviewMode: StateFlow<Boolean> = _isInterviewMode
+    private val _chatContextMode = MutableStateFlow(ChatContextMode.DEFAULT)
+    val chatContextMode: StateFlow<ChatContextMode> = _chatContextMode.asStateFlow()
+
+    private val _interviewSession = MutableStateFlow(InterviewSession())
+    val interviewSession: StateFlow<InterviewSession> = _interviewSession.asStateFlow()
+
+    val isInterviewMode: StateFlow<Boolean> = MutableStateFlow(false).apply {
+        viewModelScope.launch {
+            _chatContextMode.collect {
+                value = (it == ChatContextMode.INTERVIEW_PREPARATION)
+            }
+        }
+    }
 
     private val _isTourMode = MutableStateFlow(false)
     val isTourMode: StateFlow<Boolean> = _isTourMode
@@ -1657,14 +1826,15 @@ class AiAssistantViewModel(
 
     private fun initDefaultChat() {
         val userName = sessionManager.getUserName() ?: "there"
+        _chatContextMode.value = ChatContextMode.DEFAULT
         _messages.value = listOf(
             ChatMessage("Hello $userName! I'm Nova, your AI Career Assistant. How can I help you elevate your career today?", false)
         )
     }
 
     fun startTour() {
+        _chatContextMode.value = ChatContextMode.TOUR
         _isTourMode.value = true
-        _isInterviewMode.value = false
         val userName = sessionManager.getUserName() ?: "there"
         _messages.value = listOf(
             ChatMessage(
@@ -1686,32 +1856,184 @@ class AiAssistantViewModel(
         )
     }
 
-    fun startInterview() {
-        _isInterviewMode.value = true
+    fun startInterview(analysisId: String? = null, preferredRole: String? = null) {
+        _chatContextMode.value = ChatContextMode.INTERVIEW_PREPARATION
         _isTourMode.value = false
-        _messages.value = listOf(ChatMessage("Welcome to your mock interview. Let's start with a basic question: Tell me about yourself and your experience with Kotlin.", false))
+
+        val analysis = if (!analysisId.isNullOrBlank()) {
+            sessionManager.getAnalysisById(analysisId) ?: sessionManager.getLatestAnalysis()
+        } else {
+            sessionManager.getLatestAnalysis()
+        }
+
+        val role = preferredRole 
+            ?: analysis?.targetRole 
+            ?: sessionManager.getTargetRole() 
+            ?: "Software Engineer"
+        val candidateName = analysis?.candidateName ?: sessionManager.getUserName()
+
+        val welcomeText = interviewService.generateWelcomeMessage(role, candidateName)
+        val initialMessage = ChatMessage(welcomeText, false)
+
+        val newSession = InterviewSession(
+            targetRole = role,
+            candidateProfile = analysis,
+            currentQuestion = null,
+            currentQuestionNumber = 0,
+            candidateAnswer = "",
+            phase = InterviewPhase.WAITING_FOR_USER,
+            status = InterviewStatus.IN_PROGRESS,
+            conversationHistory = listOf(initialMessage)
+        )
+
+        _interviewSession.value = newSession
+        _messages.value = listOf(initialMessage)
         _quickPrompts.value = listOf(
-            "I have 3+ years experience with Kotlin & Compose",
-            "I have built several production Android applications",
-            "Give me a technical architecture question"
+            "Yes, I'm ready!",
+            "Let's begin the interview",
+            "Ready when you are"
         )
     }
 
     fun sendMessage(text: String, screenContext: String = "") {
+        if (text.isBlank()) return
         val userMsg = ChatMessage(text, true)
         _messages.value = _messages.value + userMsg
-        
+
+        if (_chatContextMode.value == ChatContextMode.INTERVIEW_PREPARATION) {
+            handleInterviewConversation(text)
+        } else {
+            handleGeneralAssistantConversation(text, screenContext)
+        }
+    }
+
+    private fun handleInterviewConversation(userAnswerText: String) {
+        val currentSession = _interviewSession.value
+        val updatedHistory = _messages.value
+
         viewModelScope.launch {
             _isTyping.value = true
             try {
-                val analysis = sessionManager.getLatestAnalysis()
-                val context = "Screen: $screenContext. User name: ${sessionManager.getUserName()}. Analysis: ${if (analysis != null) "Available" else "Not available"}"
-                val aiResponse = geminiService.getAiAssistantResponse(text, context)
-                _messages.value = _messages.value + ChatMessage(aiResponse, false)
+                if (currentSession.currentQuestionNumber == 0) {
+                    // Phase: Transitioning from WELCOME / WAITING_FOR_USER to first question
+                    _interviewSession.value = currentSession.copy(
+                        phase = InterviewPhase.INTERVIEWER_QUESTION,
+                        currentQuestionNumber = 1,
+                        conversationHistory = updatedHistory
+                    )
+
+                    val firstQuestion = interviewService.generateFirstQuestion(
+                        targetRole = currentSession.targetRole,
+                        candidateProfile = currentSession.candidateProfile
+                    )
+
+                    val questionText = "Great, let's begin!\n\nQuestion 1: ${firstQuestion.text}"
+                    val botMessage = ChatMessage(questionText, false)
+                    _messages.value = _messages.value + botMessage
+
+                    _interviewSession.value = _interviewSession.value.copy(
+                        currentQuestion = firstQuestion,
+                        currentQuestionNumber = 1,
+                        phase = InterviewPhase.WAITING_FOR_USER,
+                        questions = listOf(firstQuestion),
+                        conversationHistory = _messages.value
+                    )
+                    _quickPrompts.value = emptyList()
+                } else {
+                    // Phase: Candidate provided answer to Question N
+                    val currentQNum = currentSession.currentQuestionNumber
+                    val prevQuestion = currentSession.currentQuestion
+                    val updatedAnswers = currentSession.userAnswers + (currentQNum to userAnswerText)
+
+                    _interviewSession.value = currentSession.copy(
+                        candidateAnswer = userAnswerText,
+                        userAnswers = updatedAnswers,
+                        phase = InterviewPhase.USER_ANSWER,
+                        conversationHistory = updatedHistory
+                    )
+
+                    val nextQNum = currentQNum + 1
+                    val nextQuestion = interviewService.generateNextQuestion(
+                        targetRole = currentSession.targetRole,
+                        candidateProfile = currentSession.candidateProfile,
+                        questionNumber = nextQNum,
+                        previousQuestion = prevQuestion,
+                        candidateAnswer = userAnswerText
+                    )
+
+                    val nextText = "Thank you for sharing that answer.\n\nQuestion $nextQNum: ${nextQuestion.text}"
+                    val botMessage = ChatMessage(nextText, false)
+                    _messages.value = _messages.value + botMessage
+
+                    _interviewSession.value = _interviewSession.value.copy(
+                        currentQuestion = nextQuestion,
+                        currentQuestionNumber = nextQNum,
+                        phase = InterviewPhase.WAITING_FOR_USER,
+                        questions = _interviewSession.value.questions + nextQuestion,
+                        conversationHistory = _messages.value
+                    )
+                    _quickPrompts.value = emptyList()
+                }
+            } catch (e: Exception) {
+                Log.e("AiAssistantViewModel", "Interview question generation error", e)
+                val fallbackMsg = ChatMessage(
+                    "Let's continue: Could you describe your key strengths and technical experience in ${currentSession.targetRole}?",
+                    false
+                )
+                _messages.value = _messages.value + fallbackMsg
             } finally {
                 _isTyping.value = false
             }
         }
+    }
+
+    private fun handleGeneralAssistantConversation(text: String, screenContext: String) {
+        viewModelScope.launch {
+            _isTyping.value = true
+            try {
+                val analysis = sessionManager.getLatestAnalysis()
+                val contextSummary = buildUserContext(analysis, screenContext)
+                
+                // Keep only last 10 messages for conversation context to maintain speed and performance
+                val history = _messages.value.takeLast(11).dropLast(1)
+                
+                val aiResponse = geminiService.getAiAssistantResponse(text, history, contextSummary)
+                _messages.value = _messages.value + ChatMessage(aiResponse, false)
+            } catch (e: Exception) {
+                _messages.value = _messages.value + ChatMessage("I'm having a bit of trouble connecting to my AI core right now. Could you please try again in a moment?", false)
+            } finally {
+                _isTyping.value = false
+            }
+        }
+    }
+
+    private fun buildUserContext(analysis: ResumeAnalysisResult?, screen: String): String {
+        val name = sessionManager.getUserName() ?: "User"
+        if (analysis == null) return "User Name: $name. Screen: $screen. Context: No resume has been uploaded yet. Guide the user to upload their resume first."
+        
+        val sb = StringBuilder()
+        sb.append("User Name: $name\n")
+        sb.append("Current Screen: $screen\n")
+        sb.append("Target Role: ${analysis.targetRole ?: "Not set"}\n")
+        sb.append("ATS Score: ${analysis.atsScore}/100\n")
+        sb.append("Skill Match Score: ${analysis.skillMatch}%\n")
+        
+        analysis.strengths?.let { if (it.isNotEmpty()) sb.append("Top Strengths: ${it.take(3).joinToString(", ")}\n") }
+        analysis.weaknesses?.let { if (it.isNotEmpty()) sb.append("Top Weaknesses: ${it.take(3).joinToString(", ")}\n") }
+        
+        val skills = analysis.extractedSkills?.map { it.name } ?: emptyList()
+        if (skills.isNotEmpty()) sb.append("Extracted Skills: ${skills.take(15).joinToString(", ")}\n")
+        
+        if (!analysis.missingSections.isNullOrEmpty()) {
+            sb.append("Missing Resume Sections: ${analysis.missingSections.joinToString(", ")}\n")
+        }
+        
+        analysis.modificationReport?.let { report ->
+            sb.append("Specific JD Match Score: ${report.overallMatch}% for ${report.targetRole}\n")
+            sb.append("JD Match Reasoning: ${report.overallReasoning}\n")
+        }
+        
+        return sb.toString()
     }
 }
 
@@ -1721,9 +2043,13 @@ data class ResumeOptimizationState(
     val suggestions: List<OptimizationSuggestion> = emptyList(),
     val skillGaps: List<String> = emptyList(),
     val keywordOpportunities: List<String> = emptyList(),
+    val report: ResumeModificationReport? = null,
+    val reportPdfUri: Uri? = null,
     val isAnalysisComplete: Boolean = false,
     val currentImprovementIndex: Int = 0,
-    val optimizedResumeData: ResumeAnalysisResult? = null
+    val optimizedResumeData: ResumeAnalysisResult? = null,
+    val isFromExistingHistory: Boolean = false,
+    val justCompleted: Boolean = false
 )
 
 class JdMatcherViewModel(
@@ -1745,13 +2071,12 @@ class JdMatcherViewModel(
     val hasStoredResume: StateFlow<Boolean> = _hasStoredResume.asStateFlow()
 
     val analysisStages: List<String> = listOf(
-        "1. Reading Job Description",
-        "2. Scanning Your Resume",
-        "3. Identifying Relevant Skills",
-        "4. Finding Important Keywords",
-        "5. Comparing Resume Content",
-        "6. Detecting Improvement Opportunities",
-        "7. Preparing Targeted Suggestions"
+        "Scanning your resume...",
+        "Matching your experience...",
+        "Comparing skills with the job description...",
+        "Identifying relevant evidence...",
+        "Evaluating role alignment...",
+        "Preparing your JD suggestions..."
     )
 
     private val _analysisStageIndex = MutableStateFlow(0)
@@ -1782,6 +2107,20 @@ class JdMatcherViewModel(
         if (analysis != null) {
             _canonicalResume.value = analysis
             _hasStoredResume.value = true
+            
+            // If this is a JD match analysis from history, restore its state
+            if (analysis.modificationReport != null) {
+                Log.d("JD_ANALYSIS_DEBUG", "Retrieving previous analysis for ID: $id")
+                Log.d("JD_ANALYSIS_DEBUG", "Retrieved JD: ${analysis.jdText?.take(100)}...")
+                _jobDescriptionInput.value = analysis.jdText ?: ""
+                _optimizationState.value = ResumeOptimizationState(
+                    jdTitle = analysis.modificationReport.targetRole,
+                    report = analysis.modificationReport,
+                    isAnalysisComplete = true,
+                    optimizedResumeData = analysis
+                )
+                _uiState.value = JdMatcherUiState.OPTIMIZING
+            }
         } else {
             loadCanonicalResume()
         }
@@ -1814,6 +2153,21 @@ class JdMatcherViewModel(
         _canonicalResume.value = resume
         _hasStoredResume.value = true
 
+        // Requirement #5 & #9: Prevent duplicate analyses
+        val existingAnalysis = sessionManager.findExistingJdAnalysis(resume.id, jdText)
+        if (existingAnalysis?.modificationReport != null) {
+            Log.d("JD_ANALYSIS_DEBUG", "Found existing matching analysis. Skipping AI call.")
+            _optimizationState.value = ResumeOptimizationState(
+                jdTitle = existingAnalysis.modificationReport.targetRole,
+                report = existingAnalysis.modificationReport,
+                isAnalysisComplete = true,
+                optimizedResumeData = existingAnalysis,
+                isFromExistingHistory = true // Flag to show simplified suggestion view in JD Matcher
+            )
+            _uiState.value = JdMatcherUiState.OPTIMIZING
+            return
+        }
+
         _uiState.value = JdMatcherUiState.ANALYZING
         _errorMessage.value = null
         _analysisStageIndex.value = 0
@@ -1827,156 +2181,78 @@ class JdMatcherViewModel(
                     }
                 }
                 
-                val result = geminiService.optimizeResume(jdText, resume)
+                val result = geminiService.generateModificationReport(jdText, resume)
                 tickerJob.cancel()
                 _analysisStageIndex.value = analysisStages.size
                 delay(300L)
                 
+                Log.d("JD_ANALYSIS_DEBUG", "JD received: ${jdText.take(100)}...")
+                Log.d("JD_ANALYSIS_DEBUG", "Resume extracted: ${resume.summary?.take(100)}...")
+                Log.d("JD_ANALYSIS_DEBUG", "Report generated: Overall Match ${result.report?.overallMatch}%")
+                Log.d("JD_ANALYSIS_DEBUG", "Matches: ${result.report?.strongMatchCount}, Fixes: ${result.report?.recommendedImprovementCount}, Gaps: ${result.report?.potentialGapCount}")
+                Log.d("JD_ANALYSIS_DEBUG", "Sections parsed: ${result.report?.sections?.map { it.sectionName }}")
+
+                // Create a new analysis record for this JD match
+                val analysisWithReport = resume.copy(
+                    id = java.util.UUID.randomUUID().toString(), // New ID for each unique JD analysis
+                    modificationReport = result.report,
+                    jdText = jdText,
+                    targetRole = result.jdTitle
+                )
+                
+                // Save it to history
+                sessionManager.saveLatestAnalysis(analysisWithReport, "JD_Analysis_${result.jdTitle}.pdf")
+                Log.d("JD_ANALYSIS_DEBUG", "Analysis saved with ID: ${analysisWithReport.id}")
+                
                 _optimizationState.value = ResumeOptimizationState(
                     jdTitle = result.jdTitle,
                     companyName = result.companyName,
-                    suggestions = result.suggestions,
-                    skillGaps = result.skillGaps,
-                    keywordOpportunities = result.keywordOpportunities,
+                    report = result.report,
                     isAnalysisComplete = true,
-                    optimizedResumeData = resume
+                    optimizedResumeData = analysisWithReport,
+                    justCompleted = true
                 )
                 
                 _uiState.value = JdMatcherUiState.OPTIMIZING
             } catch (e: Exception) {
-                Log.e("JdMatcherViewModel", "Optimization failed", e)
-                _errorMessage.value = e.message ?: "Failed to analyze resume. Please try again."
+                Log.e("JdMatcherViewModel", "Report generation failed", e)
+                _errorMessage.value = e.message ?: "Failed to generate report. Please try again."
                 _uiState.value = JdMatcherUiState.ERROR
             }
         }
     }
 
-    fun updateSuggestionState(suggestionId: String, newState: SuggestionState, manualText: String? = null) {
-        val currentSuggestions = _optimizationState.value.suggestions
-        val updatedSuggestions = currentSuggestions.map {
-            if (it.changeId == suggestionId) {
-                it.copy(state = newState, manualText = manualText)
-            } else it
-        }
-        
-        _optimizationState.value = _optimizationState.value.copy(suggestions = updatedSuggestions)
-        
-        // If accepted or edited, update the preview resume data immediately
-        if (newState == SuggestionState.ACCEPTED || newState == SuggestionState.EDITED) {
-            applyChangeToPreview(suggestionId, if (newState == SuggestionState.EDITED) manualText else null)
-        } else if (newState == SuggestionState.DISMISSED || newState == SuggestionState.ORIGINAL_KEPT) {
-            revertChangeInPreview(suggestionId)
-        }
-    }
-
-    private fun applyChangeToPreview(suggestionId: String, manualText: String?) {
-        val suggestion = _optimizationState.value.suggestions.find { it.changeId == suggestionId } ?: return
-        val currentResume = _optimizationState.value.optimizedResumeData ?: return
-        
-        val newText = manualText ?: suggestion.suggestedText
-        val oldText = suggestion.originalText
-        
-        // Text replacement in relevant sections
-        val updatedResume = when (suggestion.section.uppercase()) {
-            "SUMMARY" -> currentResume.copy(summary = currentResume.summary?.replace(oldText, newText))
-            "EXPERIENCE" -> currentResume.copy(experience = currentResume.experience?.map { it.replace(oldText, newText) })
-            "PROJECTS" -> currentResume.copy(projectAnalysis = currentResume.projectAnalysis?.map { proj ->
-                val newName = if (proj.name.contains(oldText)) proj.name.replace(oldText, newText) else proj.name
-                val newStrengths = proj.strengths?.map { s -> if (s.contains(oldText)) s.replace(oldText, newText) else s }
-                proj.copy(name = newName, strengths = newStrengths)
-            })
-            "SKILLS" -> currentResume.copy(extractedSkills = currentResume.extractedSkills?.map { 
-                if (it.name.equals(oldText, ignoreCase = true)) it.copy(name = newText)
-                else it
-            })
-            "CERTIFICATION", "CERTIFICATIONS" -> currentResume.copy(certifications = currentResume.certifications?.map {
-                if (it.contains(oldText)) it.replace(oldText, newText) else it
-            })
-            else -> currentResume
-        }
-        
-        _optimizationState.value = _optimizationState.value.copy(optimizedResumeData = updatedResume)
-    }
-
-    private fun revertChangeInPreview(suggestionId: String) {
-        val suggestion = _optimizationState.value.suggestions.find { it.changeId == suggestionId } ?: return
-        val currentResume = _optimizationState.value.optimizedResumeData ?: return
-        
-        val currentAppliedText = suggestion.manualText ?: suggestion.suggestedText
-        val originalText = suggestion.originalText
-        
-        val updatedResume = when (suggestion.section.uppercase()) {
-            "SUMMARY" -> currentResume.copy(summary = currentResume.summary?.replace(currentAppliedText, originalText))
-            "EXPERIENCE" -> currentResume.copy(experience = currentResume.experience?.map { it.replace(currentAppliedText, originalText) })
-            "PROJECTS" -> currentResume.copy(projectAnalysis = currentResume.projectAnalysis?.map { proj ->
-                val newName = if (proj.name.contains(currentAppliedText)) proj.name.replace(currentAppliedText, originalText) else proj.name
-                val newStrengths = proj.strengths?.map { s -> if (s.contains(currentAppliedText)) s.replace(currentAppliedText, originalText) else s }
-                proj.copy(name = newName, strengths = newStrengths)
-            })
-            "SKILLS" -> currentResume.copy(extractedSkills = currentResume.extractedSkills?.map { 
-                if (it.name.equals(currentAppliedText, ignoreCase = true)) it.copy(name = originalText)
-                else it
-            })
-            "CERTIFICATION", "CERTIFICATIONS" -> currentResume.copy(certifications = currentResume.certifications?.map {
-                if (it.contains(currentAppliedText)) it.replace(currentAppliedText, originalText) else it
-            })
-            else -> currentResume
-        }
-        
-        _optimizationState.value = _optimizationState.value.copy(optimizedResumeData = updatedResume)
-    }
-
-    fun setCurrentImprovement(index: Int) {
-        if (index in _optimizationState.value.suggestions.indices) {
-            _optimizationState.value = _optimizationState.value.copy(currentImprovementIndex = index)
-        }
-    }
-
-    fun generateOptimizedResume() {
-        val currentResume = _optimizationState.value.optimizedResumeData ?: return
-        
-        _uiState.value = JdMatcherUiState.ANALYZING
-        _analysisStageIndex.value = 0
-        
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val context = com.example.aidrivencompetencyplatform.AstraApp.instance
-                val pdfFile = com.example.aidrivencompetencyplatform.data.ResumePdfGenerator.generateCleanResumePdf(
-                    context = context,
-                    resume = currentResume,
-                    targetRole = _optimizationState.value.jdTitle
-                ) ?: throw Exception("Failed to generate PDF document.")
-                
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    val updatedResume = currentResume.copy(
-                        layoutInfo = (currentResume.layoutInfo ?: com.example.aidrivencompetencyplatform.model.ResumeLayout()).copy(
-                            pdfUri = Uri.fromFile(pdfFile).toString()
-                        )
-                    )
+    fun downloadReport() {
+        val report = _optimizationState.value.report ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = com.example.aidrivencompetencyplatform.data.ResumePdfGenerator.generateModificationReportPdf(
+                com.example.aidrivencompetencyplatform.AstraApp.instance,
+                report
+            )
+            if (file != null) {
+                withContext(Dispatchers.Main) {
                     _optimizationState.value = _optimizationState.value.copy(
-                        optimizedResumeData = updatedResume,
-                        isAnalysisComplete = true
+                        reportPdfUri = Uri.fromFile(file)
                     )
                     _uiState.value = JdMatcherUiState.RESULT
                 }
-            } catch (e: Exception) {
-                Log.e("JdMatcherViewModel", "PDF Generation failed", e)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    _errorMessage.value = "Failed to generate optimized PDF: ${e.message}"
-                    _uiState.value = JdMatcherUiState.ERROR
-                }
             }
         }
+    }
+
+    fun backToReport() {
+        _uiState.value = JdMatcherUiState.OPTIMIZING
     }
 
     fun resetToInput() {
         _uiState.value = JdMatcherUiState.INPUT
         _optimizationState.value = ResumeOptimizationState()
         _errorMessage.value = null
+        loadCanonicalResume()
     }
 
-    fun backToEditor() {
-        _uiState.value = JdMatcherUiState.OPTIMIZING
+    fun markCompletionHandled() {
+        _optimizationState.value = _optimizationState.value.copy(justCompleted = false)
     }
 
     fun retryAnalysis() {
@@ -1984,4 +2260,346 @@ class JdMatcherViewModel(
     }
 }
 
+class InterviewViewModel(
+    private val sessionManager: SessionManager,
+    private val geminiService: GeminiService
+) : ViewModel() {
 
+    private val _state = MutableStateFlow(InterviewSessionState())
+    val state: StateFlow<InterviewSessionState> = _state.asStateFlow()
+
+    // Map to store user answers locally during the session
+    private val _userAnswers = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    init {
+        refreshContext()
+    }
+
+    fun refreshContext() {
+        val latest = sessionManager.getLatestAnalysis()
+        val role = latest?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
+        
+        // If the latest analysis already has a completed interview summary, load it as a locked snapshot
+        if (latest?.interviewSummary != null) {
+            _state.value = _state.value.copy(
+                targetRole = role,
+                questions = latest.interviewQuestions,
+                summary = latest.interviewSummary,
+                isComplete = true
+            )
+            _userAnswers.value = latest.userAnswers
+        } else {
+            _state.value = _state.value.copy(targetRole = role)
+        }
+    }
+
+    fun loadHistoryAnalysis(analysisId: String) {
+        val analysis = sessionManager.getAnalysisById(analysisId)
+        if (analysis != null) {
+            _state.value = _state.value.copy(
+                targetRole = analysis.targetRole ?: "Android Developer",
+                questions = analysis.interviewQuestions,
+                summary = analysis.interviewSummary,
+                isComplete = analysis.interviewSummary != null
+            )
+            // Restore user answers if available
+            _userAnswers.value = analysis.userAnswers
+        } else {
+            refreshContext()
+        }
+    }
+
+    fun startInterview() {
+        val latest = sessionManager.getLatestAnalysis()
+        if (latest == null) {
+            _state.value = _state.value.copy(errorMessage = "Please upload your resume first to generate personalized questions.")
+            return
+        }
+
+        // Clean start for new interview - Requirement #18
+        _userAnswers.value = emptyMap()
+        _state.value = InterviewSessionState(targetRole = latest.targetRole ?: "Android Developer", isLoading = true)
+
+        viewModelScope.launch {
+            try {
+                val jd = latest.jdText 
+                val questions = geminiService.generateInterviewQuestions(_state.value.targetRole, latest, jd)
+                
+                _state.value = _state.value.copy(
+                    questions = questions.take(5), // Requirement #8
+                    currentQuestionIndex = 0,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("InterviewViewModel", "Failed to generate questions", e)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = "Failed to generate questions: ${e.localizedMessage}"
+                )
+            }
+        }
+    }
+
+    fun submitAnswer(answer: String) {
+        if (answer.isBlank()) return
+        
+        val currentIdx = _state.value.currentQuestionIndex
+        val question = _state.value.questions.getOrNull(currentIdx) ?: return
+        
+        // Store answer locally - Requirement #9
+        val updatedAnswers = _userAnswers.value.toMutableMap()
+        updatedAnswers[question.id] = answer
+        _userAnswers.value = updatedAnswers
+
+        // Advance or Finish
+        if (currentIdx < _state.value.questions.size - 1) {
+            _state.value = _state.value.copy(currentQuestionIndex = currentIdx + 1)
+        } else {
+            generateFinalReport()
+        }
+    }
+
+    private fun generateFinalReport() {
+        val latest = sessionManager.getLatestAnalysis() ?: return
+        _state.value = _state.value.copy(isLoading = true, isEvaluating = true)
+        
+        viewModelScope.launch {
+            try {
+                val summary = geminiService.generateFinalInterviewReport(
+                    questions = _state.value.questions,
+                    answers = _userAnswers.value,
+                    targetRole = _state.value.targetRole,
+                    resumeData = latest
+                )
+                
+                // Update persistent analysis result with the immutable snapshot - Requirement #3
+                val updatedAnalysis = latest.copy(
+                    interviewQuestions = _state.value.questions,
+                    userAnswers = _userAnswers.value,
+                    interviewSummary = summary
+                )
+                sessionManager.saveLatestAnalysis(updatedAnalysis)
+                
+                _state.value = _state.value.copy(
+                    isComplete = true,
+                    summary = summary,
+                    isLoading = false,
+                    isEvaluating = false
+                )
+            } catch (e: Exception) {
+                Log.e("InterviewViewModel", "Failed to generate summary", e)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    isEvaluating = false,
+                    errorMessage = "Failed to generate performance report: ${e.localizedMessage}"
+                )
+            }
+        }
+    }
+
+    fun reset() {
+        startInterview()
+    }
+}
+
+class TechnicalMcqViewModel(
+    private val sessionManager: SessionManager,
+    private val geminiService: GeminiService
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(TechnicalMcqSessionState())
+    val state: StateFlow<TechnicalMcqSessionState> = _state.asStateFlow()
+
+    private var currentAnalysisId: String? = null
+
+    fun loadAnalysis(analysisId: String?) {
+        currentAnalysisId = analysisId
+        val targetAnalysis = if (!analysisId.isNullOrBlank()) {
+            sessionManager.getAnalysisById(analysisId) ?: sessionManager.getLatestAnalysis()
+        } else {
+            sessionManager.getLatestAnalysis()
+        }
+
+        if (targetAnalysis != null) {
+            val effectiveId = analysisId ?: targetAnalysis.id
+            if (targetAnalysis.technicalMcqResult != null) {
+                // Permanently marked as attempted: show result only, do not show/generate quiz
+                _state.value = TechnicalMcqSessionState(
+                    currentAnalysisId = effectiveId,
+                    result = targetAnalysis.technicalMcqResult,
+                    isComplete = true,
+                    questions = targetAnalysis.technicalMcqResult.questions,
+                    isLoading = false,
+                    isSubmitting = false
+                )
+            } else {
+                // Not attempted yet for this analysis
+                _state.value = TechnicalMcqSessionState(
+                    currentAnalysisId = effectiveId,
+                    isComplete = false,
+                    result = null,
+                    isLoading = false,
+                    isSubmitting = false
+                )
+            }
+        } else {
+            _state.value = TechnicalMcqSessionState(
+                currentAnalysisId = analysisId,
+                isComplete = false,
+                result = null,
+                isLoading = false,
+                isSubmitting = false
+            )
+        }
+    }
+
+    fun startTest() {
+        val targetId = currentAnalysisId ?: _state.value.currentAnalysisId
+        val targetAnalysis = if (!targetId.isNullOrBlank()) {
+            sessionManager.getAnalysisById(targetId) ?: sessionManager.getLatestAnalysis()
+        } else {
+            sessionManager.getLatestAnalysis()
+        }
+
+        if (targetAnalysis == null) {
+            _state.value = _state.value.copy(errorMessage = "Please upload your resume first.")
+            return
+        }
+
+        // ONE ATTEMPT CHECK: If this analysis has already been attempted, DO NOT generate or show questions
+        if (targetAnalysis.technicalMcqResult != null) {
+            _state.value = _state.value.copy(
+                currentAnalysisId = targetAnalysis.id,
+                result = targetAnalysis.technicalMcqResult,
+                questions = targetAnalysis.technicalMcqResult.questions,
+                isComplete = true,
+                isLoading = false
+            )
+            return
+        }
+
+        if (_state.value.isComplete || _state.value.result != null) {
+            return
+        }
+
+        if (_state.value.questions.isNotEmpty()) {
+            return
+        }
+
+        _state.value = _state.value.copy(
+            currentAnalysisId = targetAnalysis.id,
+            isLoading = true, 
+            errorMessage = null
+        )
+
+        viewModelScope.launch {
+            try {
+                val questions = geminiService.generateTechnicalMcqs(
+                    targetAnalysis.targetRole ?: "Software Engineer",
+                    targetAnalysis,
+                    targetAnalysis.jdText
+                )
+                _state.value = _state.value.copy(
+                    questions = questions.take(10),
+                    currentQuestionIndex = 0,
+                    userAnswers = MutableList(questions.size.coerceAtMost(10)) { null },
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = "Failed to generate test: ${e.localizedMessage}"
+                )
+            }
+        }
+    }
+
+    fun selectOption(optionIndex: Int) {
+        if (_state.value.isComplete || _state.value.isSubmitting) return
+        val currentIdx = _state.value.currentQuestionIndex
+        val updatedAnswers = _state.value.userAnswers.toMutableList()
+        if (currentIdx in updatedAnswers.indices) {
+            updatedAnswers[currentIdx] = optionIndex
+            _state.value = _state.value.copy(userAnswers = updatedAnswers)
+        }
+    }
+
+    fun nextQuestion() {
+        if (_state.value.isComplete || _state.value.isSubmitting) return
+        if (_state.value.currentQuestionIndex < _state.value.questions.size - 1) {
+            _state.value = _state.value.copy(currentQuestionIndex = _state.value.currentQuestionIndex + 1)
+        } else {
+            evaluateTest()
+        }
+    }
+
+    private fun evaluateTest() {
+        // Atomic duplicate submission check
+        if (_state.value.isComplete || _state.value.isSubmitting) return
+        _state.value = _state.value.copy(isSubmitting = true)
+
+        val targetId = currentAnalysisId ?: _state.value.currentAnalysisId
+        val targetAnalysis = if (!targetId.isNullOrBlank()) {
+            sessionManager.getAnalysisById(targetId) ?: sessionManager.getLatestAnalysis()
+        } else {
+            sessionManager.getLatestAnalysis()
+        } ?: run {
+            _state.value = _state.value.copy(isSubmitting = false)
+            return
+        }
+
+        // If already attempted in storage, do not recalculate as a new attempt
+        if (targetAnalysis.technicalMcqResult != null) {
+            _state.value = _state.value.copy(
+                result = targetAnalysis.technicalMcqResult,
+                isComplete = true,
+                isSubmitting = false
+            )
+            return
+        }
+
+        val questions = _state.value.questions
+        val userAnswers = _state.value.userAnswers
+
+        var correctCount = 0
+        val improvementAreas = mutableSetOf<String>()
+
+        questions.forEachIndexed { index, q ->
+            if (userAnswers.getOrNull(index) == q.correctAnswerIndex) {
+                correctCount++
+            } else {
+                improvementAreas.add(q.topic)
+            }
+        }
+
+        val result = TechnicalMcqResult(
+            questions = questions,
+            userAnswers = userAnswers,
+            correctCount = correctCount,
+            incorrectCount = questions.size - correctCount,
+            improvementAreas = improvementAreas.toList()
+        )
+
+        // Save result permanently against this specific analysis
+        val updatedAnalysis = targetAnalysis.copy(technicalMcqResult = result)
+        sessionManager.saveAnalysis(updatedAnalysis)
+
+        _state.value = _state.value.copy(
+            result = result,
+            isComplete = true,
+            isSubmitting = false
+        )
+    }
+}
+
+data class TechnicalMcqSessionState(
+    val currentAnalysisId: String? = null,
+    val questions: List<TechnicalMcq> = emptyList(),
+    val currentQuestionIndex: Int = 0,
+    val userAnswers: List<Int?> = emptyList(),
+    val isComplete: Boolean = false,
+    val result: TechnicalMcqResult? = null,
+    val isLoading: Boolean = false,
+    val isSubmitting: Boolean = false,
+    val errorMessage: String? = null
+)

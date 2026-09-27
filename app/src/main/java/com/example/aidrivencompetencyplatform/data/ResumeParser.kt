@@ -39,135 +39,335 @@ class ResumeParser(private val context: Context? = null) {
             LANGUAGES,
             ACHIEVEMENTS,
             PUBLICATIONS,
+            PERSONAL_INFO,
             OTHER
         }
 
         val SECTION_HEADER_KEYWORDS = setOf(
             "internship", "internships", "experience", "experiences", "work experience", "professional experience",
-            "employment", "employment history", "work history", "career history", "career summary",
+            "employment", "employment history", "work history", "career history", "career summary", "work background",
             "education", "academic", "academics", "academic background", "qualifications", "educational qualifications",
+            "educational background", "scholastic details", "academic details", "degrees",
             "skill", "skills", "technical skills", "core skills", "key skills", "competencies", "core competencies",
-            "technologies", "tech stack", "tools", "tools & technologies", "areas of expertise",
-            "project", "projects", "key projects", "academic projects", "personal projects", "portfolio",
-            "certification", "certifications", "certificates", "courses", "licenses", "licenses & certifications",
+            "technologies", "tech stack", "tools", "tools & technologies", "areas of expertise", "technical proficiencies",
+            "project", "projects", "key projects", "academic projects", "personal projects", "portfolio", "selected projects", "selected work",
+            "certification", "certifications", "certificates", "courses", "licenses", "licenses & certifications", "credentials",
             "language", "languages", "language proficiency", "languages known",
             "patent", "patents", "publication", "publications", "research", "research papers",
-            "achievement", "achievements", "award", "awards", "honors", "accomplishments",
+            "achievement", "achievements", "award", "awards", "honors", "accomplishments", "extracurricular",
             "summary", "professional summary", "executive summary", "career objective", "objective", "profile", "about", "about me",
-            "contact", "contact info", "contact information", "personal details", "personal info", "personal information",
-            "declaration", "references", "reference", "activity", "activities", "extracurricular", "co-curricular",
+            "career profile", "professional profile", "profile summary", "career overview", "statement of purpose", "career goal",
+            "contact", "contact info", "contact information", "personal details", "personal info", "personal information", "personal profile",
+            "family", "family details", "father's name", "permanent address",
+            "declaration", "references", "reference", "activity", "activities", "co-curricular",
             "volunteer", "volunteering", "leadership", "positions of responsibility", "interests", "hobbies", "training", "workshops",
             "resume", "curriculum vitae", "cv", "page", "github", "linkedin"
         )
+
+        fun normalizeHeadingText(raw: String): String {
+            var s = raw.trim()
+            // Remove markdown headers (#, ##, etc.)
+            s = s.replace(Regex("^#{1,6}\\s*"), "")
+            // Remove leading numbering/bullets like "1.", "1.0", "1)", "(1)", "[1]", "I.", "A.", "•", "-", "*", "~"
+            s = s.replace(Regex("^(?:\\d+(?:\\.\\d+)*[.)]?|\\([0-9a-zA-Z]+\\)|\\[[0-9a-zA-Z]+\\]|[IVXLCDMivxlcdm]+[.)]|[A-Za-z][.)]|[-*•·~–—=+>]+)\\s*"), "")
+            // Remove enclosing markdown styling like **bold**, *italic*, __underline__
+            s = s.replace(Regex("^[*_~`]+|[*_~`]+$"), "")
+            // Remove trailing colons, semicolons, dashes, pipes, dots, etc.
+            s = s.replace(Regex("[:;\\-–—|/\\\\.]+$"), "")
+            // Normalize internal whitespace
+            s = s.replace(Regex("\\s+"), " ")
+            return s.trim().lowercase()
+        }
 
         fun isSectionHeader(text: String): Boolean {
             return classifySectionHeader(text) != null
         }
 
-        fun classifySectionHeader(text: String): SectionType? {
-            val clean = text.trim().lowercase().removeSuffix(":").trim()
-            if (clean.isBlank()) return null
+        fun classifySectionHeader(text: String, nextLines: List<String> = emptyList()): SectionType? {
+            val trimmed = text.trim()
+            if (trimmed.isBlank()) return null
             
-            // Filter out lines that are clearly candidate names, emails, phones, or URLs
-            if (clean.contains("@") || clean.startsWith("http") || clean.contains(".com") || clean.contains("|")) return null
-            if (clean.length > 55) return null
+            // Filter out lines that are clearly candidate emails or full URLs
+            val lowerTrimmed = trimmed.lowercase()
+            if (lowerTrimmed.contains("@") || lowerTrimmed.startsWith("http://") || lowerTrimmed.startsWith("https://") || lowerTrimmed.startsWith("www.")) {
+                return null
+            }
+            if (trimmed.length > 70) return null
 
-            // 1. Summary / Profile / Objective
-            val summaryHeaders = listOf(
+            val clean = normalizeHeadingText(trimmed)
+            if (clean.isBlank()) return null
+
+            // 1. SUMMARY / PROFILE / OBJECTIVE (Semantic taxonomy & variations)
+            val summaryExactHeaders = setOf(
                 "summary", "professional summary", "executive summary", "career summary",
-                "career objective", "objective", "profile", "professional profile", "career profile",
-                "about me", "about", "overview", "career overview", "personal profile", "personal summary", "background"
+                "career objective", "objective", "objectives", "profile", "professional profile", "career profile",
+                "profile summary", "executive profile", "personal profile", "personal summary",
+                "about me", "about", "about myself", "who i am", "overview", "career overview",
+                "professional overview", "background", "professional background", "statement of purpose",
+                "career goal", "career goals", "career statement", "career aim", "professional objective",
+                "professional objectives", "synopsis", "professional synopsis", "summary of qualifications",
+                "qualification summary", "qualifications summary", "candidate profile", "core summary",
+                "brief summary", "introductory summary", "my profile", "my journey", "my career journey"
             )
-            if (summaryHeaders.any { clean == it || clean == "$it:" || clean.startsWith("$it -") || clean.startsWith("$it –") }) {
+            if (summaryExactHeaders.contains(clean)) {
                 return SectionType.SUMMARY
             }
 
-            // 2. Work Experience / Internships / Employment
-            val experienceHeaders = listOf(
+            // Compound / regex patterns for summary/objective
+            val summaryRegex = Regex("^(?:my\\s+)?(?:career\\s+|professional\\s+|personal\\s+|executive\\s+)?(?:summary|objective|objectives|profile|synopsis|statement|overview|background)s?$|" +
+                                     "^(?:about\\s+me|about\\s+myself|who\\s+i\\s+am|career\\s+goal|career\\s+goals|statement\\s+of\\s+purpose|professional\\s+bio)$|" +
+                                     "^(?:summary|profile|objective)\\s*[/&|+-]\\s*(?:summary|profile|objective|overview)$")
+            if (summaryRegex.matches(clean)) {
+                return SectionType.SUMMARY
+            }
+
+            // 2. WORK EXPERIENCE / INTERNSHIPS / EMPLOYMENT
+            val experienceExactHeaders = setOf(
                 "work experience", "professional experience", "experience", "experiences",
                 "employment", "employment history", "work history", "career history",
                 "internship", "internships", "internship experience", "industrial experience",
-                "relevant experience", "professional background", "industry experience"
+                "industrial training", "relevant experience", "professional background", "industry experience",
+                "work background", "job history", "career experience", "practical experience",
+                "corporate experience", "hands-on experience", "previous employment", "employment record",
+                "relevant work experience", "technical experience", "professional engagements"
             )
-            if (experienceHeaders.any { clean == it || clean == "$it:" || clean.startsWith("$it -") || clean.startsWith("$it –") }) {
+            if (experienceExactHeaders.contains(clean)) {
                 return SectionType.WORK_EXPERIENCE
             }
 
-            // 3. Education / Academics / Qualifications
-            val educationHeaders = listOf(
+            val experienceRegex = Regex("^(?:my\\s+)?(?:work|professional|career|employment|job|industry|internship|relevant|corporate|hands-on|technical|practical)?\\s*(?:experience|history|employment|engagements|background|career)s?$|" +
+                                        "^(?:internship|internships|internship\\s+experience|industrial\\s+training|industrial\\s+experience)$")
+            if (experienceRegex.matches(clean)) {
+                return SectionType.WORK_EXPERIENCE
+            }
+
+            // 3. EDUCATION / ACADEMICS / QUALIFICATIONS
+            val educationExactHeaders = setOf(
                 "education", "academic background", "academics", "academic details", "academic history",
                 "qualifications", "educational qualifications", "academic qualifications",
                 "educational background", "scholastic details", "scholastic record", "education & qualifications",
-                "educational details"
+                "education and qualifications", "educational details", "academic credentials", "academic record",
+                "degrees", "degrees & qualifications", "formal education", "schooling", "university education",
+                "college education", "educational credentials"
             )
-            if (educationHeaders.any { clean == it || clean == "$it:" || clean.startsWith("$it -") || clean.startsWith("$it –") }) {
+            if (educationExactHeaders.contains(clean)) {
                 return SectionType.EDUCATION
             }
 
-            // 4. Projects
-            val projectHeaders = listOf(
+            val educationRegex = Regex("^(?:my\\s+)?(?:academic|educational|scholastic|formal|university|college|school)?\\s*(?:education|qualifications?|academics?|background|details|history|record|credentials?|degrees?|preparation)s?$|" +
+                                       "^(?:education\\s*(?:&|and|/)\\s*(?:qualifications?|certifications?|academics?))$")
+            if (educationRegex.matches(clean)) {
+                return SectionType.EDUCATION
+            }
+
+            // 4. PROJECTS
+            val projectExactHeaders = setOf(
                 "projects", "key projects", "academic projects", "personal projects", "technical projects",
                 "demonstrated projects", "portfolio", "notable projects", "major projects", "mini projects",
-                "software projects", "system projects", "recent projects", "project work", "selected projects"
+                "software projects", "system projects", "recent projects", "project work", "selected projects",
+                "project experience", "capstone projects", "practical projects", "selected work",
+                "featured projects", "engineering projects", "development projects", "client projects"
             )
-            if (projectHeaders.any { clean == it || clean == "$it:" || clean.startsWith("$it -") || clean.startsWith("$it –") }) {
+            if (projectExactHeaders.contains(clean)) {
                 return SectionType.PROJECTS
             }
 
-            // 5. Skills
-            val skillHeaders = listOf(
+            val projectRegex = Regex("^(?:my\\s+)?(?:key|selected|academic|personal|technical|major|mini|capstone|software|engineering|featured|recent|demonstrated|hands-on|client)?\\s*(?:projects?|portfolio|project\\s+work|project\\s+experience|selected\\s+work)s?$")
+            if (projectRegex.matches(clean)) {
+                return SectionType.PROJECTS
+            }
+
+            // 5. SKILLS
+            val skillExactHeaders = setOf(
                 "skills", "technical skills", "core skills", "key skills", "technologies", "tech stack",
                 "tools", "tools & technologies", "tools and technologies", "competencies", "core competencies",
                 "technical competencies", "areas of expertise", "programming skills", "technical proficiencies",
-                "skills & abilities", "skills & tools", "it skills", "computer skills"
+                "skills & abilities", "skills and abilities", "skills & tools", "skills and tools",
+                "skills & technologies", "skills and technologies", "it skills", "computer skills",
+                "frameworks & tools", "software skills", "technical strengths", "domain expertise",
+                "specialties", "proficiencies", "technical toolkit", "skill set", "skillsets"
             )
-            if (skillHeaders.any { clean == it || clean == "$it:" || clean.startsWith("$it -") || clean.startsWith("$it –") }) {
+            if (skillExactHeaders.contains(clean)) {
                 return SectionType.SKILLS
             }
 
-            // 6. Certifications
-            val certHeaders = listOf(
+            val skillRegex = Regex("^(?:my\\s+)?(?:technical|core|key|programming|it|software|domain|professional|areas\\s+of)?\\s*(?:skills?|competencies|technologies|tech\\s+stack|tools|proficiencies|expertise|skill\\s*sets?|capabilities|strengths)s?$|" +
+                                   "^(?:skills?\\s*(?:&|and|/|\\+)\\s*(?:technologies|tools|abilities|frameworks|competencies))$|" +
+                                   "^(?:tools?\\s*(?:&|and|/|\\+)\\s*(?:technologies|frameworks|platforms))$")
+            if (skillRegex.matches(clean)) {
+                return SectionType.SKILLS
+            }
+
+            // 6. CERTIFICATIONS / COURSES / TRAININGS
+            val certExactHeaders = setOf(
                 "certification", "certifications", "certificates", "licenses & certifications",
-                "courses & certifications", "courses", "credentials", "professional certifications",
-                "trainings", "workshops", "courses completed", "licenses"
+                "licenses and certifications", "certifications & training", "certifications and training",
+                "courses & certifications", "courses and certifications", "courses", "credentials",
+                "professional certifications", "trainings", "workshops", "courses completed", "licenses",
+                "professional development", "accreditations", "training & certifications",
+                "certifications & licenses", "online certifications", "certificate courses",
+                "online courses", "nptel certifications", "nptel courses", "moocs", "training & courses",
+                "certifications / courses", "courses / certifications"
             )
-            if (certHeaders.any { clean == it || clean == "$it:" || clean.startsWith("$it -") || clean.startsWith("$it –") }) {
+            if (certExactHeaders.contains(clean)) {
                 return SectionType.CERTIFICATIONS
             }
 
-            // 7. Languages
-            val langHeaders = listOf(
-                "language", "languages", "language proficiency", "languages known"
+            val certRegex = Regex("^(?:my\\s+)?(?:professional\\s+|online\\s+|technical\\s+)?(?:certifications?|certificates?|credentials?|licenses?|trainings?|courses?|workshops?|accreditations?|coursework)s?$|" +
+                                  "^(?:licenses?\\s*(?:&|and|/|\\+)\\s*certifications?|certifications?\\s*(?:&|and|/|\\+)\\s*(?:licenses?|trainings?|courses?)|courses?\\s*(?:&|and|/|\\+)\\s*(?:certifications?|trainings?))$")
+            if (certRegex.matches(clean)) {
+                return SectionType.CERTIFICATIONS
+            }
+
+            // 7. LANGUAGES
+            val langExactHeaders = setOf(
+                "language", "languages", "language proficiency", "languages known", "foreign languages",
+                "linguistic skills", "spoken languages"
             )
-            if (langHeaders.any { clean == it || clean == "$it:" }) {
+            if (langExactHeaders.contains(clean) || Regex("^(?:spoken\\s+|known\\s+|foreign\\s+)?languages?(?:\\s+known|\\s+proficiency)?$").matches(clean)) {
                 return SectionType.LANGUAGES
             }
 
-            // 8. Achievements / Awards / Publications / Patents
-            val achieveHeaders = listOf(
+            // 8. ACHIEVEMENTS / AWARDS
+            val achieveExactHeaders = setOf(
                 "achievement", "achievements", "award", "awards", "honors", "accomplishments",
-                "extracurricular", "co-curricular", "positions of responsibility", "leadership",
-                "volunteer", "volunteering", "activities"
+                "honors & awards", "honors and awards", "achievements & awards", "achievements and awards",
+                "key achievements", "extracurricular", "extracurricular activities", "co-curricular",
+                "co-curricular activities", "positions of responsibility", "leadership",
+                "leadership & activities", "volunteer", "volunteering", "volunteer work", "activities",
+                "awards & recognition", "honours", "recognitions"
             )
-            if (achieveHeaders.any { clean == it || clean == "$it:" }) {
+            if (achieveExactHeaders.contains(clean) || Regex("^(?:my\\s+)?(?:key\\s+|notable\\s+|major\\s+)?(?:achievements?|awards?|honors?|accomplishments?|recognitions?|honours?)s?$").matches(clean)) {
                 return SectionType.ACHIEVEMENTS
             }
 
-            val pubHeaders = listOf(
-                "patent", "patents", "publication", "publications", "research", "research papers"
+            // 9. PUBLICATIONS
+            val pubExactHeaders = setOf(
+                "patent", "patents", "publication", "publications", "research", "research papers",
+                "conference papers", "journals", "published works", "scientific papers", "white papers"
             )
-            if (pubHeaders.any { clean == it || clean == "$it:" }) {
+            if (pubExactHeaders.contains(clean) || Regex("^(?:my\\s+)?(?:research\\s+|scientific\\s+|conference\\s+)?(?:publications?|patents?|research\\s+papers?|journals?|published\\s+works?|white\\s+papers?)s?$").matches(clean)) {
                 return SectionType.PUBLICATIONS
             }
 
-            val otherHeaders = listOf(
-                "declaration", "references", "reference", "interests", "hobbies", "personal details", "contact", "contact information"
+            // 10. PERSONAL INFO
+            val personalInfoExactHeaders = setOf(
+                "personal details", "personal info", "personal information", "contact", "contact info",
+                "contact information", "family details", "family background", "father's name", "permanent address",
+                "residential address"
             )
-            if (otherHeaders.any { clean == it || clean == "$it:" }) {
+            if (personalInfoExactHeaders.contains(clean) || Regex("^(?:personal\\s+details|personal\\s+info|personal\\s+information|contact\\s+details|contact\\s+info|contact\\s+information|family\\s+details|family\\s+background|permanent\\s+address|residential\\s+address)$").matches(clean)) {
+                return SectionType.PERSONAL_INFO
+            }
+
+            // 11. OTHER
+            val otherExactHeaders = setOf(
+                "declaration", "references", "reference", "interests", "hobbies"
+            )
+            if (otherExactHeaders.contains(clean)) {
                 return SectionType.OTHER
             }
 
+            // 12. CONTENT-BASED FALLBACK: For unconventional headings (e.g. "MY CAREER JOURNEY", "SELECTED WORK")
+            // Must strictly look like a section heading: short line, no role/job delimiters, no email/phone/periods,
+            // and either ALL CAPS or containing heading-like keywords.
+            val hasDelimiter = trimmed.contains("|") || trimmed.contains(" – ") || trimmed.contains(" - ") || trimmed.contains(":") || trimmed.contains(",") || trimmed.contains("@")
+            val isJobTitle = Regex("(?i)\\b(?:developer|engineer|intern|manager|lead|architect|analyst|consultant|programmer)\\b").containsMatchIn(trimmed)
+            val isHeadingStyle = trimmed.all { it.isUpperCase() || !it.isLetter() } || 
+                                 listOf("journey", "selected work", "highlights", "milestones", "snapshot", "portfolio", "what i do", "what i bring").any { clean.contains(it) }
+
+            if (nextLines.isNotEmpty() && clean.length in 3..35 && !hasDelimiter && !isJobTitle && isHeadingStyle) {
+                val fallbackType = classifySectionByContent(clean, nextLines)
+                if (fallbackType != null) {
+                    return fallbackType
+                }
+            }
+
             return null
+        }
+
+        /**
+         * Semantic content-based classification for unconventional or ambiguous section headings.
+         */
+        private fun classifySectionByContent(heading: String, bodyLines: List<String>): SectionType? {
+            val sample = bodyLines.take(6).filter { it.isNotBlank() }
+            if (sample.isEmpty()) return null
+            val fullSample = sample.joinToString(" ")
+            val fullSampleLower = fullSample.lowercase()
+
+            // 1. Check for Summary / Objective content characteristics:
+            // Single narrative paragraph describing career identity, goals, strengths, or experience
+            val summaryIndicators = listOf(
+                "software engineer", "developer", "experience in", "passionate", "seeking", "driven",
+                "skilled in", "proven track record", "proficient in", "specialized in", "dedicated",
+                "career goal", "objective", "results-driven", "aiming to", "looking for an opportunity"
+            )
+            val summaryCount = summaryIndicators.count { fullSampleLower.contains(it) }
+            val hasDelimiters = sample.any { it.contains(" | ") || it.contains(" – ") }
+            val hasDates = Regex("\\b(?:19|20)\\d{2}\\b").containsMatchIn(fullSample)
+            val isShortParagraph = sample.size in 1..4 && fullSample.length in 40..500
+
+            if (summaryCount >= 2 || (summaryCount >= 1 && isShortParagraph && !hasDelimiters && !hasDates)) {
+                return SectionType.SUMMARY
+            }
+
+            // 2. Check for Project content characteristics (titles with tech stack, bullets describing built systems)
+            val projectIndicators = listOf("built", "developed", "architected", "implemented", "designed", "created", "technologies:", "tech stack:")
+            val hasProjectBullet = projectIndicators.any { fullSampleLower.contains(it) }
+            val hasProjectTech = listOf("kotlin", "java", "python", "react", "compose", "sql", "firebase", "node", "aws", "flutter").count { fullSampleLower.contains(it) }
+            if (hasProjectBullet && (hasProjectTech >= 1 || hasDelimiters)) {
+                return SectionType.PROJECTS
+            }
+
+            // 3. Check for Experience content characteristics (job roles + company/dates)
+            val roleIndicators = listOf("engineer", "developer", "intern", "manager", "lead", "architect", "analyst", "consultant")
+            val hasRole = roleIndicators.any { fullSampleLower.contains(it) }
+            val hasDateRange = Regex("\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)?\\s*\\d{4}\\s*(?:–|-|to)\\s*(?:present|current|\\d{4})\\b", RegexOption.IGNORE_CASE).containsMatchIn(fullSample)
+            if (hasRole && (hasDateRange || (hasDates && hasDelimiters))) {
+                return SectionType.WORK_EXPERIENCE
+            }
+
+            // 4. Check for Education content characteristics
+            val eduIndicators = listOf("bachelor", "master", "b.tech", "b.e.", "b.sc", "m.tech", "mca", "10th", "12th", "sslc", "hsc", "cgpa", "gpa", "university", "college", "institute")
+            if (eduIndicators.count { fullSampleLower.contains(it) } >= 2) {
+                return SectionType.EDUCATION
+            }
+
+            // 5. Check for Skills (dense list of technical terms)
+            val skillMatchCount = listOf("kotlin", "java", "python", "c++", "sql", "git", "docker", "aws", "react", "html", "css", "linux").count { fullSampleLower.contains(it) }
+            if (skillMatchCount >= 3 && sample.size in 1..4) {
+                return SectionType.SKILLS
+            }
+
+            return null
+        }
+        fun isDegreeOrEducationTitle(text: String): Boolean {
+            val clean = text.trim().lowercase()
+            if (clean.isBlank()) return true
+            
+            // Regex patterns for degree and qualification text
+            val degreeRegex = Regex("(?i)\\b(?:bachelor|bachelors|bachelor's|master|masters|master's|doctor|doctorate|diploma|associate|degree|b\\.?e\\.?|b\\.?tech\\.?|btech|m\\.?e\\.?|m\\.?tech\\.?|mtech|b\\.?sc\\.?|bsc|m\\.?sc\\.?|msc|bca|mca|bba|mba|b\\.?com\\.?|bcom|m\\.?com\\.?|mcom|b\\.?a\\.?|m\\.?a\\.?|ph\\.?d\\.?|d\\.?phil\\.?|postgraduate|post\\s+graduate|undergraduate|under\\s+graduate|10th|12th|sslc|hsc|cbse|icse|matriculation|intermediate|higher\\s+secondary|secondary\\s+school|pre-university|puc)\\b")
+            if (degreeRegex.containsMatchIn(clean)) return true
+
+            // Regex patterns for educational institutions
+            val institutionRegex = Regex("(?i)\\b(?:university|college|institute|institution|school|academy|polytechnic|campus|department|faculty|vidyalaya|vidyamandir)\\b")
+            if (institutionRegex.containsMatchIn(clean)) return true
+
+            // Regex patterns for job titles
+            val jobTitleRegex = Regex("(?i)\\b(?:developer|engineer|designer|architect|analyst|consultant|intern|manager|lead|specialist|programmer|administrator|officer|executive|associate|trainee|fullstack|frontend|backend|software|hardware|student|fresher)\\b")
+            if (jobTitleRegex.containsMatchIn(clean)) return true
+
+            // Section headings
+            val sectionHeaderRegex = Regex("(?i)^(?:curriculum\\s+vitae|resume|cv|bio\\s*data|biodata|profile|summary|objective|career\\s+objective|professional\\s+summary|about\\s+me|education|academics|academic\\s+background|work\\s+experience|experience|projects|skills|technical\\s+skills|certifications|courses|languages|achievements|declaration|references|contact|personal\\s+details|personal\\s+info|hobbies)$")
+            if (sectionHeaderRegex.matches(clean)) return true
+
+            val eduKeywords = setOf(
+                "engineering", "technology", "science", "arts", "commerce"
+            )
+            val words = clean.split(Regex("\\s+")).filter { it.isNotBlank() }
+            if (words.any { eduKeywords.contains(it.trim('.', ',', '-', '\'')) }) return true
+
+            return false
         }
     }
 
@@ -631,11 +831,20 @@ class ResumeParser(private val context: Context? = null) {
                 continue
             }
 
-            val chunks = line.split(Regex("[|•·\\t]")).map { it.trim() }.filter { it.isNotBlank() }
+            // Strip emails, phone numbers, and URLs from line before checking location chunks
+            val strippedLine = line
+                .replace(Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"), "")
+                .replace(Regex("https?://\\S+|www\\.\\S+|linkedin\\.com/\\S+|github\\.com/\\S+"), "")
+                .replace(Regex("\\+?\\d{1,4}[\\s-]?(?:\\(?\\d{3}\\)?[\\s-]?)?\\d{3}[\\s-]?\\d{4}|\\b[6-9]\\d{9}\\b"), "")
+                .trim()
+
+            if (strippedLine.isBlank()) continue
+
+            val chunks = strippedLine.split(Regex("[|•·\\t]")).map { it.trim() }.filter { it.isNotBlank() }
             for (chunk in chunks) {
                 val clw = chunk.lowercase()
-                if (chunk.contains("@") || chunk.contains("http") || clw.contains("linkedin") || clw.contains("github")) continue
-                if (chunk.length !in 2..65) continue
+                if (clw.contains("linkedin") || clw.contains("github")) continue
+                if (chunk.length !in 2..70) continue
 
                 val usStateMatch = Regex("\\b([A-Za-z\\s]+),\\s*([A-Z]{2})\\b(?:\\s+\\d{5}(?:-\\d{4})?)?").find(chunk)
                 if (usStateMatch != null) {
@@ -653,7 +862,13 @@ class ResumeParser(private val context: Context? = null) {
                 val hasCity = knownCities.any { clw.contains(it) }
                 val hasStateOrCountry = stateAndCountryNames.any { clw.contains(it) }
                 if (hasCity || hasStateOrCountry) {
-                    return cleanLocationString(chunk)
+                    // Check if chunk is separated by commas (e.g. "Coimbatore, Tamil Nadu")
+                    val commaSubparts = chunk.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    if (commaSubparts.size in 1..4 && commaSubparts.all { it.length in 2..35 && it.all { c -> c.isLetter() || c.isWhitespace() || c == '.' || c == '-' } }) {
+                        return cleanLocationString(chunk)
+                    } else if (hasCity && chunk.length in 2..40) {
+                        return cleanLocationString(chunk)
+                    }
                 }
             }
         }
@@ -674,79 +889,136 @@ class ResumeParser(private val context: Context? = null) {
             "developer", "engineer", "designer", "architect", "analyst", "consultant",
             "intern", "manager", "lead", "specialist", "student", "fresher", "programmer",
             "software", "hardware", "frontend", "backend", "fullstack", "full stack",
-            "b.tech", "b.e", "m.tech", "m.e", "bca", "mca", "bsc", "msc", "phd", "resume", "curriculum", "vitae", "cv"
+            "b.tech", "b.e", "m.tech", "m.e", "bca", "mca", "bsc", "msc", "phd", "ph.d", "resume", "curriculum", "vitae", "cv",
+            "university", "college", "institute", "school", "academy", "polytechnic", "campus", "department", "institution", "faculty",
+            "bachelor", "master", "doctor", "degree", "diploma", "engineering", "technology", "science", "arts", "commerce",
+            "objective", "summary", "profile", "contact", "information", "phone", "email", "address", "location", "skills", "experience", "education", "projects", "certifications", "languages", "hobbies", "interests", "declaration", "references", "achievement", "award", "honor", "scholarship",
+            "internship", "volunteer", "leadership", "position", "responsibility", "club", "society", "organization", "training", "workshop"
         )
 
-        val nameLabelRegex = Regex("(?i)^(?:candidate\\s+name|full\\s+name|name)\\s*[:–-]?\\s*([A-Za-z\\s.\\-']+)")
-        for (i in 0 until minOf(10, lines.size)) {
+        val addressAndLandmarkKeywords = setOf(
+            "office", "backside", "street", "nagar", "road", "colony", "door", "flat", "floor", "lane", "avenue",
+            "cross", "layout", "opp", "opposite", "near", "behind", "dist", "district", "taluk", "post", "p.o",
+            "building", "apartment", "complex", "tower", "house", "plot", "sector", "block", "pin", "pincode",
+            "zip", "zipcode", "address", "residence", "domicile", "city", "state", "country", "tamil", "nadu", "india",
+            "chennai", "trichy", "tiruchirappalli", "salem", "coimbatore", "madurai", "bengaluru", "hyderabad", "bangalore",
+            "pune", "mumbai", "delhi", "noida", "gurgaon", "kolkata", "karnataka", "kerala", "telangana",
+            "andhra", "maharashtra", "sivagangai", "sivaganga", "karaikudi", "dindigul", "thanjavur", "tirunelveli",
+            "erode", "vellore", "thoothukudi", "tuticorin", "kanchipuram", "cuddalore", "nagapattinam", "karur",
+            "theni", "namakkal", "dharmapuri", "krishnagiri", "villupuram", "pudukkottai", "ramanathapuram",
+            "virudhunagar", "perambalur", "ariyalur", "nilgiris", "ooty", "kanyakumari", "nagercoil", "tirupur",
+            "tiruvallur", "tiruvannamalai", "tiruvarur", "ranipet", "tenkasi", "chengalpattu",
+            "contact", "details", "info", "information", "phone", "mobile", "email",
+            "github", "linkedin", "profile", "summary", "objective", "education", "experience", "projects",
+            "skills", "certifications", "languages", "declaration", "hobbies", "interests"
+        )
+
+        fun isValidNameToken(name: String, minWords: Int = 1): Boolean {
+            val clean = name.trim().replace(Regex("[,|•·\\-]+$"), "").trim()
+            if (clean.length !in 2..60) return false
+            if (clean.contains("@") || clean.contains("http") || clean.contains("www.") || clean.contains(".com")) return false
+            if (clean.any { it.isDigit() }) return false
+            if (isContactOrAddressLine(clean)) return false
+            if (isDegreeOrEducationTitle(clean)) return false
+
+            val words = clean.split(Regex("\\s+")).filter { it.isNotBlank() }
+            if (words.size < minWords || words.size > 5) return false
+            if (!words.all { w -> w.all { it.isLetter() || it == '.' || it == '-' || it == '\'' } }) return false
+
+            val lowerWords = words.map { it.lowercase().trim('.', ',', '-', '\'') }
+            if (lowerWords.any { blacklistJobTitles.contains(it) || addressAndLandmarkKeywords.contains(it) || SECTION_HEADER_KEYWORDS.contains(it) }) {
+                return false
+            }
+            if (locationMatch != null) {
+                val locLower = locationMatch.lowercase().trim()
+                val cleanLower = clean.lowercase()
+                if (cleanLower == locLower || cleanLower.contains(locLower)) {
+                    return false
+                }
+            }
+
+            return words.any { it.first().isUpperCase() }
+        }
+
+        val headerLimit = minOf(25, lines.size)
+        val nameLabelRegex = Regex("(?i)^(?:candidate\\s+name|full\\s+name|applicant\\s+name|name\\s+of\\s+(?:the\\s+)?candidate|name)\\s*[:–-]?\\s*([A-Za-z\\s.\\-']+)")
+        for (i in 0 until headerLimit) {
             val line = lines[i]
             val m = nameLabelRegex.find(line)
             if (m != null) {
                 val candidate = m.groupValues[1].trim().trim('"', '\'', '\t', ' ')
-                val words = candidate.split(Regex("\\s+")).filter { it.isNotBlank() }
-                if (words.size in 1..5 && !words.any { blacklistJobTitles.contains(it.lowercase()) }) {
-                    return candidate
+                if (isValidNameToken(candidate)) {
+                    return normalizeCandidateName(candidate)
                 }
             }
         }
 
-        for (i in 0 until minOf(12, lines.size)) {
+        // Pass 1: Prioritize multi-word candidate name (2..5 words, e.g. "THARSHIKA A", "R Karthik", "S. Priya", "Mary Jane Thomas")
+        for (i in 0 until headerLimit) {
             val line = lines[i]
             val lw = line.lowercase().trim()
 
-            if (isSectionHeader(line)) continue
-            if (lw in setOf("resume", "curriculum vitae", "cv", "personal details", "profile")) continue
-            if (line.length !in 2..120) continue
+            if (isSectionHeader(line)) break
+            if (lw in setOf("resume", "curriculum vitae", "cv", "personal details", "profile", "contact", "contact information")) continue
+            if (line.length !in 2..150) continue
 
-            val lineParts = line.split(Regex("[|•·\\t]")).map { it.trim() }.filter { it.isNotBlank() }
+            val lineParts = line.split(Regex("[|•·\\t,]|\\s{2,}|\\s+[-–]\\s+|\\s+/\\s+")).map { it.trim() }.filter { it.isNotBlank() }
             val potentialPart = if (lineParts.size > 1) {
-                lineParts.firstOrNull { part ->
-                    val plw = part.lowercase()
-                    !part.contains("@") && !part.contains("http") && !part.contains(".com") &&
-                    !part.any { it.isDigit() } &&
-                    (locationMatch == null || !part.equals(locationMatch, ignoreCase = true)) &&
-                    !blacklistJobTitles.any { plw.contains(it) } &&
-                    part.length in 2..40
-                }
+                lineParts.firstOrNull { part -> isValidNameToken(part, minWords = 2) }
             } else {
-                if (line.contains("@") || line.contains("http") || line.contains("www.") || line.contains("linkedin") || line.contains("github")) continue
-                if (line.any { it.isDigit() }) continue
-                if (line.length > 70) continue
-
-                if (line.contains(" - ") || line.contains(" – ")) {
-                    val splitHyphen = line.split(Regex("\\s+[-–]\\s+")).map { it.trim() }
-                    splitHyphen.firstOrNull { part ->
-                        val plw = part.lowercase()
-                        !blacklistJobTitles.any { plw.contains(it) } && part.length in 2..40
-                    }
-                } else {
-                    line
-                }
+                if (isValidNameToken(line, minWords = 2)) line else null
             }
 
             if (potentialPart != null) {
                 val cleanedPart = potentialPart.replace(Regex("[,|•·\\-]+$"), "").trim()
-                val words = cleanedPart.split(Regex("\\s+")).filter { it.isNotBlank() }
-                if (words.size in 1..4 && words.all { w -> w.all { it.isLetter() || it == '.' || it == '-' || it == '\'' } }) {
-                    if (!words.any { blacklistJobTitles.contains(it.lowercase()) || SECTION_HEADER_KEYWORDS.contains(it.lowercase()) }) {
-                        val hasUpper = words.any { it.first().isUpperCase() }
-                        if (hasUpper) {
-                            return cleanedPart
-                        }
-                    }
+                if (isValidNameToken(cleanedPart, minWords = 2)) {
+                    return normalizeCandidateName(cleanedPart)
                 }
             }
         }
 
-        if (!emailMatch.isNullOrBlank()) {
-            val emailPrefix = emailMatch.substringBefore("@").replace(Regex("[0-9_]+"), " ").trim()
-            val candidateWords = emailPrefix.split(Regex("[.\\-_\\s]+")).filter { it.length >= 2 }
-            if (candidateWords.size in 1..3 && candidateWords.all { it.all { c -> c.isLetter() } }) {
-                return candidateWords.joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+        // Pass 2: Fallback to single-word valid name only if no multi-word candidate name exists
+        for (i in 0 until minOf(12, lines.size)) {
+            val line = lines[i]
+            val lw = line.lowercase().trim()
+
+            if (isSectionHeader(line)) break
+            if (lw in setOf("resume", "curriculum vitae", "cv", "personal details", "profile", "contact", "contact information")) continue
+            if (line.length !in 2..150) continue
+
+            val lineParts = line.split(Regex("[|•·\\t,]|\\s{2,}|\\s+[-–]\\s+|\\s+/\\s+")).map { it.trim() }.filter { it.isNotBlank() }
+            val potentialPart = if (lineParts.size > 1) {
+                lineParts.firstOrNull { part -> isValidNameToken(part, minWords = 1) }
+            } else {
+                if (isValidNameToken(line, minWords = 1)) line else null
+            }
+
+            if (potentialPart != null) {
+                val cleanedPart = potentialPart.replace(Regex("[,|•·\\-]+$"), "").trim()
+                if (isValidNameToken(cleanedPart, minWords = 1)) {
+                    return normalizeCandidateName(cleanedPart)
+                }
             }
         }
 
         return null
+    }
+
+    private fun normalizeCandidateName(rawName: String): String {
+        val trimmed = rawName.trim().replace(Regex("\\s+"), " ")
+        if (trimmed.isBlank()) return trimmed
+        val isAllCaps = trimmed.all { !it.isLetter() || it.isUpperCase() }
+        if (isAllCaps) {
+            return trimmed.split(" ").joinToString(" ") { word ->
+                val cleanWord = word.trim('.', ',', '-', '\'')
+                if (cleanWord.length <= 2 && cleanWord.all { it.isLetter() }) {
+                    word.uppercase()
+                } else {
+                    word.lowercase().replaceFirstChar { it.uppercase() }
+                }
+            }
+        }
+        return trimmed
     }
 
     /**
@@ -770,7 +1042,8 @@ class ResumeParser(private val context: Context? = null) {
         val sectionSpans = mutableListOf<SectionSpan>()
         for (i in allLines.indices) {
             val line = allLines[i]
-            val sectionType = classifySectionHeader(line)
+            val nextLines = if (i + 1 < allLines.size) allLines.subList(i + 1, minOf(allLines.size, i + 10)) else emptyList()
+            val sectionType = classifySectionHeader(line, nextLines)
             if (sectionType != null) {
                 sectionSpans.add(SectionSpan(type = sectionType, headerIndex = i, headerText = line))
             }
@@ -792,12 +1065,12 @@ class ResumeParser(private val context: Context? = null) {
             }
         }
 
-        // 1. EXTRACT SUMMARY
+        // 1. EXTRACT SUMMARY (Semantic extraction across all equivalent headings)
         var extractedSummary: String? = null
         val summaryLines = sectionContents[SectionType.SUMMARY] ?: emptyList()
         if (summaryLines.isNotEmpty()) {
             val cleaned = summaryLines.filter { 
-                !isSectionHeader(it) && !it.contains("@") && it.length > 10 
+                !isSectionHeader(it) && !it.contains("@") && !isContactOrAddressLine(it) && it.length > 10 
             }.joinToString(" ")
             if (cleaned.isNotBlank()) {
                 extractedSummary = cleaned
@@ -829,7 +1102,7 @@ class ResumeParser(private val context: Context? = null) {
 
         // 2. EXTRACT EDUCATION (All tiers: 10th, 12th, Diploma, UG, PG, etc.)
         val educationLines = sectionContents[SectionType.EDUCATION] ?: emptyList()
-        val extractedEducation = parseEducationEntries(educationLines, allLines)
+        val extractedEducation = parseEducationEntries(educationLines)
 
         // 3. EXTRACT WORK EXPERIENCE (ONLY actual employment / internships)
         val experienceLines = sectionContents[SectionType.WORK_EXPERIENCE] ?: emptyList()
@@ -841,7 +1114,7 @@ class ResumeParser(private val context: Context? = null) {
 
         // 5. EXTRACT CERTIFICATIONS
         val certificationLines = sectionContents[SectionType.CERTIFICATIONS] ?: emptyList()
-        val extractedCertifications = parseCertificationEntries(certificationLines, allLines)
+        val extractedCertifications = parseCertificationEntries(certificationLines)
 
         // 6. EXTRACT SKILLS
         val skillLines = sectionContents[SectionType.SKILLS] ?: emptyList()
@@ -862,13 +1135,16 @@ class ResumeParser(private val context: Context? = null) {
         val hasCertifications = extractedCertifications.isNotEmpty()
         val hasLanguages = sectionContents[SectionType.LANGUAGES]?.isNotEmpty() == true
         val hasPatents = sectionContents[SectionType.PUBLICATIONS]?.isNotEmpty() == true || sectionContents[SectionType.ACHIEVEMENTS]?.isNotEmpty() == true
+        val hasPersonalInfo = sectionContents[SectionType.PERSONAL_INFO]?.isNotEmpty() == true
+
+        val personalInfoLines = (sectionContents[SectionType.PERSONAL_INFO] ?: emptyList()).filter { !isSectionHeader(it) }
 
         val sectionsList = listOf(
-            ParsedSectionItem("Contact Information", hasContact, contactDetails),
+            ParsedSectionItem("Contact Information", hasContact || hasPersonalInfo, contactDetails + personalInfoLines),
             ParsedSectionItem("Summary", !extractedSummary.isNullOrBlank(), emptyList(), extractedSummary),
             ParsedSectionItem("Education", hasEducation, extractedEducation),
             ParsedSectionItem("Work Experience", hasExperience, extractedExperience),
-            ParsedSectionItem("Skills", hasSkills, extractedSkillsList.take(6)),
+            ParsedSectionItem("Skills", hasSkills, extractedSkillsList),
             ParsedSectionItem("Projects", hasProjects, extractedProjectNames),
             ParsedSectionItem("Certifications", hasCertifications, extractedCertifications),
             ParsedSectionItem("Languages", hasLanguages),
@@ -886,6 +1162,7 @@ class ResumeParser(private val context: Context? = null) {
             summary = extractedSummary,
             education = extractedEducation,
             experience = extractedExperience,
+            personalInfo = personalInfoLines,
             certifications = extractedCertifications,
             projectAnalyses = extractedProjectAnalyses
         )
@@ -894,21 +1171,10 @@ class ResumeParser(private val context: Context? = null) {
     /**
      * Parses education qualifications preserving ALL tiers:
      * 10th / Secondary, 12th / Higher Secondary, Diploma, UG, PG, Doctorate.
+     * Enforces strict academic validation; non-academic courses/certifications are excluded.
      */
-    private fun parseEducationEntries(educationLines: List<String>, allLines: List<String>): List<String> {
-        val targetLines = if (educationLines.isNotEmpty()) educationLines else {
-            // Fallback: search lines in the document if no explicit education header was caught
-            allLines.filter { line ->
-                val lw = line.lowercase()
-                (lw.contains("bachelor") || lw.contains("b.tech") || lw.contains("b.e") || lw.contains("master") ||
-                 lw.contains("m.tech") || lw.contains("bca") || lw.contains("mca") || lw.contains("10th") ||
-                 lw.contains("12th") || lw.contains("sslc") || lw.contains("hsc") || lw.contains("cbse") ||
-                 lw.contains("icse") || lw.contains("matriculation") || lw.contains("diploma") ||
-                 lw.contains("high school") || lw.contains("secondary school"))
-            }
-        }
-
-        if (targetLines.isEmpty()) return emptyList()
+    private fun parseEducationEntries(educationLines: List<String>): List<String> {
+        if (educationLines.isEmpty()) return emptyList()
 
         val qualifications = mutableListOf<String>()
         val currentBlock = mutableListOf<String>()
@@ -916,12 +1182,19 @@ class ResumeParser(private val context: Context? = null) {
         fun flushBlock() {
             if (currentBlock.isNotEmpty()) {
                 val combined = currentBlock.joinToString(" | ")
-                if (combined.length in 5..250) {
+                if (combined.length in 5..1000) {
                     qualifications.add(combined)
                 }
                 currentBlock.clear()
             }
         }
+
+        val nonAcademicIndicators = listOf(
+            "nptel", "coursera", "udemy", "edx", "linkedin learning", "udacity",
+            "certification in", "certificate course", "certified in", "course in",
+            "completed course", "workshop on", "workshop in", "bootcamp",
+            "training program", "short-term course", "training in"
+        )
 
         val tierIndicators = listOf(
             // 10th / Secondary
@@ -936,9 +1209,12 @@ class ResumeParser(private val context: Context? = null) {
             Regex("(?i)\\b(?:master|m\\.tech|m\\.e\\b|m\\.sc|mca|mba|postgraduate|m\\.s\\b|m\\.a\\b|ph\\.?d)\\b")
         )
 
-        for (rawLine in targetLines) {
+        for (rawLine in educationLines) {
             val line = rawLine.removePrefix("•").removePrefix("-").removePrefix("*").trim()
-            if (line.isBlank() || isSectionHeader(line)) continue
+            if (line.isBlank() || isSectionHeader(line) || isContactOrAddressLine(line)) continue
+
+            val lw = line.lowercase()
+            if (nonAcademicIndicators.any { lw.contains(it) }) continue
 
             val isNewTier = tierIndicators.any { it.containsMatchIn(line) }
             if (isNewTier && currentBlock.isNotEmpty()) {
@@ -952,13 +1228,53 @@ class ResumeParser(private val context: Context? = null) {
         return if (qualifications.isNotEmpty()) {
             qualifications
         } else {
-            targetLines.filter { it.length in 8..150 }.take(4)
+            educationLines
+                .map { it.removePrefix("•").removePrefix("-").removePrefix("*").trim() }
+                .filter { line ->
+                    val lw = line.lowercase()
+                    line.length in 5..300 && !isSectionHeader(line) && !isContactOrAddressLine(line) &&
+                    !nonAcademicIndicators.any { lw.contains(it) } &&
+                    (tierIndicators.any { it.containsMatchIn(line) } || lw.contains("university") || lw.contains("college") || lw.contains("institute") || lw.contains("school") || lw.contains("degree") || lw.contains("cgpa") || lw.contains("gpa"))
+                }
         }
+    }
+
+    private fun isContactOrAddressLine(line: String): Boolean {
+        val lw = line.lowercase().trim()
+        if (lw.isBlank()) return false
+        
+        // Explicit contact/address labels at start of line
+        val contactLabelRegex = Regex("^(?:phone|mobile|mob|tel|telephone|cell|contact|ph|whatsapp|email|e-mail|mail|gmail|github|linkedin|portfolio|website|address|current\\s+address|permanent\\s+address|residence|domicile|location)\\s*[:–-]\\s*", RegexOption.IGNORE_CASE)
+        if (contactLabelRegex.containsMatchIn(line)) return true
+        
+        // Line that is exclusively or predominantly an email or URL
+        val emailRegex = Regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
+        if (emailRegex.matches(lw)) return true
+        val urlRegex = Regex("^(?:https?://|www\\.|linkedin\\.com|github\\.com)[^\\s]+$")
+        if (urlRegex.matches(lw)) return true
+
+        // Standalone phone number line
+        val phoneOnlyRegex = Regex("^(?:\\+?\\d{1,4}[\\s-]?)?\\(?\\d{3}\\)?[\\s-]?\\d{3}[\\s-]?\\d{4}$|^\\+?91[\\s-]?[6-9]\\d{9}$|^[6-9]\\d{9}$")
+        if (phoneOnlyRegex.matches(lw.replace(" ", ""))) return true
+
+        // Address specific patterns (e.g. "Flat No. 102, ...", "Plot 45, Gandhi Road", "123 Main St, Austin, TX 78701")
+        val addressPattern = Regex("(?i)\\b(?:h(?:ouse)?\\.?\\s*no\\.?|door\\.?\\s*no\\.?|flat\\.?\\s*no\\.?|plot\\.?\\s*no\\.?|apt\\.?\\s*no\\.?|ward\\.?\\s*no\\.?)\\s*[:–-]?\\s*\\d+")
+        if (addressPattern.containsMatchIn(line)) return true
+        
+        // Pincode/Zipcode standalone patterns with city/state
+        val pincodeWithContext = Regex("(?i)\\b(?:pin\\s*code|pincode|zip\\s*code|postal\\s*code)\\s*[:–-]?\\s*\\d{5,6}\\b")
+        if (pincodeWithContext.containsMatchIn(line)) return true
+
+        // Personal / Family metadata labels
+        val personalMetadataRegex = Regex("(?i)\\b(?:father'?s\\s+name|mother'?s\\s+name|date\\s+of\\s+birth|d\\.o\\.b|marital\\s+status|nationality\\s*:|gender\\s*:|blood\\s+group\\s*:)\\b")
+        if (personalMetadataRegex.containsMatchIn(line)) return true
+        
+        return false
     }
 
     /**
      * Parses work experience entries strictly from the experience section.
-     * Rejects summary sentences, degree qualifications, standalone certifications, or skills.
+     * Rejects summary sentences, degree qualifications, standalone certifications, address lines, or skills.
      */
     private fun parseWorkExperienceEntries(experienceLines: List<String>): List<String> {
         if (experienceLines.isEmpty()) return emptyList()
@@ -969,27 +1285,29 @@ class ResumeParser(private val context: Context? = null) {
         fun flushEntry() {
             if (currentEntry.isNotEmpty()) {
                 val formatted = currentEntry.joinToString("\n")
-                if (formatted.length in 5..400) {
+                if (formatted.length in 5..800) { // Increased limit for detailed entries
                     validEntries.add(formatted)
                 }
                 currentEntry.clear()
             }
         }
 
-        val roleTitleRegex = Regex("(?i)\\b(?:intern|internship|developer|engineer|analyst|associate|manager|lead|architect|consultant|trainee|specialist|officer|programmer)\\b")
-        val educationBlockKeywords = listOf("bachelor", "b.tech", "degree", "university", "college", "school", "10th", "12th", "sslc", "hsc", "cgpa", "percentage", "coursework")
+        val roleTitleRegex = Regex("(?i)\\b(?:intern|internship|developer|engineer|analyst|associate|manager|lead|architect|consultant|trainee|specialist|officer|programmer|specialization)\\b")
+        val educationBlockKeywords = listOf("bachelor", "b.tech", "degree", "university", "college", "school", "10th", "12th", "sslc", "hsc", "cgpa", "percentage", "coursework", "secondary", "matriculation")
 
         for (rawLine in experienceLines) {
             val line = rawLine.trim()
-            if (line.isBlank() || isSectionHeader(line)) continue
+            if (line.isBlank() || isSectionHeader(line) || isContactOrAddressLine(line)) continue
 
             val lw = line.lowercase()
             // Reject obvious education contamination
-            if (educationBlockKeywords.any { lw.contains(it) } && !lw.contains("intern") && !lw.contains("worked")) {
+            if (educationBlockKeywords.any { lw.contains(it) } && !lw.contains("intern") && !lw.contains("worked") && !lw.contains("experience")) {
                 continue
             }
 
-            val isRoleLine = roleTitleRegex.containsMatchIn(line) && (line.contains("|") || line.contains("–") || line.contains("-") || line.contains("at") || line.contains(","))
+            // Heuristic for role line: contains title + organization or date
+            val isRoleLine = roleTitleRegex.containsMatchIn(line) && (line.contains("|") || line.contains("–") || line.contains("-") || line.contains("at") || line.contains(",") || line.contains(":") || Regex("\\b(20\\d{2}|19\\d{2})\\b").containsMatchIn(line))
+            
             if (isRoleLine && currentEntry.isNotEmpty()) {
                 flushEntry()
             }
@@ -998,26 +1316,33 @@ class ResumeParser(private val context: Context? = null) {
         }
         flushEntry()
 
-        return validEntries.ifEmpty {
+        return if (validEntries.isNotEmpty()) {
+            validEntries
+        } else {
             experienceLines.filter { 
                 val lw = it.lowercase()
-                roleTitleRegex.containsMatchIn(it) && !educationBlockKeywords.any { ed -> lw.contains(ed) }
-            }.take(3)
+                !isContactOrAddressLine(it) && roleTitleRegex.containsMatchIn(it) && !educationBlockKeywords.any { ed -> lw.contains(ed) }
+            }
         }
     }
 
     /**
      * Parses projects strictly from the project section.
-     * Rejects lone technical terms (e.g. "Database Management", "Machine Learning"), certifications, or courses.
+     * Rejects lone technical terms, metadata subheadings (Frontend, Backend, Database, Tools, Description, etc.), certifications, or courses.
      */
     private fun parseProjectEntries(projectLines: List<String>): Pair<List<String>, List<ProjectAnalysis>> {
         if (projectLines.isEmpty()) return Pair(emptyList(), emptyList())
 
-        val technicalTermBlacklist = setOf(
+        val metadataLabelsAndSkills = setOf(
             "sql", "mysql", "java", "python", "management", "palm", "ml", "database", "database management",
             "cloud computing", "machine learning", "artificial intelligence", "data structures", "algorithms",
             "operating systems", "computer networks", "software engineering", "web technologies", "deep learning",
-            "natural language processing", "system design", "object oriented programming", "core java", "advanced java"
+            "natural language processing", "system design", "object oriented programming", "core java", "advanced java",
+            "frontend", "backend", "fullstack", "tools", "technologies", "tech stack", "role", "roles", "team size",
+            "duration", "description", "responsibilities", "key features", "features", "overview", "outcome",
+            "outcomes", "objective", "objectives", "environment", "platform", "modules", "summary", "architecture",
+            "client", "scope", "impact", "methodology", "contributions", "challenges", "learnings", "technology",
+            "tools used", "tech stack used", "technologies used", "programming language", "languages", "libraries", "frameworks"
         )
 
         val projectNames = mutableListOf<String>()
@@ -1036,7 +1361,7 @@ class ResumeParser(private val context: Context? = null) {
                         name = name,
                         technologies = currentTech.distinct(),
                         demonstratedSkills = currentTech.distinct(),
-                        strengths = if (currentBullets.isNotEmpty()) currentBullets.take(2) else listOf("Technical project highlighted in resume"),
+                        strengths = if (currentBullets.isNotEmpty()) currentBullets.take(3) else listOf("Technical project highlighted in resume"),
                         weaknesses = emptyList(),
                         improvementSuggestions = listOf("Add quantifiable impact metrics to outcome description")
                     )
@@ -1049,36 +1374,64 @@ class ResumeParser(private val context: Context? = null) {
 
         for (rawLine in projectLines) {
             val line = rawLine.trim()
-            if (line.isBlank() || isSectionHeader(line)) continue
+            if (line.isBlank() || isSectionHeader(line) || isContactOrAddressLine(line)) continue
 
             val cleanLine = line.removePrefix("•").removePrefix("-").removePrefix("*").trim()
             val isBullet = line.startsWith("•") || line.startsWith("-") || line.startsWith("*")
 
-            if (isBullet) {
-                currentBullets.add(cleanLine)
-                // Check if tech stack is mentioned in bullet
-                if (cleanLine.lowercase().contains("technologies:") || cleanLine.lowercase().contains("tech stack:") || cleanLine.lowercase().contains("tools:")) {
-                    val techPart = cleanLine.substringAfter(":").trim()
-                    currentTech.addAll(techPart.split(Regex("[,|/]")).map { it.trim() }.filter { it.isNotBlank() })
-                }
-            } else {
-                // Potential new project title line
-                val titlePart = cleanLine.substringBefore("|").substringBefore("–").substringBefore(" - ").trim()
-                val isBlacklisted = technicalTermBlacklist.any { titlePart.equals(it, ignoreCase = true) }
-                val isCertification = titlePart.lowercase().contains("certified") || titlePart.lowercase().contains("certification") || titlePart.lowercase().contains("certificate")
-                val isShortTerm = titlePart.split(" ").size < 2 && !titlePart.contains("app", ignoreCase = true) && !titlePart.contains("bot", ignoreCase = true)
+            val lw = cleanLine.lowercase()
+            val isMetadataLabel = metadataLabelsAndSkills.any { 
+                lw.startsWith(it + ":") || lw.startsWith(it + " :") || lw.startsWith(it + " -") || lw.startsWith(it + " –") || lw.startsWith(it + " |") || lw == it
+            }
 
-                if (!isBlacklisted && !isCertification && !isShortTerm && titlePart.length in 4..60) {
+            if (isMetadataLabel) {
+                if (currentProjectName != null) {
+                    currentBullets.add(cleanLine)
+                    val techPart = if (cleanLine.contains(":")) cleanLine.substringAfter(":") 
+                                   else if (cleanLine.contains(" - ")) cleanLine.substringAfter(" - ")
+                                   else if (cleanLine.contains(" – ")) cleanLine.substringAfter(" – ")
+                                   else ""
+                    if (techPart.isNotBlank()) {
+                        currentTech.addAll(techPart.split(Regex("[,|/]")).map { it.trim() }.filter { it.isNotBlank() && it.length in 2..30 })
+                    }
+                }
+                continue
+            }
+
+            val hasDelimiter = cleanLine.contains("|") || cleanLine.contains("–") || cleanLine.contains(" - ") || cleanLine.contains(" : ")
+            
+            if (!isBullet && (hasDelimiter || (cleanLine.length in 3..60 && cleanLine.all { it.isLetterOrDigit() || it.isWhitespace() || it == '-' || it == '&' }))) {
+                val titlePart = if (hasDelimiter) {
+                    cleanLine.split(Regex("[|–]| - | : ")).first().trim()
+                } else {
+                    cleanLine
+                }
+
+                val isBlacklisted = metadataLabelsAndSkills.any { titlePart.equals(it, ignoreCase = true) }
+                val isCertification = titlePart.lowercase().contains("certified") || titlePart.lowercase().contains("certification") || titlePart.lowercase().contains("certificate")
+
+                if (!isBlacklisted && !isCertification && titlePart.length in 3..75) {
                     if (currentProjectName != null) {
                         flushProject()
                     }
                     currentProjectName = titlePart
-                    if (cleanLine.contains("|")) {
-                        val techPart = cleanLine.substringAfter("|").trim()
-                        currentTech.addAll(techPart.split(Regex("[,|/]")).map { it.trim() }.filter { it.isNotBlank() })
+                    
+                    if (hasDelimiter) {
+                        val techPart = cleanLine.substringAfter(titlePart).trim().removePrefix("|").removePrefix("–").removePrefix("-").removePrefix(":").trim()
+                        currentTech.addAll(techPart.split(Regex("[,|/]")).map { it.trim() }.filter { it.isNotBlank() && it.length in 2..30 })
                     }
                 } else if (currentProjectName != null) {
                     currentBullets.add(cleanLine)
+                }
+            } else {
+                if (currentProjectName == null && !isBullet && cleanLine.length in 3..60) {
+                    currentProjectName = cleanLine
+                } else if (currentProjectName != null) {
+                    currentBullets.add(cleanLine)
+                    if (cleanLine.lowercase().contains("technologies:") || cleanLine.lowercase().contains("tech stack:") || cleanLine.lowercase().contains("tools:")) {
+                        val techPart = cleanLine.substringAfter(":").trim()
+                        currentTech.addAll(techPart.split(Regex("[,|/]")).map { it.trim() }.filter { it.isNotBlank() && it.length in 2..30 })
+                    }
                 }
             }
         }
@@ -1088,20 +1441,14 @@ class ResumeParser(private val context: Context? = null) {
     }
 
     /**
-     * Parses certifications cleanly into a dedicated list.
+     * Parses certifications cleanly into a dedicated list strictly from the certifications section.
      */
-    private fun parseCertificationEntries(certificationLines: List<String>, allLines: List<String>): List<String> {
-        val targetLines = if (certificationLines.isNotEmpty()) certificationLines else {
-            allLines.filter { line ->
-                val lw = line.lowercase()
-                (lw.contains("certified") || lw.contains("certification") || lw.contains("certificate") || lw.contains("specialization")) &&
-                !lw.contains("education") && !lw.contains("experience")
-            }
-        }
+    private fun parseCertificationEntries(certificationLines: List<String>): List<String> {
+        if (certificationLines.isEmpty()) return emptyList()
 
-        return targetLines
+        return certificationLines
             .map { it.removePrefix("•").removePrefix("-").removePrefix("*").trim() }
-            .filter { it.length in 5..120 && !isSectionHeader(it) }
+            .filter { it.length in 5..150 && !isSectionHeader(it) && !isContactOrAddressLine(it) }
             .distinct()
     }
 
@@ -1110,7 +1457,7 @@ class ResumeParser(private val context: Context? = null) {
      */
     private fun parseSkillsList(skillLines: List<String>, rawText: String): List<String> {
         val knownSkillKeywords = listOf(
-            "Kotlin", "Java", "Python", "C++", "C#", "JavaScript", "TypeScript", "Swift", "Go", "Rust",
+            "Kotlin", "Java", "Python", "C++", "C#", "C", "R", "JavaScript", "TypeScript", "Swift", "Go", "Rust",
             "SQL", "MySQL", "PostgreSQL", "MongoDB", "Room Database", "SQLite", "Firebase", "Redis",
             "Jetpack Compose", "Android", "Android SDK", "React", "Node.js", "Spring Boot", "Django", "Flask", "Express",
             "Docker", "Kubernetes", "AWS", "GCP", "Azure", "Git", "GitHub", "REST APIs", "GraphQL",
@@ -1124,18 +1471,26 @@ class ResumeParser(private val context: Context? = null) {
         // 1. Check explicit skills section lines
         for (line in skillLines) {
             val clean = line.removePrefix("•").removePrefix("-").removePrefix("*").trim()
-            if (isSectionHeader(clean)) continue
-            val parts = clean.substringAfter(":").split(Regex("[,|•·\\t/]")).map { it.trim() }.filter { it.length in 2..30 }
+            if (isSectionHeader(clean) || isContactOrAddressLine(clean)) continue
+            val contentToParse = if (clean.contains(":")) clean.substringAfter(":") else clean
+            val parts = contentToParse.split(Regex("[,|•·\\t/;]")).map { it.trim() }.filter { it.isNotBlank() && it.length in 1..40 }
             for (p in parts) {
-                if (!isSectionHeader(p)) {
-                    extracted.add(p)
+                if (!isSectionHeader(p) && !isContactOrAddressLine(p)) {
+                    val cleanedSkill = p.replace(Regex("^[•·*\\-]+\\s*"), "").trim()
+                    if (cleanedSkill.isNotBlank()) {
+                        extracted.add(cleanedSkill)
+                    }
                 }
             }
         }
 
         // 2. Cross-match known skills across document
         for (skill in knownSkillKeywords) {
-            val pattern = Regex("\\b" + Regex.escape(skill) + "\\b", RegexOption.IGNORE_CASE)
+            val pattern = if (skill.length == 1) {
+                Regex("(?<=[\\s,;(|]|^)" + Regex.escape(skill) + "(?=[\\s,;)|]|$)")
+            } else {
+                Regex("\\b" + Regex.escape(skill) + "\\b", RegexOption.IGNORE_CASE)
+            }
             if (pattern.containsMatchIn(rawText)) {
                 extracted.add(skill)
             }
@@ -1301,6 +1656,7 @@ data class DeterministicResumeStructure(
     val summary: String? = null,
     val education: List<String> = emptyList(),
     val experience: List<String> = emptyList(),
+    val personalInfo: List<String> = emptyList(),
     val certifications: List<String> = emptyList(),
     val projectAnalyses: List<ProjectAnalysis> = emptyList()
 )

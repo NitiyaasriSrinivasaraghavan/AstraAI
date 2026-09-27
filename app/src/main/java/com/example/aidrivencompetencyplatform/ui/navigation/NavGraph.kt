@@ -83,8 +83,29 @@ fun AppNavGraph(navController: NavHostController) {
             }
             SkillGapDashboardScreen(navController, viewModel, analysisId)
         }
-        composable(Screen.AiAssistant.route) {
+        composable(
+            route = Screen.AiAssistant.route + "?mode={mode}&analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("mode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val mode = backStackEntry.arguments?.getString("mode")
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
             val viewModel: AiAssistantViewModel = viewModel(factory = factory)
+            LaunchedEffect(mode, analysisId) {
+                if (mode == "INTERVIEW_PREPARATION" || mode == "interview") {
+                    viewModel.startInterview(analysisId)
+                }
+            }
             AiAssistantScreen(navController, viewModel)
         }
         composable(Screen.Settings.route) {
@@ -93,9 +114,54 @@ fun AppNavGraph(navController: NavHostController) {
         composable(Screen.Profile.route) {
             StubScreen("Profile", navController)
         }
-        composable(Screen.InterviewPrep.route) {
-            val viewModel: AiAssistantViewModel = viewModel(factory = factory)
+        composable(
+            route = Screen.InterviewPrep.route + "?analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
+            val viewModel: InterviewViewModel = viewModel(factory = factory)
+            LaunchedEffect(analysisId) {
+                if (!analysisId.isNullOrBlank()) {
+                    viewModel.loadHistoryAnalysis(analysisId)
+                } else {
+                    viewModel.startInterview()
+                }
+            }
             InterviewPrepScreen(navController, viewModel)
+        }
+        composable(
+            route = Screen.TechnicalMcq.route + "?analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
+            val viewModel: TechnicalMcqViewModel = viewModel(factory = factory)
+            TechnicalMcqScreen(navController, viewModel, analysisId)
+        }
+        composable(
+            route = Screen.TechnicalMcqResult.route + "?analysisId={analysisId}",
+            arguments = listOf(
+                navArgument("analysisId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val analysisId = backStackEntry.arguments?.getString("analysisId")
+            val viewModel: TechnicalMcqViewModel = viewModel(factory = factory)
+            TechnicalMcqResultScreen(navController, viewModel, analysisId)
         }
         composable(
             route = Screen.JobDescriptionAnalyzer.route + "?analysisId={analysisId}",

@@ -491,7 +491,7 @@ fun AuthTextField(
         singleLine = true,
         textStyle = TextStyle(
             color = TextPrimary,
-            fontSize = 16.sp,
+            fontSize = 19.sp,
             fontWeight = FontWeight.Normal
         ),
         keyboardOptions = KeyboardOptions(

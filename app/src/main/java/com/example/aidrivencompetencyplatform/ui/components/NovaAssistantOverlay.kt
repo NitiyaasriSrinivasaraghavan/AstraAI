@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -30,9 +31,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.example.aidrivencompetencyplatform.model.ChatContextMode
+import com.example.aidrivencompetencyplatform.model.NovaState
 import com.example.aidrivencompetencyplatform.ui.screens.ModernChatBubble
 import com.example.aidrivencompetencyplatform.ui.theme.*
 import com.example.aidrivencompetencyplatform.viewmodel.AiAssistantViewModel
+import com.example.aidrivencompetencyplatform.voice.VoiceSpeechManager
 import kotlinx.coroutines.launch
 
 /**
@@ -81,7 +89,6 @@ fun NovaFloatingButton(
                 // Nova Avatar with online indicator
                 Box(contentAlignment = Alignment.BottomEnd) {
                     NovaAvatar(size = 38.dp, elevation = 2.dp)
-                    // Active green dot
                     Surface(
                         shape = CircleShape,
                         color = SuccessGreen,
@@ -112,11 +119,151 @@ fun NovaFloatingButton(
                         text = "AI Career Assistant",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary,
-                        fontSize = 10.sp
+                        fontSize = 12.sp
                     )
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Nova Character Interviewer Header widget reflecting Nova's live interaction states:
+ * IDLE → SPEAKING → LISTENING → THINKING → ENCOURAGING
+ */
+@Composable
+fun NovaInterviewerHeader(
+    novaState: NovaState,
+    targetRole: String,
+    isInterviewMode: Boolean
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "novaCharAnim")
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathing"
+    )
+
+    Surface(
+        color = SurfaceVariant.copy(alpha = 0.85f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColorGreen.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Animated Avatar Container
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(54.dp)
+                    .graphicsLayer(scaleX = breathingScale, scaleY = breathingScale)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(NovaSageBg)
+            ) {
+                NovaAvatar(size = 50.dp, elevation = 0.dp, showBorder = false)
+
+                // State indicator ring / badge overlay
+                when (novaState) {
+                    NovaState.SPEAKING -> {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .border(2.5.dp, Primary, CircleShape)
+                        )
+                    }
+                    NovaState.LISTENING -> {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .border(2.5.dp, ErrorRed, CircleShape)
+                        )
+                    }
+                    NovaState.THINKING -> {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .border(2.5.dp, WarningAmber, CircleShape)
+                        )
+                    }
+                    else -> {}
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (isInterviewMode) "Nova • Interviewer" else "Nova AI",
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = when (novaState) {
+                            NovaState.SPEAKING -> SoftGreen
+                            NovaState.LISTENING -> ErrorRed.copy(alpha = 0.15f)
+                            NovaState.THINKING -> WarningAmber.copy(alpha = 0.2f)
+                            NovaState.ENCOURAGING -> SuccessGreen.copy(alpha = 0.2f)
+                            NovaState.IDLE -> SurfaceVariant
+                        }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            val statusText = when (novaState) {
+                                NovaState.SPEAKING -> "🔊 Speaking"
+                                NovaState.LISTENING -> "🎤 Listening..."
+                                NovaState.THINKING -> "✨ Thinking..."
+                                NovaState.ENCOURAGING -> "🌟 Encouraging"
+                                NovaState.IDLE -> "🟢 Idle"
+                            }
+                            Text(
+                                text = statusText,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = when (novaState) {
+                                    NovaState.SPEAKING -> PrimaryDark
+                                    NovaState.LISTENING -> ErrorRed
+                                    NovaState.THINKING -> PrimaryDark
+                                    NovaState.ENCOURAGING -> SuccessGreen
+                                    NovaState.IDLE -> TextSecondary
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                val subtitle = when (novaState) {
+                    NovaState.SPEAKING -> "Asking question / speaking..."
+                    NovaState.LISTENING -> "Listening to your answer..."
+                    NovaState.THINKING -> "Processing response & generating next step..."
+                    NovaState.ENCOURAGING -> "Great progress so far!"
+                    NovaState.IDLE -> if (isInterviewMode) "Target Role: $targetRole" else "Persistent Career & Competency Guide"
+                }
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -135,11 +282,64 @@ fun NovaOverlayChatPanel(
 ) {
     if (!isOpen) return
 
+    val context = LocalContext.current
     val messages by viewModel.messages.collectAsState()
     val isTyping by viewModel.isTyping.collectAsState()
+    val quickPrompts by viewModel.quickPrompts.collectAsState()
+    val chatMode by viewModel.chatContextMode.collectAsState()
+    val interviewSession by viewModel.interviewSession.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
+
+    val voiceManager = remember { VoiceSpeechManager(context) }
+    val isListening by voiceManager.isListening.collectAsState()
+    val isSpeaking by voiceManager.isSpeaking.collectAsState()
+    val currentUtteranceId by voiceManager.currentUtteranceId.collectAsState()
+    val novaState by voiceManager.novaState.collectAsState()
+
+    // Sync typing state with thinking state
+    LaunchedEffect(isTyping) {
+        if (isTyping) {
+            voiceManager.setNovaState(NovaState.THINKING)
+        } else if (novaState == NovaState.THINKING) {
+            voiceManager.setNovaState(NovaState.IDLE)
+        }
+    }
+
+    // Auto-speak the latest assistant message if in interview mode
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            val lastMsg = messages.last()
+            if (!lastMsg.isFromUser && chatMode == ChatContextMode.INTERVIEW_PREPARATION) {
+                val utteranceId = "utterance_${messages.size}"
+                voiceManager.speak(lastMsg.text, utteranceId)
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceManager.release()
+        }
+    }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Barge-in: stop TTS immediately when user activates mic
+            voiceManager.stopSpeaking()
+            voiceManager.startListening(
+                onPartialResult = { inputText = it },
+                onFinalResult = { inputText = it },
+                onErrorCallback = { errorMsg ->
+                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                }
+            )
+        } else {
+            Toast.makeText(context, "Microphone permission is required for voice input", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(messages.size, isTyping) {
         if (messages.isNotEmpty()) {
@@ -147,13 +347,16 @@ fun NovaOverlayChatPanel(
         }
     }
 
-    val quickPrompts = listOf(
+    val isInterviewMode = chatMode == ChatContextMode.INTERVIEW_PREPARATION
+
+    val defaultPrompts = listOf(
         "📊 ATS Score analysis",
         "🎯 Top skill gaps",
         "💡 Resume improvements",
         "💼 Job role advice",
         "🎤 Mock interview"
     )
+    val displayPrompts = if (quickPrompts.isNotEmpty()) quickPrompts else defaultPrompts
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -179,7 +382,7 @@ fun NovaOverlayChatPanel(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.82f)
+                    .fillMaxHeight(0.85f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -191,76 +394,41 @@ fun NovaOverlayChatPanel(
                 shadowElevation = 16.dp
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // 1. Header Bar
-                    Surface(
-                        color = Surface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor.copy(alpha = 0.6f)),
-                        modifier = Modifier.fillMaxWidth()
+                    // 1. Nova Interviewer Character Header
+                    NovaInterviewerHeader(
+                        novaState = novaState,
+                        targetRole = interviewSession.targetRole,
+                        isInterviewMode = isInterviewMode
+                    )
+
+                    // Close Button bar top right
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Surface)
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
+                        Text(
+                            text = if (isInterviewMode) "Mock Interview Session" else "AI Assistant Chat",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondary
+                        )
+                        IconButton(
+                            onClick = onDismiss,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceVariant)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(contentAlignment = Alignment.BottomEnd) {
-                                    NovaAvatar(size = 42.dp, elevation = 2.dp)
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = SuccessGreen,
-                                        border = androidx.compose.foundation.BorderStroke(1.5.dp, Surface),
-                                        modifier = Modifier.size(10.dp)
-                                    ) {}
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "Nova",
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = SoftGreen
-                                        ) {
-                                            Text(
-                                                text = "AI Companion",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = PrimaryDark,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = "Persistent Career & Competency Guide",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceVariant)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close Assistant",
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close Assistant",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
 
@@ -268,16 +436,20 @@ fun NovaOverlayChatPanel(
                     LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp, horizontal = 12.dp),
+                            .padding(vertical = 6.dp, horizontal = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(quickPrompts) { prompt ->
+                        items(displayPrompts) { prompt ->
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = Surface,
                                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderColorGreen),
                                 modifier = Modifier.clickable {
-                                    viewModel.sendMessage(prompt)
+                                    if (prompt.contains("Mock interview", ignoreCase = true)) {
+                                        viewModel.startInterview()
+                                    } else {
+                                        viewModel.sendMessage(prompt)
+                                    }
                                 }
                             ) {
                                 Text(
@@ -303,7 +475,18 @@ fun NovaOverlayChatPanel(
                     ) {
                         item { Spacer(modifier = Modifier.height(8.dp)) }
                         items(messages) { message ->
-                            ModernChatBubble(message.text, message.isFromUser)
+                            val messageId = "overlay_msg_${messages.indexOf(message)}"
+                            val isThisMsgSpeaking = isSpeaking && currentUtteranceId == messageId
+                            ModernChatBubble(
+                                text = message.text,
+                                isUser = message.isFromUser,
+                                isSpeaking = isThisMsgSpeaking,
+                                onSpeakClick = if (!message.isFromUser) {
+                                    {
+                                        voiceManager.speak(message.text, messageId)
+                                    }
+                                } else null
+                            )
                         }
 
                         if (isTyping) {
@@ -325,7 +508,7 @@ fun NovaOverlayChatPanel(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "Nova is thinking...",
+                                                text = if (isInterviewMode) "Nova is preparing next question..." else "Nova is thinking...",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = TextSecondary
                                             )
@@ -344,7 +527,7 @@ fun NovaOverlayChatPanel(
                         item { Spacer(modifier = Modifier.height(8.dp)) }
                     }
 
-                    // 4. Input Field Bar
+                    // 4. Input Field Bar (with Barge-in & Live Speech Transcription)
                     Surface(
                         color = Surface,
                         tonalElevation = 6.dp,
@@ -361,24 +544,60 @@ fun NovaOverlayChatPanel(
                                 value = inputText,
                                 onValueChange = { inputText = it },
                                 modifier = Modifier.weight(1f),
-                                placeholder = { Text("Ask Nova anything...", color = TextMuted, fontSize = 14.sp) },
+                                placeholder = {
+                                    Text(
+                                        text = if (isListening) "Listening to you speak..." else if (isInterviewMode) "Speak or type your answer..." else "Ask Nova anything...",
+                                        color = if (isListening) ErrorRed else TextMuted,
+                                        fontSize = 15.sp
+                                    )
+                                },
                                 shape = RoundedCornerShape(24.dp),
                                 maxLines = 3,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Primary,
-                                    unfocusedBorderColor = BorderColor,
+                                    focusedBorderColor = if (isListening) ErrorRed else Primary,
+                                    unfocusedBorderColor = if (isListening) ErrorRed.copy(alpha = 0.5f) else BorderColor,
                                     focusedContainerColor = SurfaceVariant,
                                     unfocusedContainerColor = SurfaceVariant
                                 )
                             )
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
+                            // Mic Button with Barge-in / Interruption
+                            IconButton(
+                                onClick = {
+                                    if (isListening) {
+                                        voiceManager.stopListening()
+                                    } else {
+                                        // Barge-in: immediately stop TTS when user starts recording
+                                        voiceManager.stopSpeaking()
+                                        micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(if (isListening) ErrorRed else SurfaceVariant)
+                                    .size(42.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                                    contentDescription = if (isListening) "Stop Listening" else "Voice Input",
+                                    tint = if (isListening) Color.White else Primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Send Button
                             IconButton(
                                 onClick = {
                                     if (inputText.isNotBlank()) {
                                         val text = inputText
                                         inputText = ""
+                                        // Ensure TTS stops when sending answer
+                                        voiceManager.stopSpeaking()
+                                        voiceManager.stopListening()
                                         viewModel.sendMessage(text)
                                     }
                                 },
@@ -386,7 +605,7 @@ fun NovaOverlayChatPanel(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(if (inputText.isNotBlank()) Primary else Primary.copy(alpha = 0.4f))
-                                    .size(46.dp)
+                                    .size(42.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Send,

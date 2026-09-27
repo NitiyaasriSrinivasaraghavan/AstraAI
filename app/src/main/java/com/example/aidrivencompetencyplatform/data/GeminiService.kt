@@ -22,19 +22,21 @@ import kotlin.math.roundToInt
 import com.example.aidrivencompetencyplatform.viewmodel.RoleSkillsData
 
 class GeminiService {
-    // API Key read from BuildConfig with fallback
-    private val apiKey = if (BuildConfig.GEMINI_API_KEY != "YOUR_KEY_HERE" && BuildConfig.GEMINI_API_KEY.isNotBlank()) {
-        BuildConfig.GEMINI_API_KEY
-    } else {
-        "AQ.Ab8RN6Jwy3UjrBJoa1mw53fDaioiIqMZGeL_Os6oDkRYCPOxfg"
+    // API Key read from BuildConfig
+    private val apiKey = BuildConfig.GEMINI_API_KEY
+
+    init {
+        // Safe diagnostic log to confirm key presence without exposing it
+        if (apiKey.isBlank()) {
+            Log.e("GeminiService", "CRITICAL: Gemini API Key is empty in BuildConfig!")
+        } else {
+            Log.d("GeminiService", "Gemini API Key is configured (length: ${apiKey.length})")
+        }
     }
 
     // Prioritized model cascade with confirmed high-performance and available endpoints
     private val modelCascade = listOf(
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest"
+        "gemini-3.6-flash"
     )
 
     private val client = createOkHttpClient()
@@ -89,37 +91,64 @@ class GeminiService {
             $targetRole
             
             STRICT EXTRACTION & CLASSIFICATION RULES:
-            1. SINGLE SOURCE OF TRUTH: ONLY extract facts present in the resume. Do NOT fabricate, invent, or hallucinate names, companies, roles, dates, or projects.
+            1. SINGLE SOURCE OF TRUTH, SECTION BOUNDARIES & NO HALLUCINATION:
+               - ONLY extract facts actually present in the resume. Respect the actual semantic section in which information appears.
+               - Do not move content between Education, Certifications, Skills, Projects, Work Experience, or Summary simply because another field is empty.
+               - Never fill an empty field with unrelated content from other sections. If a field or section is not present in the resume, return null or an empty list [] - never invent or hallucinate information.
+
+            2. CONTACT INFORMATION & LOCATION:
+               - candidateName: Extract the candidate's actual personal name ONLY from the resume header/name area.
+                 * STRICTLY FORBIDDEN: NEVER use education qualifications, degree names (such as 'Bachelor of Engineering', 'Bachelor of Technology', 'B.E.', 'B.Tech', 'M.E.', 'M.Tech', 'B.Sc', 'M.Sc', 'MCA', 'BCA', 'MBA', etc.), department/course names (such as 'Computer Science and Engineering', 'Information Technology', etc.), college/university/school names, job titles (such as 'Software Engineer', 'Android Developer', etc.), or section headings as the candidate's name.
+                 * If the resume contains a name with an initial (e.g. 'Tharshika A', 'A. Tharshika', 'S. Priya', 'Karthik R'), preserve the name and initial exactly as written. Do NOT concatenate unrelated characters or merge initials into words (do NOT change 'Tharshika A' into 'Tharshikaa').
+                 * Never infer or construct the candidate name from email address (e.g., do not turn 'tharshikaa2005@gmail.com' into 'Tharshikaa').
+                 * If no valid candidate name is present in the resume header, return null.
+               - Extract candidateEmail, candidatePhone, and candidateLocation.
+               - Detect candidateLocation from the contact header block (e.g., 'City, State', 'City, Country', 'City - Pincode', under name or beside email/phone). Do not confuse college or company locations with the candidate's location. If not present in the resume, return null.
+
+            3. SUMMARY / OBJECTIVE (Semantic Classification):
+               - Extract the professional summary, profile statement, career objective, career summary, executive summary, overview, or introductory professional paragraph based on content and semantic meaning.
+               - Semantically classify equivalent headings such as 'Professional Summary', 'Summary', 'Career Objective', 'Objective', 'Career Summary', 'Professional Profile', 'Profile', 'Profile Summary', 'Executive Summary', 'About Me', 'Career Profile', 'Personal Profile', 'Overview', or any introductory career paragraph into the 'summary' field.
+               - If no summary/objective paragraph exists in the resume, return null. Never invent one.
             
-            2. SUMMARY (Semantic Extraction):
-               - Extract the professional summary, profile statement, career objective, overview, or introductory professional paragraph based on content and semantic meaning.
-               - Look for headings such as 'Summary', 'Professional Summary', 'Profile', 'Objective', 'Career Objective', 'About Me', 'Overview', or any introductory career paragraph near the top.
-               - If no summary/intro paragraph exists in the resume, return null. Never invent one.
-            
-            3. WORK EXPERIENCE (Strict Category Isolation):
+            4. WORK EXPERIENCE (Semantic Classification & Strict Category Isolation):
                - 'experience' MUST contain ONLY genuine employment or internship entries (Company/Organization, Job/Internship Title, Dates/Duration, Responsibilities/Achievements).
+               - Semantically classify equivalent headings such as 'Work Experience', 'Professional Experience', 'Employment History', 'Career History', 'Work History', 'Experience', 'Internships', 'Industrial Experience'.
                - If the resume contains only internships and no full-time jobs, include only those internships.
                - STRICTLY FORBIDDEN: NEVER put Summary text, Education degrees, Certifications, Skills, Locations, or Coursework into 'experience'.
                - If the candidate is a fresher or student with NO work experience or internships, 'experience' MUST be an empty list []. Never fill it with other sections.
             
-            4. EDUCATION (Preserve ALL Tiers):
-               - 'education' MUST preserve ALL educational qualifications present in the resume without truncation:
+            5. EDUCATION (Strict Formal Academic Qualifications & Preserve ALL Tiers):
+               - Semantically classify equivalent headings such as 'Education', 'Academic Background', 'Academic Qualifications', 'Educational Qualifications', 'Educational Details'.
+               - Extract ONLY formal academic qualifications explicitly presented as education in the resume (e.g., 10th/Secondary/SSLC, 12th/HSC/Intermediate, Diploma/Polytechnic, Undergraduate Degree B.Tech/B.E./B.Sc/BCA/B.Com/BBA, Postgraduate Degree M.Tech/M.E./M.Sc/MCA/MBA, Ph.D/Doctorate).
+               - STRICTLY FORBIDDEN: Do NOT classify certifications, NPTEL courses, online courses (Coursera, Udemy, edX, LinkedIn Learning, etc.), workshops, training programs, bootcamps, or professional certificates as formal education. If no formal education is present in the resume, return an empty list [] for education. Never create an Education entry from information that is not explicitly supported by the resume.
+               - 'education' MUST preserve ALL formal educational qualifications present in the resume completely without truncation:
                  * 10th / Secondary School / SSLC / Matriculation / CBSE Class 10 / ICSE Class 10
                  * 12th / Higher Secondary / HSC / Intermediate / CBSE Class 12 / ISC Class 12 / Pre-University
                  * Diploma / Polytechnic
                  * Undergraduate Degree (B.Tech, B.E., B.Sc., BCA, B.Com, etc.)
                  * Postgraduate Degree (M.Tech, M.S., MCA, MBA, etc.)
-               - Include Degree/Standard, School/College/University, Board, Graduation Year, and CGPA/Percentage for each qualification.
+               - Include Degree/Standard, School/College/University, Location, Graduation Year/Dates, and CGPA/Percentage for each qualification.
                - If the resume contains 10th, 12th, and college, ALL THREE must be extracted as separate items in the 'education' array.
             
-            5. PROJECTS (Strict Semantic Project Validation):
-               - 'projectAnalysis' MUST contain ONLY genuine projects (academic, personal, capstone, or open-source) with actual project titles, descriptions, and technologies used.
-               - STRICTLY FORBIDDEN: Do NOT classify lone technical terms (e.g., 'Database Management', 'Machine Learning', 'SQL', 'Operating Systems', 'PALM', 'MySQL'), courses, subjects, or certifications as projects.
+            6. PROJECTS (Semantic Classification & Strict Project Validation):
+               - 'projectAnalysis' MUST contain ONLY genuine projects (academic, personal, capstone, client, or open-source) with actual project titles, descriptions, and technologies used.
+               - Extract only genuine projects explicitly represented in the resume. Respect section boundaries.
+               - Do NOT convert skills, certifications, education, training, work responsibilities or unrelated paragraphs into projects.
+               - Do NOT split a single project's subheadings (such as Frontend, Backend, Tools, Database, Description, Role, Environment, Outcome) into multiple separate projects. Group all subheadings and metadata of a project under that single project entry.
+               - Preserve legitimate technical and nontechnical/community projects when explicitly presented as projects.
+               - If the resume does NOT contain a Projects section or project entries, return 'projectAnalysis': []. NEVER fabricate projects from other text.
                - Certifications MUST remain under certifications, NEVER in projects.
-               - The number of projects in 'projectAnalysis' MUST match the actual number of projects in the resume (if 2 exist, return 2; if 0, return []).
             
-            6. SKILLS & CERTIFICATIONS:
-               - Extract all technical skills, frameworks, programming languages, and developer tools into 'extractedSkills'.
+            7. SKILLS (Extract ALL Explicit Skills without Artificial Limits):
+               - Semantically classify headings such as 'Technical Skills', 'Skills', 'Technical Expertise', 'Core Skills', 'Technical Competencies', 'Technologies', 'Tech Stack', 'Tools & Technologies' into 'extractedSkills'.
+               - Extract ALL programming languages, frameworks, developer tools, and technologies explicitly listed in the resume.
+               - DO NOT impose any artificial limit (e.g. do NOT limit to 3 skills; extract 10, 15, 20+ if explicitly listed).
+               - Do NOT invent skills not present in the resume.
+               - Keep Certifications (e.g., 'Certifications', 'Certificates', 'Licenses & Certifications') separate from Skills.
+
+            8. PERSONAL & FAMILY INFORMATION (Strict Isolation):
+               - Fields like Father's Name, DOB, Marital Status, Nationality, and Permanent Address must be treated as personal info.
+               - NEVER include these details in Education, Work Experience, Projects, or Professional Summary.
             
             JSON OUTPUT SCHEMA (Valid RFC 8259 JSON ONLY):
             {
@@ -130,6 +159,7 @@ class GeminiService {
               "candidateEmail": "string or null",
               "candidatePhone": "string or null",
               "candidateLocation": "string or null",
+              "personalInfo": ["string"],
               "summary": "string or null",
               "strengths": ["string"],
               "weaknesses": ["string"],
@@ -435,11 +465,21 @@ class GeminiService {
         val atsScore = getSafeInt(root, "atsScore", overallScore)
         val skillMatch = getSafeInt(root, "skillMatch", 70)
 
-        val candidateName = getSafeString(root, "candidateName")
+        val candidateName = getSafeString(root, "candidateName")?.takeIf {
+            !ResumeParser.isDegreeOrEducationTitle(it)
+        }
         val candidateEmail = getSafeString(root, "candidateEmail")
         val candidatePhone = getSafeString(root, "candidatePhone")
         val candidateLocation = getSafeString(root, "candidateLocation")
-        val summary = getSafeString(root, "summary") ?: ""
+        val personalInfo = getSafeStringList(root, "personalInfo")
+        val summary = getSafeString(root, "summary")
+            ?: getSafeString(root, "careerObjective")
+            ?: getSafeString(root, "objective")
+            ?: getSafeString(root, "professionalSummary")
+            ?: getSafeString(root, "profile")
+            ?: getSafeString(root, "careerProfile")
+            ?: getSafeString(root, "aboutMe")
+            ?: ""
 
         val rawEducation = getSafeStringList(root, "education")
         val rawExperience = getSafeStringList(root, "experience")
@@ -486,13 +526,14 @@ class GeminiService {
             candidateEmail = candidateEmail,
             candidatePhone = candidatePhone,
             candidateLocation = candidateLocation,
+            personalInfo = personalInfo,
             rawResumeText = rawResumeText
         )
     }
 
     private fun sanitizeAnalysisResult(result: ResumeAnalysisResult): ResumeAnalysisResult {
         return result.copy(
-            candidateName = sanitizeField(result.candidateName),
+            candidateName = sanitizeField(result.candidateName)?.takeIf { !ResumeParser.isDegreeOrEducationTitle(it) },
             candidateEmail = sanitizeField(result.candidateEmail),
             candidatePhone = sanitizeField(result.candidatePhone),
             candidateLocation = sanitizeField(result.candidateLocation)
@@ -510,14 +551,458 @@ class GeminiService {
         return if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) null else clean
     }
 
-    suspend fun getAiAssistantResponse(query: String, context: String): String = withContext(Dispatchers.IO) {
-        val prompt = "You are Nova, an AI career assistant. Use the following context to help the user.\nContext: $context\nUser Query: $query"
+    suspend fun getAiAssistantResponse(
+        query: String,
+        history: List<ChatMessage>,
+        userContext: String
+    ): String = withContext(Dispatchers.IO) {
+        val systemInstructions = """
+            You are Nova, a highly intelligent, natural, and context-aware AI Career Assistant for the NoviQ app.
+            
+            USER CONTEXT:
+            $userContext
+            
+            YOUR CORE PRINCIPLES:
+            1. BE NATURAL & CONVERSATIONAL: Communicate like a real person. Be professional, empathetic, and encouraging. Avoid robotic "Input accepted" style responses.
+            2. TYPO TOLERANCE: Ignore spelling mistakes and poor grammar (e.g., "scor" -> "score"). Focus 100% on the user's intent.
+            3. CONTEXT AWARENESS: Remember previous messages. Resolve references like "it", "them", "why is it low?" using history and context.
+            4. ACCURACY: Use ONLY the provided 'USER CONTEXT'. Never hallucinate user data (jobs, skills, companies). If info is missing, say you don't have it yet.
+            5. CONDITIONAL ADVICE: If suggesting a missing skill, always say "If you have experience with [Skill], add it..." or "Consider learning [Skill] to bridge the gap...".
+            6. DYNAMIC LENGTH: Concise for simple questions ("What is ATS?"), detailed and structured for career strategy advice.
+            7. FORMATTING: Use clean, plain-text formatting. ABSOLUTELY NO raw markdown like '###', '**', or '---'. Use bullet points with simple characters like '•' if needed.
+            
+            CURRENT CONVERSATION HISTORY:
+            ${history.joinToString("\n") { if (it.isFromUser) "USER: ${it.text}" else "NOVA: ${it.text}" }}
+            
+            CURRENT USER QUERY: $query
+        """.trimIndent()
+
         try {
-            val responseText = executeWithFallbackAndRetry(prompt, isJson = false)
-            responseText ?: "I'm sorry, I couldn't process that request."
+            val responseText = executeWithFallbackAndRetry(systemInstructions, isJson = false)
+            // Strip any accidental markdown formatting to ensure clean plain-text display as requested
+            responseText?.replace(Regex("[#*\\-_]{2,}"), "")
+                ?.replace(Regex("^#+\\s*", RegexOption.MULTILINE), "")
+                ?.trim() ?: "I'm sorry, I couldn't process that right now. Could you rephrase your question?"
         } catch (e: Exception) {
-            "Error: ${e.message}"
+            "I encountered a temporary connection issue. Please try your question again."
         }
+    }
+
+    suspend fun generateInterviewQuestions(
+        targetRole: String,
+        resumeData: ResumeAnalysisResult,
+        jobDescription: String?
+    ): List<InterviewQuestion> = withContext(Dispatchers.IO) {
+        val candidateSkills = resumeData.extractedSkills?.map { it.name } ?: emptyList()
+        val candidateExp = resumeData.experience ?: emptyList()
+        val candidateProjects = resumeData.projectAnalysis?.map { it.name } ?: emptyList()
+
+        val prompt = """
+            You are an expert technical interviewer for NoviQ. Generate 5 personalized interview questions for a candidate.
+            
+            CONTEXT:
+            - Target Role: $targetRole
+            - Resume Skills: ${candidateSkills.joinToString(", ")}
+            - Resume Experience: ${candidateExp.joinToString(" | ")}
+            - Resume Projects: ${candidateProjects.joinToString(", ")}
+            - Job Description: ${jobDescription ?: "Not provided"}
+            
+            QUESTION TYPES TO COVER:
+            1. TECHNICAL: Based on skills and JD requirements.
+            2. BEHAVIORAL: Based on experience and soft skills.
+            3. PROJECT_BASED: Based on specific projects in the resume.
+            4. SITUATIONAL: "What would you do if..." scenarios related to the role.
+            
+            RULES:
+            - Ground questions in actual resume content. Do not invent experience.
+            - Provide professional model guidance on what a strong answer should cover.
+            - Return ONLY valid JSON.
+            
+            JSON OUTPUT SCHEMA (MUST BE A RAW ARRAY OF OBJECTS):
+            [
+              {
+                "text": "string (the question text)",
+                "type": "TECHNICAL | BEHAVIORAL | PROJECT_BASED | SITUATIONAL",
+                "category": "string (e.g. Kotlin, Soft Skills, System Design)",
+                "modelGuidance": "string (professional tips for answering)"
+              }
+            ]
+        """.trimIndent()
+
+        val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
+        Log.d("INTERVIEW_DEBUG", "INTERVIEW_GEMINI_RAW_RESPONSE: $responseText")
+        
+        val jsonString = extractJson(responseText)
+        Log.d("INTERVIEW_DEBUG", "INTERVIEW_GEMINI_CLEANED_RESPONSE: $jsonString")
+        
+        if (jsonString == null) {
+            throw Exception("AI response failed to provide valid JSON. Response starts with: ${responseText?.take(50)}")
+        }
+        
+        try {
+            parseInterviewQuestionsJson(jsonString)
+        } catch (e: Exception) {
+            Log.e("GeminiService", "Interview parsing error: ${e.message}. Raw: $jsonString")
+            throw Exception("Failed to parse interview questions. Response starts with: ${jsonString.take(50)}")
+        }
+    }
+
+    private fun parseInterviewQuestionsJson(jsonString: String): List<InterviewQuestion> {
+        val element = try {
+            JsonParser.parseString(jsonString)
+        } catch (e: Exception) {
+            val repaired = repairJson(jsonString)
+            JsonParser.parseString(repaired)
+        }
+
+        val jsonArray = when {
+            element.isJsonArray -> element.asJsonArray
+            element.isJsonObject -> {
+                val obj = element.asJsonObject
+                // Try to find any array field (e.g., "questions", "data", "items")
+                obj.entrySet().firstOrNull { it.value.isJsonArray }?.value?.asJsonArray
+                    ?: throw Exception("JSON object does not contain an array of questions.")
+            }
+            else -> throw Exception("Unexpected JSON format: expected array or object.")
+        }
+
+        return jsonArray.mapNotNull { item ->
+            if (!item.isJsonObject) return@mapNotNull null
+            val qObj = item.asJsonObject
+            
+            // Highly defensive key extraction (handles question, text, content, and snake_case variations)
+            val text = (qObj.get("text") ?: qObj.get("question") ?: qObj.get("questionText") ?: qObj.get("content") ?: qObj.get("question_text"))?.asString 
+                ?: return@mapNotNull null
+                
+            val typeStr = (qObj.get("type") ?: qObj.get("questionType") ?: qObj.get("kind") ?: qObj.get("question_type"))?.asString ?: "TECHNICAL"
+            val category = (qObj.get("category") ?: qObj.get("topic") ?: qObj.get("subject") ?: qObj.get("question_category"))?.asString ?: typeStr
+            val modelGuidance = (qObj.get("modelGuidance") ?: qObj.get("guidance") ?: qObj.get("tips") ?: qObj.get("suggestedAnswer") ?: qObj.get("model_guidance"))?.asString 
+                ?: "Focus on providing a structured, evidence-based response."
+
+            InterviewQuestion(
+                text = text,
+                type = when {
+                    typeStr.contains("TECHNICAL", ignoreCase = true) -> InterviewQuestionType.TECHNICAL
+                    typeStr.contains("BEHAVIORAL", ignoreCase = true) -> InterviewQuestionType.BEHAVIORAL
+                    typeStr.contains("PROJECT", ignoreCase = true) -> InterviewQuestionType.PROJECT_BASED
+                    typeStr.contains("SITUATIONAL", ignoreCase = true) -> InterviewQuestionType.SITUATIONAL
+                    else -> InterviewQuestionType.TECHNICAL
+                },
+                category = category,
+                modelGuidance = modelGuidance
+            )
+        }
+    }
+
+    suspend fun generateDynamicOpeningQuestion(
+        targetRole: String,
+        resumeData: ResumeAnalysisResult?
+    ): InterviewQuestion = withContext(Dispatchers.IO) {
+        val candidateSkills = resumeData?.extractedSkills?.map { it.name } ?: emptyList()
+        val candidateExp = resumeData?.experience ?: emptyList()
+        val candidateProjects = resumeData?.projectAnalysis?.map { it.name } ?: emptyList()
+        val candidateEducation = resumeData?.education ?: emptyList()
+        val candidateCerts = resumeData?.certifications ?: emptyList()
+
+        val prompt = """
+            You are a real-world senior technical hiring manager conducting a mock interview for a candidate applying for the position of '$targetRole'.
+            
+            CANDIDATE PROFILE:
+            - Target Role: $targetRole
+            - Skills: ${candidateSkills.joinToString(", ").ifBlank { "Not specified" }}
+            - Projects: ${candidateProjects.joinToString(", ").ifBlank { "Not specified" }}
+            - Experience: ${candidateExp.joinToString(" | ").ifBlank { "Not specified" }}
+            - Education: ${candidateEducation.joinToString(", ").ifBlank { "Not specified" }}
+            - Certifications: ${candidateCerts.joinToString(", ").ifBlank { "Not specified" }}
+            - Summary: ${resumeData?.summary ?: "Not provided"}
+
+            REQUIREMENTS:
+            1. Generate the FIRST interview question tailored directly to the candidate's background and '$targetRole'.
+            2. If the candidate has specific projects or technologies in their resume, ask an insightful question exploring their technical approach, architectural choices, or trade-offs on those specific items.
+            3. If candidate details are missing, formulate an engaging opening question exploring their experience with core engineering competencies in '$targetRole'.
+            4. Do NOT ask generic textbook questions like 'What is Android?' or 'What is Java?'.
+            5. Return ONLY a valid JSON object.
+
+            JSON OUTPUT SCHEMA:
+            {
+              "text": "string (the question text)",
+              "category": "Introduction | Resume-based | Technical | Project-based | Problem-solving | Behavioural | Role-specific",
+              "difficulty": "Entry | Mid-Level | Senior | Advanced",
+              "expectedTopic": "string",
+              "modelGuidance": "string (brief guidance on what a strong answer should demonstrate)"
+            }
+        """.trimIndent()
+
+        val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
+        val jsonString = extractJson(responseText) ?: throw Exception("Failed to generate opening question")
+
+        val obj = JsonParser.parseString(jsonString).asJsonObject
+        val text = (obj.get("text") ?: obj.get("question"))?.asString ?: throw Exception("Missing question text")
+        val category = obj.get("category")?.asString ?: "Resume-based"
+        val difficulty = obj.get("difficulty")?.asString ?: "Mid-Level"
+        val expectedTopic = obj.get("expectedTopic")?.asString ?: "Project Architecture & Technical Implementation"
+        val modelGuidance = obj.get("modelGuidance")?.asString ?: "Focus on concrete architecture choices, challenges faced, and results."
+
+        InterviewQuestion(
+            text = text,
+            type = mapCategoryToType(category),
+            category = category,
+            difficulty = difficulty,
+            expectedTopic = expectedTopic,
+            questionNumber = 1,
+            modelGuidance = modelGuidance
+        )
+    }
+
+    suspend fun evaluateAnswerAndGenerateAdaptiveQuestion(
+        targetRole: String,
+        resumeData: ResumeAnalysisResult?,
+        questionNumber: Int,
+        currentQuestion: InterviewQuestion,
+        candidateAnswer: String,
+        conversationHistory: List<InterviewExchange>
+    ): AdaptiveInterviewResponse = withContext(Dispatchers.IO) {
+        val candidateSkills = resumeData?.extractedSkills?.map { it.name } ?: emptyList()
+        val candidateProjects = resumeData?.projectAnalysis?.map { it.name } ?: emptyList()
+        val candidateExp = resumeData?.experience ?: emptyList()
+
+        val historySummary = conversationHistory.takeLast(4).joinToString("\n\n") { exchange ->
+            "Q (${exchange.question.category}): ${exchange.question.text}\nA: ${exchange.answer}"
+        }
+
+        val prompt = """
+            You are a professional technical interviewer conducting an adaptive mock interview for a '$targetRole' candidate.
+            
+            CANDIDATE PROFILE:
+            - Role: $targetRole
+            - Skills: ${candidateSkills.joinToString(", ")}
+            - Projects: ${candidateProjects.joinToString(", ")}
+            - Experience: ${candidateExp.joinToString(" | ")}
+
+            PREVIOUS EXCHANGES:
+            ${historySummary.ifBlank { "None (this is the first answer)" }}
+
+            CURRENT QUESTION (#$questionNumber):
+            Category: ${currentQuestion.category}
+            Question: ${currentQuestion.text}
+
+            CANDIDATE'S ANSWER:
+            $candidateAnswer
+
+            INSTRUCTIONS:
+            1. EVALUATE the candidate's answer internally:
+               - relevance, clarity, completeness, technical accuracy, strengths, weaknesses, and potential improvements.
+            2. ADAPTIVE QUESTIONING:
+               - If the candidate gave a strong answer or mentioned a specific library/design decision/project detail, formulate a deeper follow-up question.
+               - If the answer was vague or incomplete, ask a clarifying question on that concept.
+               - If the topic was adequately explored, seamlessly pivot to the next competency area for '$targetRole' (e.g. system design, concurrency, testing, behavioral, performance optimization).
+            3. SPOKEN INTERVIEWER RESPONSE:
+               - Provide a natural conversational response in 'interviewerSpokenResponse'.
+               - Briefly acknowledge the candidate's point (e.g. 'That makes sense regarding...', 'You mentioned X in your answer...').
+               - Avoid over-praising or repetitive enthusiastic greetings. Maintain a natural, professional interview demeanor.
+               - Transition immediately into the next question.
+               - ABSOLUTELY NO raw markdown like '###', '**', or raw JSON in 'interviewerSpokenResponse'.
+            4. Return ONLY a valid JSON object.
+
+            JSON OUTPUT SCHEMA:
+            {
+              "interviewerSpokenResponse": "string (Brief acknowledgement + natural transition + next question)",
+              "nextQuestion": {
+                "text": "string (the standalone text of the next question)",
+                "category": "Resume-based | Technical | Project-based | Problem-solving | Behavioural | Role-specific",
+                "difficulty": "Entry | Mid-Level | Senior | Advanced",
+                "expectedTopic": "string",
+                "modelGuidance": "string",
+                "isFollowUp": boolean
+              },
+              "evaluation": {
+                "relevance": "string",
+                "clarity": "string",
+                "completeness": "string",
+                "technicalUnderstanding": "string",
+                "strengths": ["string"],
+                "weaknesses": ["string"],
+                "improvements": ["string"]
+              }
+            }
+        """.trimIndent()
+
+        val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
+        val jsonString = extractJson(responseText) ?: throw Exception("Failed to generate adaptive question")
+
+        parseAdaptiveResponseJson(jsonString, questionNumber + 1, currentQuestion.id)
+    }
+
+    private fun mapCategoryToType(category: String): InterviewQuestionType {
+        val lower = category.lowercase()
+        return when {
+            lower.contains("project") -> InterviewQuestionType.PROJECT_BASED
+            lower.contains("behavior") || lower.contains("behaviour") -> InterviewQuestionType.BEHAVIORAL
+            lower.contains("problem") -> InterviewQuestionType.PROBLEM_SOLVING
+            lower.contains("resume") -> InterviewQuestionType.RESUME_BASED
+            lower.contains("intro") -> InterviewQuestionType.INTRODUCTION
+            lower.contains("role") -> InterviewQuestionType.ROLE_SPECIFIC
+            lower.contains("situation") -> InterviewQuestionType.SITUATIONAL
+            else -> InterviewQuestionType.TECHNICAL
+        }
+    }
+
+    private fun parseAdaptiveResponseJson(jsonString: String, nextQuestionNumber: Int, parentQuestionId: String?): AdaptiveInterviewResponse {
+        val element = try {
+            JsonParser.parseString(jsonString)
+        } catch (e: Exception) {
+            val repaired = repairJson(jsonString)
+            JsonParser.parseString(repaired)
+        }
+
+        val obj = element.asJsonObject
+        val spoken = (obj.get("interviewerSpokenResponse") ?: obj.get("spokenResponse") ?: obj.get("response"))?.asString
+            ?: "Thank you for your response. Let's move to the next question."
+        
+        val cleanSpoken = spoken.replace(Regex("[#*\\-_`]{2,}"), "").trim()
+
+        val nextQObj = if (obj.has("nextQuestion") && obj.get("nextQuestion").isJsonObject) obj.getAsJsonObject("nextQuestion") else JsonObject()
+        val nextText = (nextQObj.get("text") ?: nextQObj.get("question"))?.asString
+            ?: "Could you describe another significant technical challenge you faced in your recent work?"
+        val nextCategory = (nextQObj.get("category") ?: nextQObj.get("type"))?.asString ?: "Technical"
+        val nextDifficulty = nextQObj.get("difficulty")?.asString ?: "Mid-Level"
+        val nextExpectedTopic = nextQObj.get("expectedTopic")?.asString ?: nextCategory
+        val nextGuidance = nextQObj.get("modelGuidance")?.asString ?: "Provide a structured, evidence-based answer."
+        val isFollowUp = nextQObj.get("isFollowUp")?.asBoolean ?: false
+
+        val evalObj = if (obj.has("evaluation") && obj.get("evaluation").isJsonObject) obj.getAsJsonObject("evaluation") else JsonObject()
+        val relevance = evalObj.get("relevance")?.asString ?: "Good relevance to the question."
+        val clarity = evalObj.get("clarity")?.asString ?: "Clear explanation."
+        val completeness = evalObj.get("completeness")?.asString ?: "Addressed key points."
+        val techUnderstanding = evalObj.get("technicalUnderstanding")?.asString ?: "Solid technical understanding demonstrated."
+        val strengths = getSafeStringListFromJson(evalObj, "strengths")
+        val weaknesses = getSafeStringListFromJson(evalObj, "weaknesses")
+        val improvements = getSafeStringListFromJson(evalObj, "improvements")
+
+        val nextQuestion = InterviewQuestion(
+            text = nextText,
+            type = mapCategoryToType(nextCategory),
+            category = nextCategory,
+            difficulty = nextDifficulty,
+            expectedTopic = nextExpectedTopic,
+            questionNumber = nextQuestionNumber,
+            modelGuidance = nextGuidance,
+            parentQuestionId = parentQuestionId,
+            isFollowUp = isFollowUp
+        )
+
+        val evaluation = InterviewEvaluation(
+            questionId = parentQuestionId ?: "",
+            relevance = relevance,
+            clarity = clarity,
+            completeness = completeness,
+            technicalUnderstanding = techUnderstanding,
+            strengths = strengths,
+            weaknesses = weaknesses,
+            improvements = improvements
+        )
+
+        return AdaptiveInterviewResponse(
+            interviewerSpokenResponse = cleanSpoken,
+            nextQuestion = nextQuestion,
+            evaluation = evaluation
+        )
+    }
+
+    suspend fun generateFinalInterviewReport(
+        questions: List<InterviewQuestion>,
+        answers: Map<String, String>,
+        targetRole: String,
+        resumeData: ResumeAnalysisResult
+    ): InterviewPerformanceSummary = withContext(Dispatchers.IO) {
+        val sessionData = questions.joinToString("\n\n") { q ->
+            "QUESTION (${q.type}): ${q.text}\nCANDIDATE ANSWER: ${answers[q.id] ?: "No answer provided"}"
+        }
+
+        val prompt = """
+            Analyze the candidate's interview session for the position of $targetRole.
+            
+            CANDIDATE PROFILE SUMMARY:
+            ${resumeData.summary}
+            
+            INTERVIEW SESSION DATA:
+            $sessionData
+            
+            TASKS:
+            1. Evaluate overall performance across all 5 answers.
+            2. Identify 3-4 Key Strengths.
+            3. Identify 2-3 Main Weaknesses.
+            4. Provide specific "What to Improve" points (qualitative only).
+            5. Provide a concise Overall Feedback observation.
+            
+            STRICT RULES:
+            - NO NUMERICAL SCORES, percentages, or marks.
+            - Provide qualitative, constructive feedback only.
+            - Ensure "What to Improve" focuses on actionable communication and technical clarity.
+            
+            JSON OUTPUT SCHEMA:
+            {
+              "overallPerformance": "string (qualitative executive summary)",
+              "keyStrengths": ["string"],
+              "mainWeaknesses": ["string"],
+              "recurringWeaknesses": ["string"],
+              "improvementSuggestions": ["string"],
+              "areasForPreparation": ["string"]
+            }
+        """.trimIndent()
+
+        val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
+        val jsonString = extractJson(responseText) ?: throw Exception("Failed to generate final report.")
+        
+        gson.fromJson(jsonString, InterviewPerformanceSummary::class.java)
+    }
+
+    suspend fun generateTechnicalMcqs(
+        targetRole: String,
+        resumeData: ResumeAnalysisResult,
+        jobDescription: String?
+    ): List<TechnicalMcq> = withContext(Dispatchers.IO) {
+        val candidateSkills = resumeData.extractedSkills?.map { it.name } ?: emptyList()
+        val candidateProjects = resumeData.projectAnalysis?.map { it.name } ?: emptyList()
+
+        val prompt = """
+            You are an expert technical recruiter at NoviQ. Generate EXACTLY 10 technical multiple-choice questions (MCQs) for the role of $targetRole.
+            
+            CONTEXT:
+            - Target Role: $targetRole
+            - Candidate Skills: ${candidateSkills.joinToString(", ")}
+            - Candidate Projects: ${candidateProjects.joinToString(", ")}
+            - Job Description: ${jobDescription ?: "Not provided"}
+            
+            DIFFICULTY DISTRIBUTION:
+            - 3 Easy, 4 Medium, 3 Difficult.
+            
+            RULES:
+            - Use the candidate's resume and target JD for personalization.
+            - Do NOT invent candidate experience.
+            - Every question must have EXACTLY 4 options (A, B, C, D).
+            - Every question must have EXACTLY 1 correct answer.
+            - Provide a technically accurate explanation for the correct answer.
+            - Ensure questions are role-specific and cover topics like Programming, Frameworks, Architecture, Databases, etc.
+            
+            JSON OUTPUT SCHEMA (RAW ARRAY OF OBJECTS):
+            [
+              {
+                "question": "string",
+                "options": ["Option A", "Option B", "Option C", "Option D"],
+                "correctAnswerIndex": 0,
+                "explanation": "string",
+                "topic": "string",
+                "difficulty": "Easy | Medium | Difficult"
+              }
+            ]
+        """.trimIndent()
+
+        val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
+        val jsonString = extractJson(responseText) ?: throw Exception("Failed to generate MCQs.")
+        
+        val type = object : com.google.gson.reflect.TypeToken<List<TechnicalMcq>>() {}.type
+        gson.fromJson(jsonString, type)
     }
 
     suspend fun matchJobDescription(
@@ -869,7 +1354,7 @@ class GeminiService {
         )
     }
 
-    suspend fun optimizeResume(
+    suspend fun generateModificationReport(
         jobDescription: String,
         resumeData: ResumeAnalysisResult
     ): ResumeOptimizationResult = withContext(Dispatchers.IO) {
@@ -877,101 +1362,238 @@ class GeminiService {
             throw Exception("Gemini API Key is missing.")
         }
 
+        fun isAddressOrContact(text: String): Boolean {
+            val lw = text.lowercase().trim()
+            val contactKeywords = listOf(
+                "phone", "mobile", "mob", "tel", "telephone", "cell", "contact", "ph", "whatsapp",
+                "email", "e-mail", "mail", "gmail",
+                "github", "linkedin", "portfolio", "website", "www.", "http",
+                "address", "location", "residence", "domicile", "permanent", "correspondence", "city", "state", "country", "pincode", "pin code", "zip"
+            )
+            if (contactKeywords.any { lw.startsWith("$it ") || lw.startsWith("$it:") || lw.startsWith("$it-") || lw.startsWith("$it –") }) return true
+            if (lw.contains("@") || lw.contains(".com") || lw.contains(".in") || lw.contains(".net") || lw.contains(".org")) return true
+            val addressKeywords = listOf("street", "nagar", "road", "colony", "avenue", "layout", "cross", "main", "floor", "building", "apartment", "h.no", "house no", "plot no", "door no")
+            if (addressKeywords.any { lw.contains(" $it ") || lw.contains(" $it,") || lw.startsWith("$it ") }) return true
+            val personalKeywords = listOf("father's name", "mother's name", "date of birth", "dob", "marital status", "nationality", "gender", "sex", "languages known", "hobbies", "interests")
+            if (personalKeywords.any { lw.contains(it) }) return true
+            if (Regex("\\b\\d{6}\\b").containsMatchIn(lw)) return true
+            if (Regex("\\b[6-9]\\d{9}\\b").containsMatchIn(lw)) return true
+            if (Regex("\\b\\d{3}[-.\\s]??\\d{3}[-.\\s]??\\d{4}\\b").containsMatchIn(lw)) return true
+            return false
+        }
+
         val candidateSkills = resumeData.extractedSkills?.map { it.name } ?: emptyList()
-        val candidateEdu = resumeData.education ?: emptyList()
-        val candidateExp = resumeData.experience ?: emptyList()
-        val candidateProjects = resumeData.projectAnalysis?.map {
-            "${it.name}: ${it.strengths?.joinToString("; ") ?: ""}"
+        val candidateEdu = resumeData.education?.filter { !isAddressOrContact(it) } ?: emptyList()
+        val candidateExp = resumeData.experience?.filter { !isAddressOrContact(it) } ?: emptyList()
+        val candidateProjects = resumeData.projectAnalysis?.map { proj ->
+            val tech = if (!proj.technologies.isNullOrEmpty()) " (Technologies: ${proj.technologies.joinToString(", ")})" else ""
+            val desc = if (!proj.strengths.isNullOrEmpty()) " - ${proj.strengths.joinToString("; ")}" else ""
+            "${proj.name}$tech$desc"
         } ?: emptyList()
         val candidateSummary = resumeData.summary ?: ""
 
         val prompt = """
-            You are an expert AI Resume Optimizer. Your goal is to suggest minimal, targeted improvements to a candidate's resume to better align it with a specific Job Description (JD).
+            You are an expert AI Technical Interviewer and Career Strategist. Generate a structured Resume Modification Report by comparing the candidate's ACTUAL resume content against the provided Job Description (JD).
             
-            STRICT RULES:
-            1. MINIMAL CHANGE: Only suggest changes that are actually useful for alignment. Do NOT rewrite the entire resume.
-            2. NO FABRICATION: Never invent experience, skills, technologies, certifications, or projects. Only suggest wording improvements IF AND ONLY IF the existing resume evidence supports it.
-            3. TARGETED: Suggest specific wording changes (words, phrases, sentences, bullets).
-            4. FORMAT: Provide results as structured JSON.
+            STRICT DATA INTEGRITY & ISOLATION PROTOCOL:
+            1. SOURCE OF TRUTH: Use ONLY the Candidate Resume Data below. If a section below contains "none listed" or is empty, DO NOT assume the candidate has those skills or projects.
+            2. SECTION ISOLATION (ZERO CROSS-CONTAMINATION):
+               - PROFESSIONAL SUMMARY: Use ONLY the candidate's profile/objective provided below.
+               - TECHNICAL SKILLS: Use ONLY the explicit skills list provided.
+               - WORK EXPERIENCE: Use ONLY actual employment/internship history. NEVER include contact info, address, education, or projects in "Work Experience".
+               - PROJECTS: Use ONLY the specific candidate projects provided below. If projects are listed, you MUST analyze them. NEVER say "no projects found" if there are projects in the data below.
+               - EDUCATION: Use ONLY the candidate's academic degrees/institutions.
+            3. NO FABRICATION: Do not invent missing experience. If a JD requirement is missing from the resume, list it as a GAP.
+            4. CONDITIONAL ADVICE: Only suggest adding a missing skill if you use a disclaimer like "If you have experience with [Skill], ensure it is visible...".
             
-            5. EXACT ORIGINAL TEXT: The "originalText" field MUST contain the EXACT substring from the "rawResumeText" provided below. This is critical for locating the text in the document.
-            
-            CANDIDATE RESUME DATA (STRICT SOURCE OF TRUTH):
-            - Name: ${resumeData.candidateName ?: "Candidate"}
-            - Raw Resume Text: ${resumeData.rawResumeText ?: ""}
-            - Summary: $candidateSummary
-            - Experience: ${candidateExp.joinToString(" | ")}
-            - Education: ${candidateEdu.joinToString(" | ")}
-            - Skills: ${candidateSkills.joinToString(", ")}
-            - Projects: ${candidateProjects.joinToString(" | ")}
+            CANDIDATE RESUME DATA (ISOLATED):
+            - Candidate Name: ${resumeData.candidateName ?: "Candidate"}
+            - Professional Summary: ${if (candidateSummary.isNotBlank()) candidateSummary else "None provided"}
+            - Work Experience & Internships: ${if (candidateExp.isNotEmpty()) candidateExp.joinToString("\n| ") else "No formal experience listed (Fresher / Student)"}
+            - Technical Skills: ${if (candidateSkills.isNotEmpty()) candidateSkills.joinToString(", ") else "None listed"}
+            - Projects (Built by Candidate): ${if (candidateProjects.isNotEmpty()) candidateProjects.joinToString("\n| ") else "None listed"}
+            - Education: ${if (candidateEdu.isNotEmpty()) candidateEdu.joinToString("\n| ") else "None listed"}
             
             JOB DESCRIPTION:
             $jobDescription
             
-            Identify:
-            1. Keyword Opportunities: Terms in JD that could be better represented using existing resume evidence.
-            2. Content Improvements: Targeted wording improvements for summary, experience, or projects.
-            3. Skill Gaps: Genuine requirements missing from resume (list them only, do NOT suggest changes for them).
+            REQUIRED ANALYSIS SECTIONS:
+            1. MATCHES: Requirements from JD already supported by the resume.
+            2. MODIFICATIONS: Existing resume content that should be emphasized or rewritten for better JD alignment.
+            3. GAPS: JD requirements with no evidence in the resume.
+            
+            TASKS:
+            1. Calculate an "Overall Match" percentage (0-100) based on actual evidence.
+            2. Provide "overallReasoning" for the score.
+            3. Identify "matchedAreas", "recommendedChanges", and "potentialGaps".
+            4. Generate "Section Analysis" for: Professional Summary, Technical Skills, Projects, Work Experience, Education.
+            
+            For each section analysis:
+            - sectionId: "SUMMARY" | "SKILLS" | "PROJECTS" | "EXPERIENCE" | "EDUCATION"
+            - sectionName: Professional Summary | Technical Skills | Projects | Work Experience | Education
+            - priority: HIGH | RECOMMENDED | ALIGNED
+            - currentContent: Provide the ACTUAL text from the candidate's resume for this section.
+            - jdRequirement: What the JD asks for regarding this section.
+            - reason: Why this section is a match or needs alignment.
+            - modificationRequired: Strategic advice on what to change.
+            - specificAction: CLEAR, STEP-BY-STEP instruction for the candidate.
+            - whatNotToClaim: Explicit warning NOT to add skills they don't have.
             
             JSON OUTPUT SCHEMA:
             {
               "jdTitle": "string",
               "companyName": "string or null",
-              "skillGaps": ["string"],
-              "keywordOpportunities": ["string"],
-              "suggestions": [
+              "overallMatch": 0,
+              "overallReasoning": "string",
+              "summary": "Overall alignment overview...",
+              "strongMatchCount": 0,
+              "recommendedImprovementCount": 0,
+              "potentialGapCount": 0,
+              "matchedAreas": ["string"],
+              "recommendedChanges": ["string"],
+              "potentialGaps": ["string"],
+              "sections": [
                 {
-                  "section": "SUMMARY | EXPERIENCE | PROJECTS | SKILLS | CERTIFICATION",
-                  "originalText": "exact text from resume to be replaced",
-                  "suggestedText": "improved targeted text",
-                  "changeType": "WORD | PHRASE | SENTENCE | BULLET | SKILL | PROJECT | EXPERIENCE | SUMMARY | CERTIFICATION",
-                  "reason": "why this change improves alignment",
-                  "relatedKeyword": "string",
-                  "priority": "CRITICAL | HIGH | MEDIUM | LOW",
-                  "confidence": 100,
-                  "resumeEvidence": "string",
-                  "supportedByResume": true
+                  "sectionId": "SUMMARY | SKILLS | PROJECTS | EXPERIENCE | EDUCATION",
+                  "sectionName": "string",
+                  "priority": "HIGH | RECOMMENDED | ALIGNED",
+                  "currentContent": "string",
+                  "jdRequirement": "string",
+                  "reason": "string",
+                  "modificationRequired": "string",
+                  "specificAction": "string",
+                  "suggestedConsiderations": ["string"],
+                  "whatNotToClaim": "string",
+                  "matchedKeywords": ["string"]
                 }
               ]
             }
         """.trimIndent()
 
         val responseText = executeWithFallbackAndRetry(prompt, isJson = true)
-        val jsonString = extractJson(responseText) ?: throw Exception("Failed to get optimization suggestions.")
+        val jsonString = extractJson(responseText) ?: throw Exception("Failed to generate modification report.")
         
-        parseOptimizationJson(jsonString)
+        parseReportJson(jsonString, jobDescription, resumeData, candidateExp, candidateProjects, candidateSkills, candidateEdu, candidateSummary)
     }
 
-    private fun parseOptimizationJson(jsonString: String): ResumeOptimizationResult {
-        val root = JsonParser.parseString(jsonString).asJsonObject
+    private fun parseReportJson(
+        jsonString: String,
+        originalJd: String,
+        resumeData: ResumeAnalysisResult,
+        candidateExp: List<String>,
+        candidateProjects: List<String>,
+        candidateSkills: List<String>,
+        candidateEdu: List<String>,
+        candidateSummary: String
+    ): ResumeOptimizationResult {
+        val root = try { JsonParser.parseString(jsonString).asJsonObject } catch (_: Exception) { JsonObject() }
         
-        val jdTitle = root.get("jdTitle")?.asString ?: "Target Role"
+        val jdTitle = if (root.has("jdTitle") && !root.get("jdTitle").isJsonNull) root.get("jdTitle").asString else "Target Role"
         val companyName = if (root.has("companyName") && !root.get("companyName").isJsonNull) root.get("companyName").asString else null
         
-        val skillGaps = mutableListOf<String>()
-        root.getAsJsonArray("skillGaps")?.forEach { skillGaps.add(it.asString) }
-        
-        val keywordOpportunities = mutableListOf<String>()
-        root.getAsJsonArray("keywordOpportunities")?.forEach { keywordOpportunities.add(it.asString) }
-        
-        val suggestions = mutableListOf<OptimizationSuggestion>()
-        root.getAsJsonArray("suggestions")?.forEach { 
-            val sObj = it.asJsonObject
-            suggestions.add(OptimizationSuggestion(
-                section = sObj.get("section").asString,
-                originalText = sObj.get("originalText").asString,
-                suggestedText = sObj.get("suggestedText").asString,
-                changeType = try { ChangeType.valueOf(sObj.get("changeType").asString) } catch (_: Exception) { ChangeType.OTHER },
-                reason = sObj.get("reason").asString,
-                relatedKeyword = if (sObj.has("relatedKeyword") && !sObj.get("relatedKeyword").isJsonNull) sObj.get("relatedKeyword").asString else null,
-                priority = try { SuggestionPriority.valueOf(sObj.get("priority").asString) } catch (_: Exception) { SuggestionPriority.MEDIUM },
-                confidence = if (sObj.has("confidence")) sObj.get("confidence").asInt else 100,
-                resumeEvidence = if (sObj.has("resumeEvidence")) sObj.get("resumeEvidence").asString else null,
-                supportedByResume = if (sObj.has("supportedByResume")) sObj.get("supportedByResume").asBoolean else true
-            ))
+        val matchedAreas = getSafeStringListFromJson(root, "matchedAreas")
+        val recommendedChanges = getSafeStringListFromJson(root, "recommendedChanges")
+        val potentialGaps = getSafeStringListFromJson(root, "potentialGaps")
+
+        fun isAddressContent(text: String): Boolean {
+            val lw = text.lowercase().trim()
+            val addressKeywords = listOf("street", "nagar", "road", "colony", "avenue", "layout", "cross", "main", "floor", "building", "pincode", "pin code", "pin:", "dist:")
+            if (addressKeywords.any { lw.contains(" $it ") || lw.contains(" $it,") || lw.startsWith("$it ") || lw.contains(",$it ") }) return true
+            if (lw.contains("@") || lw.contains("github.com") || lw.contains("linkedin.com")) return true
+            if (Regex("\\b\\d{6}\\b").containsMatchIn(lw) || Regex("\\b[6-9]\\d{9}\\b").containsMatchIn(lw)) return true
+            return false
         }
+
+        val report = com.example.aidrivencompetencyplatform.model.ResumeModificationReport(
+            targetRole = jdTitle,
+            originalJobDescription = originalJd,
+            overallMatch = if (root.has("overallMatch") && !root.get("overallMatch").isJsonNull) root.get("overallMatch").asInt else 0,
+            summary = if (root.has("summary") && !root.get("summary").isJsonNull) root.get("summary").asString else "",
+            overallReasoning = if (root.has("overallReasoning") && !root.get("overallReasoning").isJsonNull) root.get("overallReasoning").asString else null,
+            strongMatchCount = matchedAreas.size,
+            recommendedImprovementCount = recommendedChanges.size,
+            potentialGapCount = potentialGaps.size,
+            matchedAreas = matchedAreas,
+            recommendedChanges = recommendedChanges,
+            potentialGaps = potentialGaps,
+            sections = mutableListOf<com.example.aidrivencompetencyplatform.model.SectionAnalysis>().also { list ->
+                if (root.has("sections") && root.get("sections").isJsonArray) {
+                    root.getAsJsonArray("sections").forEach { item ->
+                        try {
+                            val sObj = item.asJsonObject
+                            val rawName = if (sObj.has("sectionName") && !sObj.get("sectionName").isJsonNull) sObj.get("sectionName").asString else "Section"
+                            
+                            val normalizedName = when {
+                                rawName.contains("Summary", ignoreCase = true) || rawName.contains("Objective", ignoreCase = true) -> "Professional Summary"
+                                rawName.contains("Skill", ignoreCase = true) || rawName.contains("Competencies", ignoreCase = true) -> "Technical Skills"
+                                rawName.contains("Project", ignoreCase = true) -> "Projects"
+                                rawName.contains("Experience", ignoreCase = true) || rawName.contains("Employment", ignoreCase = true) || rawName.contains("Work", ignoreCase = true) -> "Work Experience"
+                                rawName.contains("Education", ignoreCase = true) || rawName.contains("Academic", ignoreCase = true) -> "Education"
+                                rawName.contains("Certif", ignoreCase = true) -> "Certifications"
+                                else -> rawName
+                            }
+
+                            var currentContent = if (sObj.has("currentContent") && !sObj.get("currentContent").isJsonNull) sObj.get("currentContent").asString.trim() else ""
+                            
+                            // Reconcile and guarantee strict section data integrity
+                            when (normalizedName) {
+                                "Work Experience" -> {
+                                    if (currentContent.isBlank() || isAddressContent(currentContent) || currentContent.equals("none", ignoreCase = true)) {
+                                        currentContent = if (candidateExp.isNotEmpty()) candidateExp.joinToString("\n")
+                                            else "No formal employment/internship experience listed in resume (Fresher / Student)"
+                                    }
+                                }
+                                "Projects" -> {
+                                    if ((currentContent.isBlank() || currentContent.equals("none", ignoreCase = true) || currentContent.contains("no projects", ignoreCase = true)) && candidateProjects.isNotEmpty()) {
+                                        currentContent = candidateProjects.joinToString("\n\n")
+                                    }
+                                }
+                                "Professional Summary" -> {
+                                    if (currentContent.isBlank() && candidateSummary.isNotBlank()) {
+                                        currentContent = candidateSummary
+                                    }
+                                }
+                                "Technical Skills" -> {
+                                    if (currentContent.isBlank() && candidateSkills.isNotEmpty()) {
+                                        currentContent = candidateSkills.joinToString(", ")
+                                    }
+                                }
+                                "Education" -> {
+                                    if (currentContent.isBlank() && candidateEdu.isNotEmpty()) {
+                                        currentContent = candidateEdu.joinToString(" | ")
+                                    }
+                                }
+                            }
+
+                            list.add(com.example.aidrivencompetencyplatform.model.SectionAnalysis(
+                                sectionId = if (sObj.has("sectionId") && !sObj.get("sectionId").isJsonNull) sObj.get("sectionId").asString else "",
+                                sectionName = normalizedName,
+                                priority = try { com.example.aidrivencompetencyplatform.model.ReportPriority.valueOf(sObj.get("priority").asString) } catch (_: Exception) { com.example.aidrivencompetencyplatform.model.ReportPriority.ALIGNED },
+                                currentContent = currentContent,
+                                jdRequirement = if (sObj.has("jdRequirement") && !sObj.get("jdRequirement").isJsonNull) sObj.get("jdRequirement").asString else null,
+                                reason = if (sObj.has("reason") && !sObj.get("reason").isJsonNull) sObj.get("reason").asString else "",
+                                modificationRequired = if (sObj.has("modificationRequired") && !sObj.get("modificationRequired").isJsonNull) sObj.get("modificationRequired").asString else "",
+                                specificAction = if (sObj.has("specificAction") && !sObj.get("specificAction").isJsonNull) sObj.get("specificAction").asString else null,
+                                suggestedConsiderations = getSafeStringListFromJson(sObj, "suggestedConsiderations"),
+                                caution = if (sObj.has("caution") && !sObj.get("caution").isJsonNull) sObj.get("caution").asString else null,
+                                whatNotToClaim = if (sObj.has("whatNotToClaim") && !sObj.get("whatNotToClaim").isJsonNull) sObj.get("whatNotToClaim").asString else null,
+                                matchedKeywords = getSafeStringListFromJson(sObj, "matchedKeywords")
+                            ))
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        )
         
-        return ResumeOptimizationResult(jdTitle, companyName, suggestions, skillGaps, keywordOpportunities)
+        return ResumeOptimizationResult(jdTitle, companyName, report = report)
+    }
+
+    private fun getSafeStringListFromJson(obj: JsonObject, key: String): List<String> {
+        val list = mutableListOf<String>()
+        if (obj.has(key) && obj.get(key).isJsonArray) {
+            obj.getAsJsonArray(key).forEach { if (it.isJsonPrimitive) list.add(it.asString) }
+        }
+        return list
     }
 
     /**
@@ -1009,24 +1631,35 @@ class GeminiService {
     }
 
     private fun callGeminiApi(model: String, promptText: String, isJson: Boolean): String? {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
+        // Use v1beta endpoint for Gemini Developer API generateContent
+        val apiVersion = "v1beta"
+        val url = "https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent"
 
         val requestBodyMap = mutableMapOf<String, Any>(
             "contents" to listOf(mapOf("parts" to listOf(mapOf("text" to promptText))))
         )
-        if (isJson) {
-            requestBodyMap["generationConfig"] = mapOf(
-                "response_mime_type" to "application/json",
-                "maxOutputTokens" to 8192,
-                "temperature" to 0.1
+        val genConfig = mutableMapOf<String, Any>(
+            "maxOutputTokens" to 8192,
+            "temperature" to 0.1,
+            "thinkingConfig" to mapOf(
+                "thinkingLevel" to "LOW"
             )
+        )
+        if (isJson) {
+            genConfig["response_mime_type"] = "application/json"
         }
+        requestBodyMap["generationConfig"] = genConfig
 
         val requestBody = gson.toJson(requestBodyMap).toRequestBody(jsonMediaType)
+        
+        // Build request using the official header-based authentication style.
+        // Using .header() ensures that any previous value is replaced.
+        // We explicitly trim the key to prevent hidden whitespace from causing 401 errors.
         val request = Request.Builder()
             .url(url)
-            .addHeader("x-goog-api-key", apiKey)
-            .addHeader("Content-Type", "application/json")
+            .header("x-goog-api-key", apiKey.trim()) 
+            .header("Content-Type", "application/json")
+            .removeHeader("Authorization") // Prevent 401 UNAUTHENTICATED: ACCESS_TOKEN_TYPE_UNSUPPORTED
             .post(requestBody)
             .build()
 
@@ -1035,13 +1668,17 @@ class GeminiService {
                 val responseBody = response.body?.string()
                 if (!response.isSuccessful) {
                     val code = response.code
+                    Log.e("GeminiService", "API Error: $code. Body: $responseBody")
+                    
+                    // Specific handling for common Gemini error codes
                     val errorMsg = when (code) {
-                        400 -> "Bad Request (400): Invalid request parameter."
-                        401, 403 -> "Authentication failed: Please verify your Gemini API key."
-                        404 -> "Model not found (404): Model '$model' is unavailable."
+                        400 -> "Bad Request (400): Invalid request parameter. Model: $model. Body: $responseBody"
+                        401 -> "Unauthenticated (401): Request had invalid authentication credentials. Expected API key in x-goog-api-key header or key query parameter. Body: $responseBody"
+                        403 -> "Permission Denied (403): Your API key might be restricted or the Generative Language API is not enabled. Body: $responseBody"
+                        404 -> "Model not found (404): Model '$model' is unavailable or the endpoint is incorrect."
                         429 -> "Rate limit (429): Quota exceeded. Retrying shortly."
                         500, 502, 503, 504 -> "Server error ($code): Gemini service temporarily unavailable."
-                        else -> "API Error (HTTP $code)"
+                        else -> "API Error (HTTP $code). Body: $responseBody"
                     }
                     throw Exception(errorMsg)
                 }
@@ -1068,10 +1705,21 @@ class GeminiService {
         cleaned = cleaned.replace(Regex("\\s*```\\s*$"), "")
         cleaned = cleaned.trim()
 
-        val start = cleaned.indexOf("{")
+        val startBrace = cleaned.indexOf("{")
+        val startBracket = cleaned.indexOf("[")
+        
+        val start = when {
+            startBrace == -1 -> startBracket
+            startBracket == -1 -> startBrace
+            else -> minOf(startBrace, startBracket)
+        }
+        
         if (start == -1) return null
 
-        val end = cleaned.lastIndexOf("}")
+        val endBrace = cleaned.lastIndexOf("}")
+        val endBracket = cleaned.lastIndexOf("]")
+        val end = maxOf(endBrace, endBracket)
+        
         val candidateJson = if (end > start) cleaned.substring(start, end + 1) else cleaned.substring(start)
         return repairJson(candidateJson)
     }

@@ -188,7 +188,7 @@ fun NoviQFullLogo(
             Text(
                 text = "Novi",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = (iconSize.value * 0.40f).sp,
+                    fontSize = (iconSize.value * 0.48f).sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = (-0.5).sp
                 ),
@@ -197,7 +197,7 @@ fun NoviQFullLogo(
             Text(
                 text = "Q",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = (iconSize.value * 0.40f).sp,
+                    fontSize = (iconSize.value * 0.48f).sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = (-0.5).sp
                 ),
@@ -212,7 +212,7 @@ fun NoviQFullLogo(
             Text(
                 text = "YOUR AI CAREER COMPANION",
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 2.4.sp
                 ),
@@ -442,7 +442,7 @@ fun NovaFullLogo(
             Text(
                 text = "Nov",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = (iconSize.value * 0.40f).sp,
+                    fontSize = (iconSize.value * 0.48f).sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = (-0.5).sp
                 ),
@@ -451,7 +451,7 @@ fun NovaFullLogo(
             Text(
                 text = "a",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = (iconSize.value * 0.40f).sp,
+                    fontSize = (iconSize.value * 0.48f).sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = (-0.5).sp
                 ),
@@ -466,7 +466,7 @@ fun NovaFullLogo(
             Text(
                 text = "YOUR AI CAREER ASSISTANT",
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 2.4.sp
                 ),

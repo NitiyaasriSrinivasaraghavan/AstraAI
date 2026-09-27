@@ -87,7 +87,7 @@ fun AtsScoreResult.toOverallCalculation(): AtsCardCalculation {
 
 data class RoleBenchmark(
     val role: String,
-    val coreSkills: List<String>,
-    val frameworkSkills: List<String>,
-    val toolSkills: List<String>
+    val coreSkills: List<String> = emptyList(),
+    val frameworkSkills: List<String> = emptyList(),
+    val toolSkills: List<String> = emptyList()
 )

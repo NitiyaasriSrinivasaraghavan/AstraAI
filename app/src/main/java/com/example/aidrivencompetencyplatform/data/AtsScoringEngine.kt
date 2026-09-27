@@ -25,7 +25,7 @@ class AtsScoringEngine {
         try { Log.d(TAG, "Calculating deterministic ATS scores for: $targetRole") } catch (_: Throwable) {}
 
         // Candidate personal details from resume
-        val candidateName = sanitizeEntity(result.candidateName)
+        val candidateName = sanitizeEntity(result.candidateName, isNameField = true)
         val candidateEmail = sanitizeEntity(result.candidateEmail)
         val candidatePhone = sanitizeEntity(result.candidatePhone)
         val candidateLocation = sanitizeEntity(result.candidateLocation)
@@ -576,7 +576,7 @@ class AtsScoringEngine {
         }
     }
 
-    private fun sanitizeEntity(value: String?): String? {
+    private fun sanitizeEntity(value: String?, isNameField: Boolean = false): String? {
         if (value.isNullOrBlank()) return null
         val clean = value.trim()
         val lower = clean.lowercase()
@@ -584,6 +584,8 @@ class AtsScoringEngine {
             "null", "none", "n/a", "na", "not detected", "not specified",
             "not provided", "not found", "unknown", "nil", "-", "--", "undefined", "empty"
         )
-        return if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) null else clean
+        if (invalid.contains(lower) || lower.startsWith("not detected") || lower.startsWith("not found")) return null
+        if (isNameField && ResumeParser.isDegreeOrEducationTitle(clean)) return null
+        return clean
     }
 }

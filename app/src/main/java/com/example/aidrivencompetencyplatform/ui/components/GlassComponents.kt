@@ -14,6 +14,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,7 +93,7 @@ fun PremiumButton(
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
+            .heightIn(min = 52.dp),
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
@@ -102,13 +104,15 @@ fun PremiumButton(
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 2.dp
-        )
+        ),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            fontSize = 15.sp
+            fontSize = 18.sp,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -139,30 +143,35 @@ fun AstraHeaderBanner(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.Top, modifier = Modifier.weight(1f)) {
                     if (leadingIcon != null) {
-                        leadingIcon()
+                        Box(modifier = Modifier.padding(top = 4.dp)) {
+                            leadingIcon()
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                     }
                     Text(
                         text = title,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = Color.White,
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 if (trailingIcon != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
                     trailingIcon()
                 }
             }
             if (!subtitle.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = Color.White.copy(alpha = 0.9f),
+                    lineHeight = 22.sp
                 )
             }
         }
@@ -192,6 +201,7 @@ fun AstraPillToggle(
                     shape = RoundedCornerShape(20.dp),
                     color = if (isSelected) Primary else Color.Transparent,
                     modifier = Modifier
+                        .weight(1f)
                         .clip(RoundedCornerShape(20.dp))
                         .clickable { onSelect(index) }
                 ) {
@@ -200,7 +210,10 @@ fun AstraPillToggle(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) Color.White else TextSecondary,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
