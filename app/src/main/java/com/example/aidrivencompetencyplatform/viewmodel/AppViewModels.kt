@@ -11,6 +11,7 @@ import java.io.File
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aidrivencompetencyplatform.AstraApp
 import com.example.aidrivencompetencyplatform.data.AtsScoringEngine
 import com.example.aidrivencompetencyplatform.data.DeterministicResumeStructure
 import com.example.aidrivencompetencyplatform.data.GeminiService
@@ -2262,7 +2263,8 @@ class JdMatcherViewModel(
 
 class InterviewViewModel(
     private val sessionManager: SessionManager,
-    private val geminiService: GeminiService
+    private val geminiService: GeminiService,
+    private val interviewService: InterviewService = AstraApp.instance.interviewService
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(InterviewSessionState())
@@ -2285,7 +2287,7 @@ class InterviewViewModel(
         val candidateName = latest?.candidateName ?: sessionManager.getUserName()
         
         // If the latest analysis already has a completed interview summary, load it as a locked snapshot
-        if (latest?.interviewSummary != null) {
+        if (latest?.interviewSummary != null && latest.interviewQuestions.isNotEmpty()) {
             _state.value = _state.value.copy(
                 targetRole = role,
                 candidateName = candidateName,
@@ -2309,24 +2311,31 @@ class InterviewViewModel(
         if (analysis != null) {
             val role = analysis.targetRole ?: "Android Developer"
             val candidateName = analysis.candidateName ?: sessionManager.getUserName()
-            _state.value = _state.value.copy(
-                targetRole = role,
-                candidateName = candidateName,
-                questions = analysis.interviewQuestions,
-                summary = analysis.interviewSummary,
-                isComplete = analysis.interviewSummary != null,
-                currentNovaExpression = if (analysis.interviewSummary != null) NovaState.ENCOURAGING else NovaState.HAPPY
-            )
-            _userAnswers.value = analysis.userAnswers
+            if (analysis.interviewSummary != null && analysis.interviewQuestions.isNotEmpty()) {
+                _state.value = _state.value.copy(
+                    targetRole = role,
+                    candidateName = candidateName,
+                    questions = analysis.interviewQuestions,
+                    summary = analysis.interviewSummary,
+                    isComplete = true,
+                    currentNovaExpression = NovaState.ENCOURAGING
+                )
+                _userAnswers.value = analysis.userAnswers
+            } else {
+                startInterview(customRole = role, customName = candidateName)
+            }
         } else {
-            refreshContext()
+            startInterview()
         }
     }
 
-    fun startInterview() {
+    fun startInterview(
+        customRole: String? = null,
+        customName: String? = null
+    ) {
         val latest = sessionManager.getLatestAnalysis()
-        val role = latest?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
-        val candidateName = latest?.candidateName ?: sessionManager.getUserName()
+        val role = customRole ?: latest?.targetRole ?: sessionManager.getTargetRole() ?: "Android Developer"
+        val candidateName = customName ?: latest?.candidateName ?: sessionManager.getUserName()
 
         // Clean start for character-led interview
         _userAnswers.value = emptyMap()
@@ -2335,53 +2344,15 @@ class InterviewViewModel(
             targetRole = role,
             candidateName = candidateName,
             isLoading = true,
-            currentNovaExpression = NovaState.HAPPY
+            currentNovaExpression = NovaState.HAPPY,
+            isIntroFinished = false
         )
 
         viewModelScope.launch {
             try {
-                val jd = latest?.jdText
-                val questions = if (latest != null) {
-                    geminiService.generateInterviewQuestions(role, latest, jd)
-                } else {
-                    emptyList()
-                }
-
-                val finalQuestions = if (questions.isNotEmpty()) {
-                    questions.take(5)
-                } else {
-                    // Fallback questions if offline or no resume
-                    listOf(
-                        InterviewQuestion(
-                            text = "To start our discussion, could you introduce yourself and tell me about your background with $role?",
-                            type = InterviewQuestionType.TECHNICAL,
-                            category = "Introduction & Overview"
-                        ),
-                        InterviewQuestion(
-                            text = "Could you walk me through a challenging technical problem you solved recently and your approach to debugging it?",
-                            type = InterviewQuestionType.PROBLEM_SOLVING,
-                            category = "Problem Solving"
-                        ),
-                        InterviewQuestion(
-                            text = "How do you ensure high performance, scalability, and clean architecture in your code?",
-                            type = InterviewQuestionType.TECHNICAL,
-                            category = "Architecture & Quality"
-                        ),
-                        InterviewQuestion(
-                            text = "Can you share a time when project requirements changed rapidly and how you adapted to deliver on time?",
-                            type = InterviewQuestionType.BEHAVIORAL,
-                            category = "Adaptability & Delivery"
-                        ),
-                        InterviewQuestion(
-                            text = "What engineering practices or technologies are you most excited to learn or deepen your expertise in next?",
-                            type = InterviewQuestionType.TECHNICAL,
-                            category = "Growth & Vision"
-                        )
-                    )
-                }
-
+                val questions = interviewService.generateInterviewQuestions(role, latest)
                 _state.value = _state.value.copy(
-                    questions = finalQuestions,
+                    questions = questions,
                     currentQuestionIndex = 0,
                     isLoading = false,
                     currentNovaExpression = NovaState.HAPPY,
@@ -2389,9 +2360,13 @@ class InterviewViewModel(
                 )
             } catch (e: Exception) {
                 Log.e("InterviewViewModel", "Failed to generate questions", e)
+                val fallbackQ = interviewService.generateFirstQuestion(role, latest)
                 _state.value = _state.value.copy(
+                    questions = listOf(fallbackQ),
+                    currentQuestionIndex = 0,
                     isLoading = false,
-                    errorMessage = "Failed to generate questions: ${e.localizedMessage}"
+                    currentNovaExpression = NovaState.HAPPY,
+                    lastNovaFeedback = null
                 )
             }
         }
@@ -2426,33 +2401,33 @@ class InterviewViewModel(
         viewModelScope.launch {
             try {
                 if (currentIdx < _state.value.questions.size - 1) {
-                    // Evaluate response using Gemini adaptive engine
+                    // Evaluate response using InterviewService / Gemini adaptive engine
                     val adaptive = try {
-                        geminiService.evaluateAnswerAndGenerateAdaptiveQuestion(
+                        interviewService.evaluateAnswer(
                             targetRole = _state.value.targetRole,
-                            resumeData = latest,
+                            candidateProfile = latest,
                             questionNumber = currentIdx + 1,
                             currentQuestion = question,
                             candidateAnswer = answer,
                             conversationHistory = _exchanges.value
                         )
                     } catch (e: Exception) {
-                        Log.w("InterviewViewModel", "Adaptive call fallback: ${e.message}")
+                        Log.w("InterviewViewModel", "Adaptive evaluation fallback: ${e.message}")
                         null
                     }
 
-                    // Dynamically map Nova's expression to answer quality & personality
+                    // Dynamically map Nova's expression to answer quality & feedback
                     val newExpression = when {
                         adaptive?.evaluation?.strengths?.isNotEmpty() == true -> {
-                            if (currentIdx % 2 == 0) NovaState.EXCITED else NovaState.ENCOURAGING
+                            if ((adaptive.evaluation.strengths?.size ?: 0) >= 2) NovaState.EXCITED else NovaState.ENCOURAGING
                         }
-                        adaptive?.nextQuestion?.isFollowUp == true -> NovaState.WINKING
-                        answer.length > 220 -> NovaState.ENCOURAGING
+                        adaptive?.nextQuestion?.isFollowUp == true -> NovaState.SURPRISED
+                        adaptive?.evaluation?.weaknesses?.isNotEmpty() == true -> NovaState.ENCOURAGING
                         else -> NovaState.HAPPY
                     }
 
                     val spokenFeedback = adaptive?.interviewerSpokenResponse?.ifBlank { null }
-                        ?: "Thanks for that response! Let's explore the next question."
+                        ?: "Thank you for that answer! Let's move on to the next question."
 
                     // Record exchange
                     val newExchange = InterviewExchange(
@@ -2470,7 +2445,7 @@ class InterviewViewModel(
 
                     // If adaptive provided a relevant follow-up question, adapt the next question
                     val updatedQuestions = _state.value.questions.toMutableList()
-                    if (adaptive?.nextQuestion != null && adaptive.nextQuestion.isFollowUp) {
+                    if (adaptive?.nextQuestion != null && adaptive.nextQuestion.text.isNotBlank()) {
                         updatedQuestions[currentIdx + 1] = adaptive.nextQuestion
                     }
 
@@ -2483,7 +2458,13 @@ class InterviewViewModel(
                         isEvaluating = false
                     )
                 } else {
-                    // Final question reached -> generate comprehensive performance summary
+                    // Final question reached -> record last exchange and generate comprehensive performance summary
+                    val newExchange = InterviewExchange(
+                        question = question,
+                        answer = answer,
+                        evaluation = null
+                    )
+                    _exchanges.value = _exchanges.value + newExchange
                     generateFinalReport()
                 }
             } catch (e: Exception) {
@@ -2501,7 +2482,7 @@ class InterviewViewModel(
     }
 
     private fun generateFinalReport() {
-        val latest = sessionManager.getLatestAnalysis() ?: return
+        val latest = sessionManager.getLatestAnalysis()
         _state.value = _state.value.copy(
             isLoading = true,
             isEvaluating = true,
@@ -2510,20 +2491,22 @@ class InterviewViewModel(
 
         viewModelScope.launch {
             try {
-                val summary = geminiService.generateFinalInterviewReport(
+                val summary = interviewService.generateFinalReport(
                     questions = _state.value.questions,
                     answers = _userAnswers.value,
                     targetRole = _state.value.targetRole,
-                    resumeData = latest
+                    candidateProfile = latest
                 )
 
-                // Update persistent analysis result with the snapshot
-                val updatedAnalysis = latest.copy(
-                    interviewQuestions = _state.value.questions,
-                    userAnswers = _userAnswers.value,
-                    interviewSummary = summary
-                )
-                sessionManager.saveLatestAnalysis(updatedAnalysis)
+                // Update persistent analysis result with the snapshot if analysis exists
+                if (latest != null) {
+                    val updatedAnalysis = latest.copy(
+                        interviewQuestions = _state.value.questions,
+                        userAnswers = _userAnswers.value,
+                        interviewSummary = summary
+                    )
+                    sessionManager.saveLatestAnalysis(updatedAnalysis)
+                }
 
                 _state.value = _state.value.copy(
                     isComplete = true,

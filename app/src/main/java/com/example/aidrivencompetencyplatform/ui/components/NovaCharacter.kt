@@ -18,15 +18,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.aidrivencompetencyplatform.model.NovaState
 
-// Official Nova Color Palette (Duolingo-inspired flat illustration style)
-val NovaTealPrimary = Color(0xFF2EBD85)
-val NovaTealDark = Color(0xFF239E6D)
-val NovaTealLight = Color(0xFF5CE1A6)
-val NovaDarkVisor = Color(0xFF192A24)
-val NovaWhiteShell = Color(0xFFF6FAF7)
-val NovaBodyCream = Color(0xFFEDF5F0)
-val NovaMintGlow = Color(0xFF4EE8A2)
-val NovaGroundShadow = Color(0xFFD3E4DB)
+// Official Nova Color Palette - Dark Forest Green Theme matching the NoviQ App
+val NovaTealPrimary = Color(0xFF2C4A3E)  // Dark green matching app Primary
+val NovaTealDark = Color(0xFF1E352B)     // Deeper dark forest green matching PrimaryDark
+val NovaTealLight = Color(0xFF568367)    // Sage green accent matching Accent
+val NovaDarkVisor = Color(0xFF14241C)    // Dark screen visor
+val NovaWhiteShell = Color(0xFFF7FAF8)   // Clean crisp shell
+val NovaBodyCream = Color(0xFFE8F2EC)    // Soft sage body cream
+val NovaMintGlow = Color(0xFF5FAF87)     // Medium sage glowing face elements
+val NovaGroundShadow = Color(0xFFCEDBD2) // Subtle sage ground shadow
 
 /**
  * Standalone Nova Character Component
@@ -45,7 +45,8 @@ val NovaGroundShadow = Color(0xFFD3E4DB)
 fun NovaCharacter(
     modifier: Modifier = Modifier,
     size: Dp = 190.dp,
-    state: NovaState = NovaState.HAPPY
+    state: NovaState = NovaState.HAPPY,
+    isSpeaking: Boolean = false
 ) {
     // Subtle idle floating / breathing animation
     val infiniteTransition = rememberInfiniteTransition(label = "NovaBreathing")
@@ -103,7 +104,7 @@ fun NovaCharacter(
         label = "ListeningPulse"
     )
 
-    val currentScale = if (state == NovaState.SPEAKING) speakingBounce else 1f
+    val currentScale = if (state == NovaState.SPEAKING || isSpeaking) speakingBounce else 1f
 
     Box(
         modifier = modifier

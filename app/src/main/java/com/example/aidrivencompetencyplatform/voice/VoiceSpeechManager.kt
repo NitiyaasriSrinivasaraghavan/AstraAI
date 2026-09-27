@@ -57,6 +57,10 @@ class VoiceSpeechManager(private val context: Context) {
     val currentUtteranceId: StateFlow<String?> = _currentUtteranceId.asStateFlow()
     private val utteranceCallbacks = mutableMapOf<String, () -> Unit>()
 
+    private var pendingSpeakText: String? = null
+    private var pendingUtteranceId: String? = null
+    private var pendingOnDone: (() -> Unit)? = null
+
     init {
         initTts()
     }
@@ -74,6 +78,19 @@ class VoiceSpeechManager(private val context: Context) {
                     textToSpeech?.setPitch(1.08f)
                     isTtsInitialized = true
                     setupTtsListener()
+
+                    // Flush any pending utterance queued before asynchronous TTS initialization completed
+                    val pendingText = pendingSpeakText
+                    val pendingId = pendingUtteranceId ?: UUID.randomUUID().toString()
+                    val pendingDone = pendingOnDone
+                    pendingSpeakText = null
+                    pendingUtteranceId = null
+                    pendingOnDone = null
+                    if (!pendingText.isNullOrBlank()) {
+                        mainHandler.post {
+                            speak(pendingText, pendingId, pendingDone)
+                        }
+                    }
                 } else {
                     isTtsInitialized = false
                     Log.w("VoiceSpeechManager", "TTS initialization returned status: $status")
@@ -360,7 +377,11 @@ class VoiceSpeechManager(private val context: Context) {
         }
 
         if (!isTtsInitialized || textToSpeech == null) {
+            pendingSpeakText = text
+            pendingUtteranceId = utteranceId
+            pendingOnDone = onDone
             initTts()
+            return
         }
 
         val cleanText = text

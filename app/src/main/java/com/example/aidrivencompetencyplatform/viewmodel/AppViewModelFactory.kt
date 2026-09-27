@@ -20,7 +20,7 @@ class AppViewModelFactory(private val app: AstraApp) : ViewModelProvider.Factory
             modelClass.isAssignableFrom(JdMatcherViewModel::class.java) -> 
                 JdMatcherViewModel(app.sessionManager, app.geminiService, app.resumeParser) as T
             modelClass.isAssignableFrom(InterviewViewModel::class.java) -> 
-                InterviewViewModel(app.sessionManager, app.geminiService) as T
+                InterviewViewModel(app.sessionManager, app.geminiService, app.interviewService) as T
             modelClass.isAssignableFrom(TechnicalMcqViewModel::class.java) -> 
                 TechnicalMcqViewModel(app.sessionManager, app.geminiService) as T
             else -> throw IllegalArgumentException("Unknown ViewModel class")

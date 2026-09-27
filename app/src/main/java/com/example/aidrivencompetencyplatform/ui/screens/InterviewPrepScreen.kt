@@ -78,12 +78,18 @@ fun InterviewPrepScreen(
     var showKeyboardFallbackDialog by remember { mutableStateOf(false) }
     var typedAnswerText by remember { mutableStateOf("") }
 
-    // Derive active character expression: priority to listening/speaking/thinking states, else ViewModel expression
-    val activeNovaState = remember(isListening, isSpeaking, state.isEvaluating, state.currentNovaExpression) {
+    // Auto-initialize interview if screen is opened with empty questions
+    LaunchedEffect(state.questions.isEmpty(), state.isLoading, state.isComplete) {
+        if (state.questions.isEmpty() && !state.isLoading && !state.isComplete) {
+            viewModel.startInterview()
+        }
+    }
+
+    // Derive active character expression: priority to listening/thinking states, else ViewModel expression
+    val activeNovaState = remember(isListening, state.isEvaluating, state.currentNovaExpression) {
         when {
             state.isEvaluating -> NovaState.THINKING
             isListening -> NovaState.LISTENING
-            isSpeaking -> NovaState.SPEAKING
             else -> state.currentNovaExpression
         }
     }
@@ -99,6 +105,8 @@ fun InterviewPrepScreen(
         if (!state.isLoading && state.questions.isNotEmpty() && !state.isComplete) {
             val q = state.questions.getOrNull(state.currentQuestionIndex)
             if (q != null) {
+                userSpokenText = ""
+                typedAnswerText = ""
                 interviewPhase = InterviewVoicePhase.NOVA_SPEAKING
                 val isFirstQuestion = state.currentQuestionIndex == 0 && !state.isIntroFinished
 
@@ -344,6 +352,7 @@ fun InterviewPrepScreen(
                         NovaCharacter(
                             size = 195.dp,
                             state = activeNovaState,
+                            isSpeaking = isSpeaking,
                             modifier = Modifier.clickable {
                                 // Tapping Nova replays the question or greeting
                                 replayCurrentQuestion()
