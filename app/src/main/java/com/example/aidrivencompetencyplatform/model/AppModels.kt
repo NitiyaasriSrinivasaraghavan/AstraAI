@@ -26,6 +26,7 @@ data class ResumeAnalysisResult(
     val summary: String? = "",
     val education: List<String>? = emptyList(),
     val experience: List<String>? = emptyList(),
+    val internships: List<String>? = emptyList(),
     val strengths: List<String>? = emptyList(),
     val weaknesses: List<String>? = emptyList(),
     val atsBreakdown: AtsBreakdown? = AtsBreakdown(),
@@ -56,6 +57,7 @@ data class ResumeAnalysisResult(
 enum class SectionType {
     SUMMARY,
     WORK_EXPERIENCE,
+    INTERNSHIPS,
     EDUCATION,
     SKILLS,
     PROJECTS,

@@ -34,9 +34,14 @@ class GeminiService {
         }
     }
 
-    // Prioritized model cascade with confirmed high-performance and available endpoints
+    companion object {
+        const val TTS_MODEL = "gemini-3.8-flash-tts"
+        const val DEFAULT_MODEL = "gemini-3.6-flash"
+    }
+
+    // Prioritized model cascade with gemini-3.6-flash as the primary engine for ATS, Skill Gap, JD Matcher, and MCQ generation
     private val modelCascade = listOf(
-        "gemini-3.6-flash"
+        DEFAULT_MODEL
     )
 
     private val client = createOkHttpClient()
@@ -164,6 +169,7 @@ class GeminiService {
               "strengths": ["string"],
               "weaknesses": ["string"],
               "education": ["string"],
+              "internships": ["string"],
               "experience": ["string"],
               "atsBreakdown": {
                 "keywordCoverage": 0,
@@ -483,6 +489,7 @@ class GeminiService {
 
         val rawEducation = getSafeStringList(root, "education")
         val rawExperience = getSafeStringList(root, "experience")
+        val rawInternships = getSafeStringList(root, "internships")
 
         // Cross-contamination filter for experience
         val cleanedExperience = rawExperience.filter { exp ->
@@ -513,6 +520,7 @@ class GeminiService {
             summary = summary,
             education = rawEducation,
             experience = cleanedExperience,
+            internships = rawInternships,
             strengths = strengths,
             weaknesses = weaknesses,
             atsBreakdown = atsBreakdown,
@@ -598,7 +606,7 @@ class GeminiService {
         val candidateProjects = resumeData.projectAnalysis?.map { it.name } ?: emptyList()
 
         val prompt = """
-            You are an expert technical interviewer for NoviQ. Generate 5 personalized interview questions for a candidate.
+            You are an expert technical interviewer for NoviQ. Generate 8-10 diverse interview questions for a candidate applying for the role of '$targetRole'.
             
             CONTEXT:
             - Target Role: $targetRole
@@ -607,23 +615,30 @@ class GeminiService {
             - Resume Projects: ${candidateProjects.joinToString(", ")}
             - Job Description: ${jobDescription ?: "Not provided"}
             
-            QUESTION TYPES TO COVER:
-            1. TECHNICAL: Based on skills and JD requirements.
-            2. BEHAVIORAL: Based on experience and soft skills.
-            3. PROJECT_BASED: Based on specific projects in the resume.
-            4. SITUATIONAL: "What would you do if..." scenarios related to the role.
+            MANDATORY CATEGORY DISTRIBUTION & VARIETY (10 Categories):
+            1. Introduction / Background
+            2. Resume-based
+            3. Project-based (STRICTLY MAX 1 project question)
+            4. Technical Knowledge
+            5. Role-Specific Technical (At least 2 questions specifically tailored to $targetRole core stack, e.g. Android architecture/Compose for Android, SQL/dashboards for Data Analyst, APIs/databases for Backend Developer)
+            6. Scenario-based (Debugging, performance bottlenecks, production issues, trade-offs)
+            7. Problem-solving
+            8. Behavioral
+            9. Situational
+            10. Follow-up / Deep dive
             
             RULES:
-            - Ground questions in actual resume content. Do not invent experience.
+            - Ground questions in actual resume content and role requirements. Do NOT repeat questions or topics.
+            - Ensure high diversity across categories, topics, and wording.
             - Provide professional model guidance on what a strong answer should cover.
-            - Return ONLY valid JSON.
+            - Return ONLY valid JSON array of objects.
             
             JSON OUTPUT SCHEMA (MUST BE A RAW ARRAY OF OBJECTS):
             [
               {
                 "text": "string (the question text)",
-                "type": "TECHNICAL | BEHAVIORAL | PROJECT_BASED | SITUATIONAL",
-                "category": "string (e.g. Kotlin, Soft Skills, System Design)",
+                "type": "TECHNICAL | BEHAVIORAL | PROJECT_BASED | SITUATIONAL | INTRO | SCENARIO",
+                "category": "string (e.g. Role-Specific Technical, Scenario-based, Technical Knowledge)",
                 "modelGuidance": "string (professional tips for answering)"
               }
             ]
@@ -1598,7 +1613,7 @@ class GeminiService {
 
     /**
      * Executes the Gemini request across the model cascade with retry and exponential backoff.
-     * Prevents key exposure in logs by passing the key in HTTP headers.
+     * Automatically falls back to independent model quotas if rate-limited or temporarily unavailable (HTTP 429 / 503).
      */
     private suspend fun executeWithFallbackAndRetry(promptText: String, isJson: Boolean): String? {
         var lastException: Exception? = null
@@ -1615,13 +1630,21 @@ class GeminiService {
                     lastException = e
                     val errorMsg = e.message ?: ""
                     Log.w("GeminiService", "Attempt $attempt on model $model failed: $errorMsg")
-                    
-                    if (errorMsg.contains("503") || errorMsg.contains("429") || errorMsg.contains("unavailable", ignoreCase = true)) {
+
+                    if (errorMsg.contains("429") || errorMsg.contains("quota", ignoreCase = true) || errorMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true)) {
                         if (attempt < maxAttempts) {
                             delay(400L * attempt)
+                        } else {
+                            break // Cascade to next model immediately
                         }
-                    } else if (errorMsg.contains("404") || errorMsg.contains("400")) {
-                        break
+                    } else if (errorMsg.contains("503") || errorMsg.contains("502") || errorMsg.contains("504") || errorMsg.contains("unavailable", ignoreCase = true) || errorMsg.contains("demand", ignoreCase = true)) {
+                        if (attempt < maxAttempts) {
+                            delay(350L * attempt)
+                        } else {
+                            break // Cascade to next model immediately
+                        }
+                    } else if (errorMsg.contains("404") || errorMsg.contains("400") || errorMsg.contains("Unauthenticated")) {
+                        break // Move immediately to next model in cascade
                     }
                 }
             }
@@ -1633,31 +1656,31 @@ class GeminiService {
     private fun callGeminiApi(model: String, promptText: String, isJson: Boolean): String? {
         // Use v1beta endpoint for Gemini Developer API generateContent
         val apiVersion = "v1beta"
-        val url = "https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent"
+        val trimmedKey = apiKey.trim()
+        val url = if (trimmedKey.isNotEmpty()) {
+            "https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$trimmedKey"
+        } else {
+            "https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent"
+        }
 
         val requestBodyMap = mutableMapOf<String, Any>(
             "contents" to listOf(mapOf("parts" to listOf(mapOf("text" to promptText))))
         )
         val genConfig = mutableMapOf<String, Any>(
             "maxOutputTokens" to 8192,
-            "temperature" to 0.1,
-            "thinkingConfig" to mapOf(
-                "thinkingLevel" to "LOW"
-            )
+            "temperature" to 0.0 // Deterministic sampling
         )
         if (isJson) {
-            genConfig["response_mime_type"] = "application/json"
+            genConfig["responseMimeType"] = "application/json"
         }
         requestBodyMap["generationConfig"] = genConfig
 
         val requestBody = gson.toJson(requestBodyMap).toRequestBody(jsonMediaType)
         
-        // Build request using the official header-based authentication style.
-        // Using .header() ensures that any previous value is replaced.
-        // We explicitly trim the key to prevent hidden whitespace from causing 401 errors.
+        // Build request using header-based and URL-based authentication for maximum reliability
         val request = Request.Builder()
             .url(url)
-            .header("x-goog-api-key", apiKey.trim()) 
+            .header("x-goog-api-key", trimmedKey) 
             .header("Content-Type", "application/json")
             .removeHeader("Authorization") // Prevent 401 UNAUTHENTICATED: ACCESS_TOKEN_TYPE_UNSUPPORTED
             .post(requestBody)
@@ -1672,13 +1695,13 @@ class GeminiService {
                     
                     // Specific handling for common Gemini error codes
                     val errorMsg = when (code) {
-                        400 -> "Bad Request (400): Invalid request parameter. Model: $model. Body: $responseBody"
-                        401 -> "Unauthenticated (401): Request had invalid authentication credentials. Expected API key in x-goog-api-key header or key query parameter. Body: $responseBody"
-                        403 -> "Permission Denied (403): Your API key might be restricted or the Generative Language API is not enabled. Body: $responseBody"
-                        404 -> "Model not found (404): Model '$model' is unavailable or the endpoint is incorrect."
-                        429 -> "Rate limit (429): Quota exceeded. Retrying shortly."
-                        500, 502, 503, 504 -> "Server error ($code): Gemini service temporarily unavailable."
-                        else -> "API Error (HTTP $code). Body: $responseBody"
+                        400 -> "Bad Request (400): Invalid request parameter for model $model."
+                        401 -> "Unauthenticated (401): Request had invalid authentication credentials."
+                        403 -> "Permission Denied (403): Your API key might be restricted or the Generative Language API is not enabled."
+                        404 -> "Model not found (404): Model '$model' is unavailable."
+                        429 -> "Rate limit (429): Quota temporarily reached on $model."
+                        500, 502, 503, 504 -> "Server status ($code): Model $model is experiencing high demand."
+                        else -> "API Error (HTTP $code) on model $model."
                     }
                     throw Exception(errorMsg)
                 }
@@ -1765,8 +1788,151 @@ class GeminiService {
         return repaired
     }
 
+    /**
+     * Calls the free gemini-3.8-flash-tts model with responseMimeType set to audio/mp3
+     * and system instructions so the model always responds in a cute, high-energy
+     * anime mascot voice using inline tags like [giggle] or [cheer].
+     *
+     * @param prompt The user text or statement to respond to or speak out loud.
+     * @return Raw audio bytes (MP3 format) returned by the Gemini TTS model.
+     */
+    suspend fun generateAnimeMascotTtsAudio(prompt: String): ByteArray? = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            throw Exception("Gemini API Key is missing. Please configure your GEMINI_API_KEY.")
+        }
+
+        val mascotSystemInstruction = """
+            You are a cute, high-energy anime mascot voice companion! Always speak in an enthusiastic, bubbly, cheerful, and adorable anime mascot personality.
+            Naturally incorporate expressive inline emotion and voice inflection tags such as [giggle], [cheer], [gasp], [sigh], [laugh], or [sparkle] into your responses to convey high energy, charm, and excitement.
+        """.trimIndent()
+
+        generateTtsAudio(
+            prompt = prompt,
+            model = TTS_MODEL,
+            systemInstruction = mascotSystemInstruction,
+            responseMimeType = "audio/mp3"
+        )
+    }
+
+    /**
+     * Executes a TTS request against Gemini with the specified model, system instructions,
+     * and responseMimeType set to "audio/mp3".
+     */
+    suspend fun generateTtsAudio(
+        prompt: String,
+        model: String = TTS_MODEL,
+        systemInstruction: String? = null,
+        responseMimeType: String = "audio/mp3"
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        val apiVersion = "v1beta"
+        val trimmedKey = apiKey.trim()
+        val url = if (trimmedKey.isNotEmpty()) {
+            "https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$trimmedKey"
+        } else {
+            "https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent"
+        }
+
+        val requestBodyMap = mutableMapOf<String, Any>(
+            "contents" to listOf(
+                mapOf(
+                    "role" to "user",
+                    "parts" to listOf(mapOf("text" to prompt))
+                )
+            )
+        )
+
+        if (!systemInstruction.isNullOrBlank()) {
+            requestBodyMap["systemInstruction"] = mapOf(
+                "parts" to listOf(
+                    mapOf("text" to systemInstruction)
+                )
+            )
+        }
+
+        val genConfig = mutableMapOf<String, Any>(
+            "responseMimeType" to responseMimeType,
+            "response_mime_type" to responseMimeType
+        )
+        requestBodyMap["generationConfig"] = genConfig
+
+        val requestBody = gson.toJson(requestBodyMap).toRequestBody(jsonMediaType)
+
+        val request = Request.Builder()
+            .url(url)
+            .header("x-goog-api-key", trimmedKey)
+            .header("Content-Type", "application/json")
+            .removeHeader("Authorization")
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+            if (!response.isSuccessful) {
+                val code = response.code
+                Log.e("GeminiService", "Gemini TTS API Error: $code. Body: $responseBody")
+                throw Exception("Gemini TTS API Error (HTTP $code): $responseBody")
+            }
+
+            if (responseBody.isNullOrBlank()) {
+                return@withContext null
+            }
+
+            try {
+                val geminiResponse = gson.fromJson(responseBody, GeminiApiResponse::class.java)
+                val candidate = geminiResponse.candidates?.firstOrNull()
+                val parts = candidate?.content?.parts ?: emptyList()
+
+                for (part in parts) {
+                    val inlineData = part.inlineData ?: part.inline_data
+                    val base64Data = inlineData?.data
+                    if (!base64Data.isNullOrBlank()) {
+                        return@withContext android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("GeminiService", "Failed to deserialize GeminiApiResponse with Gson, trying manual fallback", e)
+            }
+
+            // Fallback manual JSON parsing for inline data bytes
+            try {
+                val rootObj = JsonParser.parseString(responseBody).asJsonObject
+                val candidatesArr = rootObj.getAsJsonArray("candidates")
+                val firstCand = candidatesArr?.firstOrNull()?.asJsonObject
+                val contentObj = firstCand?.getAsJsonObject("content")
+                val partsArr = contentObj?.getAsJsonArray("parts")
+
+                partsArr?.forEach { partElem ->
+                    if (partElem.isJsonObject) {
+                        val pObj = partElem.asJsonObject
+                        val inline = pObj.getAsJsonObject("inlineData") ?: pObj.getAsJsonObject("inline_data")
+                        val data = inline?.get("data")?.asString
+                        if (!data.isNullOrBlank()) {
+                            return@withContext android.util.Base64.decode(data, android.util.Base64.DEFAULT)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GeminiService", "Manual JSON parsing for audio inline data failed", e)
+            }
+
+            null
+        }
+    }
+
     private data class GeminiApiResponse(val candidates: List<Candidate>?)
     private data class Candidate(val content: Content?, val finishReason: String? = null)
     private data class Content(val parts: List<Part>?, val role: String? = null)
-    private data class Part(val text: String?, val thought: Boolean? = null)
+    private data class Part(
+        val text: String? = null,
+        val thought: Boolean? = null,
+        val inlineData: InlineData? = null,
+        @com.google.gson.annotations.SerializedName("inline_data")
+        val inline_data: InlineData? = null
+    )
+    private data class InlineData(
+        val mimeType: String? = null,
+        @com.google.gson.annotations.SerializedName("mime_type")
+        val mime_type: String? = null,
+        val data: String? = null
+    )
 }

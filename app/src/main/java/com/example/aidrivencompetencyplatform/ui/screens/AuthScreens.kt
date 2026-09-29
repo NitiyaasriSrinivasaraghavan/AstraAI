@@ -65,16 +65,16 @@ fun SplashScreen(navController: NavController) {
         launch {
             scale.animateTo(
                 targetValue = 1.0f,
-                animationSpec = spring(dampingRatio = 0.7f, stiffness = 350f)
+                animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f)
             )
         }
         launch {
             alpha.animateTo(
                 targetValue = 1.0f,
-                animationSpec = tween(durationMillis = 400)
+                animationSpec = tween(durationMillis = 200)
             )
         }
-        delay(1200L)
+        delay(300L)
         
         if (sessionManager.isLoggedIn()) {
             navController.navigate(Screen.Dashboard.route) {
@@ -114,6 +114,8 @@ fun LoginScreen(navController: NavController) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val coroutineScope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -217,11 +219,8 @@ fun LoginScreen(navController: NavController) {
                             return@PremiumButton
                         }
 
-                        val user = sessionManager.getUser(trimmedEmail)
-                        if (user == null) {
-                            errorMessage = "No account found with this email. Please sign up."
-                            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
-                        } else if (sessionManager.authenticate(trimmedEmail, password)) {
+                        val localUser = sessionManager.getUser(trimmedEmail)
+                        if (localUser != null && sessionManager.authenticate(trimmedEmail, password)) {
                             errorMessage = null
                             sessionManager.login(trimmedEmail)
                             Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
@@ -229,8 +228,23 @@ fun LoginScreen(navController: NavController) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         } else {
-                            errorMessage = "Incorrect password. Please try again."
-                            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+                            // Try authenticating with backend (e.g. on fresh app install or multi-device)
+                            coroutineScope.launch {
+                                val success = sessionManager.authenticateWithBackend(trimmedEmail, password)
+                                if (success) {
+                                    errorMessage = null
+                                    Toast.makeText(context, "Login successful.", Toast.LENGTH_SHORT).show()
+                                    navController.navigate(Screen.Dashboard.route) {
+                                        popUpTo(Screen.Login.route) { inclusive = true }
+                                    }
+                                } else if (localUser == null) {
+                                    errorMessage = "No account found with this email. Please sign up."
+                                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                                } else {
+                                    errorMessage = "Incorrect password. Please try again."
+                                    Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     }
                 )

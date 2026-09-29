@@ -104,8 +104,9 @@ class InterviewService(
                     resumeData = candidateProfile,
                     jobDescription = jd
                 )
-                if (questions.isNotEmpty()) {
-                    return@withContext questions.take(5)
+                val sanitized = sanitizeAndDeduplicateQuestions(questions)
+                if (sanitized.isNotEmpty()) {
+                    return@withContext sanitized.take(8)
                 }
             }
         } catch (e: Exception) {
@@ -118,7 +119,7 @@ class InterviewService(
         val education = candidateProfile?.education ?: emptyList()
         val certifications = candidateProfile?.certifications ?: emptyList()
 
-        (1..5).map { idx ->
+        val fallbacks = (1..6).map { idx ->
             createGroundedFallbackQuestion(
                 targetRole = targetRole,
                 skills = skills,
@@ -129,6 +130,40 @@ class InterviewService(
                 questionIndex = idx
             )
         }
+        return@withContext sanitizeAndDeduplicateQuestions(fallbacks)
+    }
+
+    private fun sanitizeAndDeduplicateQuestions(questions: List<InterviewQuestion>): List<InterviewQuestion> {
+        val unique = mutableListOf<InterviewQuestion>()
+        val seenTexts = mutableSetOf<String>()
+        var projectCount = 0
+
+        for (q in questions) {
+            val normalized = q.text.lowercase().replace(Regex("[^a-z0-9]"), "")
+            val isDuplicate = seenTexts.any { seen ->
+                similarityScore(seen, normalized) > 0.65 || seen.contains(normalized) || normalized.contains(seen)
+            }
+
+            val isProjectQ = q.category.contains("project", ignoreCase = true) || q.type == InterviewQuestionType.PROJECT_BASED || q.text.lowercase().contains("project")
+            if (isProjectQ) {
+                projectCount++
+                if (projectCount > 1) continue // Limit project questions to at most 1
+            }
+
+            if (!isDuplicate && normalized.length > 10) {
+                seenTexts.add(normalized)
+                unique.add(q)
+            }
+        }
+        return unique.take(8)
+    }
+
+    private fun similarityScore(a: String, b: String): Double {
+        val setA = a.chunked(3).toSet()
+        val setB = b.chunked(3).toSet()
+        val intersection = setA.intersect(setB).size.toDouble()
+        val union = setA.union(setB).size.toDouble()
+        return if (union == 0.0) 0.0 else intersection / union
     }
 
     suspend fun evaluateAnswer(

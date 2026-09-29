@@ -219,7 +219,7 @@ class AtsScoringEngine {
         
         val contactDetected = (details?.contactDetected == true) || !candidateEmail.isNullOrBlank() || !candidateName.isNullOrBlank()
         val summaryDetected = !missingFromAi.any { it.contains("summary") || it.contains("objective") } && !result.summary.isNullOrBlank()
-        val experienceDetected = (details?.experienceDetected == true) || !(result.experience.isNullOrEmpty())
+        val experienceDetected = (details?.experienceDetected == true) || !(result.experience.isNullOrEmpty()) || !(result.internships.isNullOrEmpty())
         val skillsDetected = (details?.skillsDetected == true) || !(result.extractedSkills.isNullOrEmpty())
         val educationDetected = (details?.educationDetected == true) || !(result.education.isNullOrEmpty())
         val projectsDetected = (details?.projectsDetected == true) || !(result.projectAnalysis.isNullOrEmpty())

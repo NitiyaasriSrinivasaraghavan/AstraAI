@@ -1305,6 +1305,12 @@ class ResumeViewModel(
     fun analyzeResume(targetRole: String) {
         Log.d(TAG, "ANALYZE_BUTTON_CLICKED: TargetRole: $targetRole")
         
+        // Prevent duplicate simultaneous analysis requests
+        if (_isLoading.value) {
+            Log.d(TAG, "ANALYZE_REQUEST_IGNORED: Analysis already in progress.")
+            return
+        }
+
         val effectiveRole = if (targetRole.isNotBlank()) targetRole else "Android Developer"
         
         if (selectedUri == null && sampleResumeText == null) {
@@ -1414,7 +1420,6 @@ class ResumeViewModel(
                 }
 
                 // Merge deterministic structure with AI results, prioritizing valid details
-                // If Gemini succeeded (did not return synthesize result), we trust its classification of empty lists.
                 val isSynthesized = aiResult.summary == "Synthesized Analysis" // Heuristic for fallback
 
                 fun sanitizeCandidate(value: String?, isNameField: Boolean = false): String? {
@@ -1506,23 +1511,55 @@ class ResumeViewModel(
                     emptyList()
                 }
 
-                // Work Experience: strict isolation (only genuine employment/internships)
+                // Work Experience: strict isolation (employment records)
                 val effectiveExperience = if (!aiResult.experience.isNullOrEmpty() && !isSynthesized) {
-                    aiResult.experience
+                    val combined = mutableListOf<String>()
+                    combined.addAll(aiResult.experience)
+                    structure.experience.forEach { detExp ->
+                        if (combined.none { it.contains(detExp.take(15), ignoreCase = true) }) {
+                            combined.add(detExp)
+                        }
+                    }
+                    combined
                 } else if (structure.experience.isNotEmpty()) {
                     structure.experience
                 } else {
                     emptyList()
                 }
 
-                // Projects: strict isolation (only genuine projects)
+                // Internships: strict isolation as a canonical category
+                val effectiveInternships = if (!aiResult.internships.isNullOrEmpty() && !isSynthesized) {
+                    val combined = mutableListOf<String>()
+                    combined.addAll(aiResult.internships)
+                    structure.internships.forEach { detInt ->
+                        if (combined.none { it.contains(detInt.take(15), ignoreCase = true) }) {
+                            combined.add(detInt)
+                        }
+                    }
+                    combined
+                } else if (structure.internships.isNotEmpty()) {
+                    structure.internships
+                } else {
+                    emptyList()
+                }
+
+                // Projects: strict isolation with deterministic detection guarantee
                 val hasProjectSection = structure.sections.any { it.sectionName.equals("Projects", ignoreCase = true) && it.isFound } ||
+                    structure.projectAnalyses.isNotEmpty() ||
                     structure.extractedProjects.isNotEmpty() ||
-                    Regex("(?i)\\b(?:projects?|academic\\s+projects?|personal\\s+projects?|key\\s+projects?|selected\\s+projects?|project\\s+experience)\\b").containsMatchIn(text)
+                    Regex("(?i)\\b(?:projects?|academic\\s+projects?|personal\\s+projects?|technical\\s+projects?|key\\s+projects?|major\\s+projects?|selected\\s+projects?|relevant\\s+projects?|projects?\\s*&\\s*work|project\\s+experience)\\b").containsMatchIn(text)
 
                 val effectiveProjects = if (hasProjectSection) {
                     if (!aiResult.projectAnalysis.isNullOrEmpty() && !isSynthesized) {
-                        aiResult.projectAnalysis
+                        val resultList = mutableListOf<ProjectAnalysis>()
+                        resultList.addAll(aiResult.projectAnalysis)
+                        // If deterministic parser found specific projects that AI missed, reconcile them deterministically
+                        structure.projectAnalyses.forEach { detProj ->
+                            if (resultList.none { it.name.equals(detProj.name, ignoreCase = true) || it.name.contains(detProj.name, ignoreCase = true) }) {
+                                resultList.add(detProj)
+                            }
+                        }
+                        resultList
                     } else if (structure.projectAnalyses.isNotEmpty()) {
                         structure.projectAnalyses
                     } else if (structure.extractedProjects.isNotEmpty()) {
@@ -1572,6 +1609,7 @@ class ResumeViewModel(
                     summary = effectiveSummary,
                     education = effectiveEducation,
                     experience = effectiveExperience,
+                    internships = effectiveInternships,
                     extractedSkills = effectiveSkills,
                     projectAnalysis = effectiveProjects,
                     rawResumeText = text,
@@ -1695,6 +1733,7 @@ class ResumeViewModel(
             extractedSkills = skillsList,
             education = structure.education,
             experience = structure.experience,
+            internships = structure.internships,
             certifications = structure.certifications,
             projectAnalysis = projectsList
         )
@@ -1740,6 +1779,7 @@ class ResumeViewModel(
             candidateLocation = candidateInfo.location,
             education = structure.education,
             experience = structure.experience,
+            internships = structure.internships,
             extractedSkills = skillsList,
             certifications = structure.certifications,
             projectAnalysis = projectsList,

@@ -2,13 +2,21 @@ package com.example.aidrivencompetencyplatform.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.example.aidrivencompetencyplatform.model.User
 import com.example.aidrivencompetencyplatform.model.ResumeAnalysisResult
 import com.example.aidrivencompetencyplatform.model.AnalysisHistoryRecord
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
-class SessionManager(context: Context) {
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
+class SessionManager(
+    context: Context,
+    val backendRepository: BackendRepository? = null
+) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(
@@ -16,10 +24,35 @@ class SessionManager(context: Context) {
             Context.MODE_PRIVATE
         )
     private val gson = Gson()
+    private val ioScope = CoroutineScope(Dispatchers.IO)
 
     init {
-        // Delete all existing users and their analysis history from the application as requested
-        deleteAllUsersAndHistory()
+        // Sync active user and latest analysis from MongoDB backend if logged in
+        syncWithBackend()
+    }
+
+    /**
+     * Synchronizes the current user's profile and latest resume analysis from the MongoDB backend.
+     */
+    fun syncWithBackend() {
+        val email = getCurrentEmail() ?: return
+        val normalizedEmail = normalizeEmail(email)
+        backendRepository?.let { repo ->
+            ioScope.launch {
+                try {
+                    val user = repo.fetchUserProfile(normalizedEmail)
+                    if (user != null) {
+                        saveUserLocally(user)
+                    }
+                    val remoteLatest = repo.fetchLatestAnalysis(normalizedEmail)
+                    if (remoteLatest != null) {
+                        saveLatestAnalysisLocally(remoteLatest)
+                    }
+                } catch (e: Exception) {
+                    // Fallback to local offline cache
+                }
+            }
+        }
     }
 
     fun deleteAllUsersAndHistory() {
@@ -40,15 +73,50 @@ class SessionManager(context: Context) {
         val email = getCurrentEmail() ?: return
         val normalizedEmail = normalizeEmail(email)
         
-        // Runtime safety: if Gson bypassed Kotlin non-nullability, fix it now.
-        // Also ensures that if multiple objects have the same or empty ID, they get a fresh one.
         val existingId = (result as? ResumeAnalysisResult)?.id 
         val analysisId = if (existingId.isNullOrBlank()) java.util.UUID.randomUUID().toString() else existingId
         
         val fixedResult = result.copy(id = analysisId)
         val json = gson.toJson(fixedResult)
         
-        // Use target role from analysis record or fallback to user's current role
+        val role = fixedResult.targetRole ?: getTargetRole(normalizedEmail) ?: "Android Developer"
+        val topSkills = (fixedResult.extractedSkills ?: emptyList()).map { it.name }.take(4)
+        val historyRecord = AnalysisHistoryRecord(
+            id = analysisId,
+            targetRole = role,
+            atsScore = fixedResult.atsScore,
+            skillMatch = fixedResult.skillMatch,
+            candidateName = fixedResult.candidateName ?: getUserName(normalizedEmail),
+            fileName = fileName ?: "Resume.pdf",
+            topSkills = topSkills,
+            fullResult = fixedResult
+        )
+        addAnalysisHistoryRecord(historyRecord, normalizedEmail)
+
+        prefs.edit()
+            .putString(KEY_ANALYSIS_RECORD_PREFIX + analysisId, json)
+            .putString(KEY_LATEST_ANALYSIS + normalizedEmail, json)
+            .apply()
+
+        // Sync with MongoDB backend
+        backendRepository?.let { repo ->
+            ioScope.launch {
+                try {
+                    repo.saveResumeAnalysis(normalizedEmail, fixedResult, fileName)
+                } catch (e: Exception) {
+                    Log.d("SessionManager", "Backend sync deferred: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun saveLatestAnalysisLocally(result: ResumeAnalysisResult, fileName: String? = null) {
+        val email = getCurrentEmail() ?: result.candidateEmail ?: return
+        val normalizedEmail = normalizeEmail(email)
+        val analysisId = result.id.ifBlank { java.util.UUID.randomUUID().toString() }
+        val fixedResult = result.copy(id = analysisId)
+        val json = gson.toJson(fixedResult)
+        
         val role = fixedResult.targetRole ?: getTargetRole(normalizedEmail) ?: "Android Developer"
         val topSkills = (fixedResult.extractedSkills ?: emptyList()).map { it.name }.take(4)
         val historyRecord = AnalysisHistoryRecord(
@@ -81,7 +149,6 @@ class SessionManager(context: Context) {
         val json = gson.toJson(result)
         val editor = prefs.edit().putString(KEY_ANALYSIS_RECORD_PREFIX + analysisId, json)
 
-        // Update in analysis history list if present
         val currentHistory = getAnalysisHistory(normalizedEmail).toMutableList()
         val index = currentHistory.indexOfFirst { it.id == analysisId }
         if (index != -1) {
@@ -105,13 +172,23 @@ class SessionManager(context: Context) {
             editor.putString(KEY_ANALYSIS_HISTORY + normalizedEmail, gson.toJson(currentHistory.distinctBy { it.id }.take(15)))
         }
 
-        // If this analysis is also the latest analysis, update latest as well
         val latest = getLatestAnalysis(normalizedEmail)
         if (latest?.id == analysisId) {
             editor.putString(KEY_LATEST_ANALYSIS + normalizedEmail, json)
         }
 
         editor.apply()
+
+        // Sync with MongoDB backend
+        backendRepository?.let { repo ->
+            ioScope.launch {
+                try {
+                    repo.saveResumeAnalysis(normalizedEmail, result, "Resume.pdf")
+                } catch (e: Exception) {
+                    Log.d("SessionManager", "Backend sync deferred: ${e.message}")
+                }
+            }
+        }
     }
 
     fun getAnalysisHistory(specificEmail: String? = null): List<AnalysisHistoryRecord> {
@@ -262,14 +339,33 @@ class SessionManager(context: Context) {
      */
     fun register(user: User): Boolean {
         val normalizedEmail = normalizeEmail(user.email)
-        if (getUser(normalizedEmail) != null) return false
+        // Remove all existing users from the app when creating a new account as requested
+        deleteAllUsersAndHistory()
+        
         saveUser(user)
+        login(normalizedEmail, isNewUser = true)
+        
+        // Sync with MongoDB backend synchronously to guarantee visibility in the database
+        backendRepository?.let { repo ->
+            try {
+                kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                    val success = repo.registerUser(user)
+                    Log.d("SessionManager", "Backend MongoDB registration success: $success for ${user.email}")
+                }
+            } catch (e: Exception) {
+                Log.e("SessionManager", "Backend registration sync exception: ${e.message}")
+            }
+        }
         return true
     }
 
     /**
      * Internal method to save or overwrite user data synchronously.
      */
+    fun saveUserLocally(user: User) {
+        saveUser(user)
+    }
+
     private fun saveUser(user: User) {
         val normalizedEmail = normalizeEmail(user.email)
         val userJson = gson.toJson(user)
@@ -294,11 +390,40 @@ class SessionManager(context: Context) {
     }
 
     /**
-     * Validates credentials against stored data.
+     * Validates credentials against stored data, or attempts authentication with MongoDB backend.
      */
     fun authenticate(email: String, password: String): Boolean {
-        val user = getUser(email) ?: return false
-        return user.password == password
+        val user = getUser(email)
+        if (user != null) {
+            return user.password == password
+        }
+        return false
+    }
+
+    /**
+     * Asynchronous login against backend or local cache, restoring profile and resume analysis.
+     */
+    suspend fun authenticateWithBackend(email: String, password: String): Boolean {
+        val normalizedEmail = normalizeEmail(email)
+        val localUser = getUser(normalizedEmail)
+        if (localUser != null && localUser.password == password) {
+            login(normalizedEmail)
+            return true
+        }
+
+        // Try backend login
+        if (backendRepository != null) {
+            val (remoteUser, remoteAnalysis) = backendRepository.loginUser(normalizedEmail, password)
+            if (remoteUser != null) {
+                saveUser(remoteUser.copy(password = password))
+                if (remoteAnalysis != null) {
+                    saveLatestAnalysisLocally(remoteAnalysis)
+                }
+                login(normalizedEmail)
+                return true
+            }
+        }
+        return false
     }
 
     /**
@@ -316,6 +441,9 @@ class SessionManager(context: Context) {
             .putBoolean(KEY_IS_NEW_USER, determinedIsNew)
             .putBoolean(hasLoggedInBeforeKey, true)
             .commit()
+
+        // Sync latest analysis from backend on login
+        syncWithBackend()
     }
 
     fun isLoggedIn(): Boolean {

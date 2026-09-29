@@ -17,11 +17,13 @@ import com.example.aidrivencompetencyplatform.model.ProjectAnalysis
 class ResumeParser(private val context: Context? = null) {
 
     init {
-        context?.let {
-            try {
-                PDFBoxResourceLoader.init(it)
-            } catch (_: Throwable) {
-            }
+        context?.let { ctx ->
+            Thread {
+                try {
+                    PDFBoxResourceLoader.init(ctx)
+                } catch (_: Throwable) {
+                }
+            }.start()
         }
     }
 
@@ -29,9 +31,43 @@ class ResumeParser(private val context: Context? = null) {
         private const val TAG = "ResumeParser"
         const val ERROR_SCANNED_PDF = "[ERROR_SCANNED_PDF]"
 
+        val US_STATES = setOf(
+            "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY",
+            "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND",
+            "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC"
+        )
+
+        val STATE_AND_COUNTRY_NAMES = setOf(
+            "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida",
+            "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
+            "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska",
+            "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio",
+            "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas",
+            "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming",
+            "tamil nadu", "karnataka", "kerala", "maharashtra", "telangana", "andhra pradesh", "uttar pradesh", "gujarat",
+            "rajasthan", "west bengal", "punjab", "haryana", "madhya pradesh", "bihar", "odisha", "assam", "delhi",
+            "india", "usa", "united states", "uk", "united kingdom", "canada", "australia", "germany", "france",
+            "singapore", "japan", "netherlands", "ireland", "sweden", "switzerland", "uae", "united arab emirates",
+            "ontario", "british columbia", "quebec", "alberta"
+        )
+
+        val KNOWN_CITIES = setOf(
+            "san francisco", "san jose", "los angeles", "san diego", "seattle", "austin", "new york", "nyc",
+            "boston", "chicago", "denver", "atlanta", "dallas", "houston", "miami", "portland", "phoenix",
+            "philadelphia", "washington", "toronto", "vancouver", "montreal", "london", "manchester", "berlin",
+            "munich", "paris", "amsterdam", "dublin", "sydney", "melbourne", "singapore", "tokyo",
+            "chennai", "bangalore", "bengaluru", "hyderabad", "pune", "mumbai", "delhi", "noida", "gurgaon",
+            "gurugram", "kolkata", "kochi", "trivandrum", "trichy", "tiruchirappalli", "srirangam", "coimbatore",
+            "madurai", "salem", "vellore", "erode", "tirunelveli", "thanjavur", "ahmedabad", "jaipur", "surat",
+            "indore", "nagpur", "bhopal", "patna", "vadodara", "ghaziabad", "ludhiana", "agra", "nashik",
+            "faridabad", "meerut", "rajkot", "varanasi", "srinagar", "aurangabad", "amritsar", "navi mumbai",
+            "mysore", "mysuru", "mangalore", "mangaluru", "visakhapatnam", "vijayawada", "chandigarh", "calicut", "kozhikode"
+        )
+
         enum class SectionType {
             SUMMARY,
             WORK_EXPERIENCE,
+            INTERNSHIPS,
             EDUCATION,
             SKILLS,
             PROJECTS,
@@ -121,12 +157,28 @@ class ResumeParser(private val context: Context? = null) {
                 return SectionType.SUMMARY
             }
 
-            // 2. WORK EXPERIENCE / INTERNSHIPS / EMPLOYMENT
+            // 2. INTERNSHIPS (Strict Isolation as canonical category)
+            val internshipExactHeaders = setOf(
+                "internship", "internships", "internship experience", "industrial internship",
+                "technical internship", "summer internship", "intern experience", "industrial training",
+                "virtual internship", "graduate internship", "internship program", "internships & training",
+                "internship details", "internship project", "internship engagements", "winter internship",
+                "research internship", "software internship", "engineering internship"
+            )
+            if (internshipExactHeaders.contains(clean)) {
+                return SectionType.INTERNSHIPS
+            }
+
+            val internshipRegex = Regex("^(?:my\\s+)?(?:summer\\s+|winter\\s+|industrial\\s+|technical\\s+|virtual\\s+|graduate\\s+|research\\s+|software\\s+)?(?:internships?|intern\\s+experience|internship\\s+experience|industrial\\s+training)s?$")
+            if (internshipRegex.matches(clean)) {
+                return SectionType.INTERNSHIPS
+            }
+
+            // 3. WORK EXPERIENCE / EMPLOYMENT (Full-time / regular employment)
             val experienceExactHeaders = setOf(
                 "work experience", "professional experience", "experience", "experiences",
                 "employment", "employment history", "work history", "career history",
-                "internship", "internships", "internship experience", "industrial experience",
-                "industrial training", "relevant experience", "professional background", "industry experience",
+                "relevant experience", "professional background", "industry experience",
                 "work background", "job history", "career experience", "practical experience",
                 "corporate experience", "hands-on experience", "previous employment", "employment record",
                 "relevant work experience", "technical experience", "professional engagements"
@@ -135,13 +187,12 @@ class ResumeParser(private val context: Context? = null) {
                 return SectionType.WORK_EXPERIENCE
             }
 
-            val experienceRegex = Regex("^(?:my\\s+)?(?:work|professional|career|employment|job|industry|internship|relevant|corporate|hands-on|technical|practical)?\\s*(?:experience|history|employment|engagements|background|career)s?$|" +
-                                        "^(?:internship|internships|internship\\s+experience|industrial\\s+training|industrial\\s+experience)$")
+            val experienceRegex = Regex("^(?:my\\s+)?(?:work|professional|career|employment|job|industry|relevant|corporate|hands-on|technical|practical)?\\s*(?:experience|history|employment|engagements|background|career)s?$")
             if (experienceRegex.matches(clean)) {
                 return SectionType.WORK_EXPERIENCE
             }
 
-            // 3. EDUCATION / ACADEMICS / QUALIFICATIONS
+            // 4. EDUCATION / ACADEMICS / QUALIFICATIONS
             val educationExactHeaders = setOf(
                 "education", "academic background", "academics", "academic details", "academic history",
                 "qualifications", "educational qualifications", "academic qualifications",
@@ -160,19 +211,21 @@ class ResumeParser(private val context: Context? = null) {
                 return SectionType.EDUCATION
             }
 
-            // 4. PROJECTS
+            // 5. PROJECTS (Section-Aware Detection & Canonical Taxonomy)
             val projectExactHeaders = setOf(
-                "projects", "key projects", "academic projects", "personal projects", "technical projects",
+                "projects", "project", "key projects", "academic projects", "personal projects", "technical projects",
                 "demonstrated projects", "portfolio", "notable projects", "major projects", "mini projects",
                 "software projects", "system projects", "recent projects", "project work", "selected projects",
                 "project experience", "capstone projects", "practical projects", "selected work",
-                "featured projects", "engineering projects", "development projects", "client projects"
+                "featured projects", "engineering projects", "development projects", "client projects",
+                "projects & work", "work & projects", "relevant projects", "my projects", "major & minor projects",
+                "course projects", "undergraduate projects", "capstone project", "term projects"
             )
             if (projectExactHeaders.contains(clean)) {
                 return SectionType.PROJECTS
             }
 
-            val projectRegex = Regex("^(?:my\\s+)?(?:key|selected|academic|personal|technical|major|mini|capstone|software|engineering|featured|recent|demonstrated|hands-on|client)?\\s*(?:projects?|portfolio|project\\s+work|project\\s+experience|selected\\s+work)s?$")
+            val projectRegex = Regex("^(?:my\\s+)?(?:key|selected|academic|personal|technical|major|mini|capstone|software|engineering|featured|recent|demonstrated|hands-on|client|relevant|course|undergraduate|term)?\\s*(?:projects?|portfolio|project\\s+work|project\\s+experience|selected\\s+work|projects?\\s*(?:&|and|/)\\s*work)s?$")
             if (projectRegex.matches(clean)) {
                 return SectionType.PROJECTS
             }
@@ -926,7 +979,18 @@ class ResumeParser(private val context: Context? = null) {
             if (!words.all { w -> w.all { it.isLetter() || it == '.' || it == '-' || it == '\'' } }) return false
 
             val lowerWords = words.map { it.lowercase().trim('.', ',', '-', '\'') }
-            if (lowerWords.any { blacklistJobTitles.contains(it) || addressAndLandmarkKeywords.contains(it) || SECTION_HEADER_KEYWORDS.contains(it) }) {
+            val cleanLower = clean.lowercase()
+            if (KNOWN_CITIES.contains(cleanLower) || STATE_AND_COUNTRY_NAMES.contains(cleanLower) || US_STATES.contains(clean.uppercase())) {
+                return false
+            }
+            if (lowerWords.any { 
+                blacklistJobTitles.contains(it) || 
+                addressAndLandmarkKeywords.contains(it) || 
+                SECTION_HEADER_KEYWORDS.contains(it) ||
+                KNOWN_CITIES.contains(it) ||
+                STATE_AND_COUNTRY_NAMES.contains(it) ||
+                US_STATES.contains(it.uppercase())
+            }) {
                 return false
             }
             if (locationMatch != null) {
@@ -1104,8 +1168,12 @@ class ResumeParser(private val context: Context? = null) {
         val educationLines = sectionContents[SectionType.EDUCATION] ?: emptyList()
         val extractedEducation = parseEducationEntries(educationLines)
 
-        // 3. EXTRACT WORK EXPERIENCE (ONLY actual employment / internships)
-        val experienceLines = sectionContents[SectionType.WORK_EXPERIENCE] ?: emptyList()
+        // 3. EXTRACT INTERNSHIPS (Strict Isolation)
+        val internshipLines = sectionContents[SectionType.INTERNSHIPS] ?: emptyList()
+        val extractedInternships = parseInternshipEntries(internshipLines)
+
+        // 4. EXTRACT WORK EXPERIENCE (ONLY actual employment + internships combined for compatibility)
+        val experienceLines = (sectionContents[SectionType.WORK_EXPERIENCE] ?: emptyList()) + internshipLines
         val extractedExperience = parseWorkExperienceEntries(experienceLines)
 
         // 4. EXTRACT PROJECTS (ONLY actual projects, NEVER lone skills/subjects/certifications)
@@ -1116,7 +1184,7 @@ class ResumeParser(private val context: Context? = null) {
         val certificationLines = sectionContents[SectionType.CERTIFICATIONS] ?: emptyList()
         val extractedCertifications = parseCertificationEntries(certificationLines)
 
-        // 6. EXTRACT SKILLS
+        // 7. EXTRACT SKILLS
         val skillLines = sectionContents[SectionType.SKILLS] ?: emptyList()
         val extractedSkillsList = parseSkillsList(skillLines, rawText)
 
@@ -1129,6 +1197,7 @@ class ResumeParser(private val context: Context? = null) {
 
         val hasContact = contactDetails.isNotEmpty()
         val hasEducation = extractedEducation.isNotEmpty()
+        val hasInternships = extractedInternships.isNotEmpty()
         val hasExperience = extractedExperience.isNotEmpty()
         val hasSkills = extractedSkillsList.isNotEmpty()
         val hasProjects = extractedProjectNames.isNotEmpty()
@@ -1143,6 +1212,7 @@ class ResumeParser(private val context: Context? = null) {
             ParsedSectionItem("Contact Information", hasContact || hasPersonalInfo, contactDetails + personalInfoLines),
             ParsedSectionItem("Summary", !extractedSummary.isNullOrBlank(), emptyList(), extractedSummary),
             ParsedSectionItem("Education", hasEducation, extractedEducation),
+            ParsedSectionItem("Internships", hasInternships, extractedInternships),
             ParsedSectionItem("Work Experience", hasExperience, extractedExperience),
             ParsedSectionItem("Skills", hasSkills, extractedSkillsList),
             ParsedSectionItem("Projects", hasProjects, extractedProjectNames),
@@ -1162,10 +1232,51 @@ class ResumeParser(private val context: Context? = null) {
             summary = extractedSummary,
             education = extractedEducation,
             experience = extractedExperience,
+            internships = extractedInternships,
             personalInfo = personalInfoLines,
             certifications = extractedCertifications,
             projectAnalyses = extractedProjectAnalyses
         )
+    }
+
+    /**
+     * Parses internship entries strictly from the internship section.
+     */
+    private fun parseInternshipEntries(internshipLines: List<String>): List<String> {
+        if (internshipLines.isEmpty()) return emptyList()
+
+        val validEntries = mutableListOf<String>()
+        val currentEntry = mutableListOf<String>()
+
+        fun flushEntry() {
+            if (currentEntry.isNotEmpty()) {
+                val formatted = currentEntry.joinToString("\n")
+                if (formatted.length in 5..800) {
+                    validEntries.add(formatted)
+                }
+                currentEntry.clear()
+            }
+        }
+
+        val roleTitleRegex = Regex("(?i)\\b(?:intern|internship|trainee|apprentice|fellow)\\b")
+
+        for (rawLine in internshipLines) {
+            val line = rawLine.trim()
+            if (line.isBlank() || isSectionHeader(line) || isContactOrAddressLine(line)) continue
+
+            val isRoleLine = roleTitleRegex.containsMatchIn(line) || line.contains("|") || line.contains("–") || line.contains("-") || Regex("\\b(20\\d{2}|19\\d{2})\\b").containsMatchIn(line)
+            if (isRoleLine && currentEntry.isNotEmpty() && currentEntry.size >= 2) {
+                flushEntry()
+            }
+            currentEntry.add(line)
+        }
+        flushEntry()
+
+        return if (validEntries.isNotEmpty()) {
+            validEntries
+        } else {
+            internshipLines.filter { !isContactOrAddressLine(it) }
+        }
     }
 
     /**
@@ -1656,6 +1767,7 @@ data class DeterministicResumeStructure(
     val summary: String? = null,
     val education: List<String> = emptyList(),
     val experience: List<String> = emptyList(),
+    val internships: List<String> = emptyList(),
     val personalInfo: List<String> = emptyList(),
     val certifications: List<String> = emptyList(),
     val projectAnalyses: List<ProjectAnalysis> = emptyList()

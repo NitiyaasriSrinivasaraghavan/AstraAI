@@ -10,6 +10,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.util.Log
 import com.example.aidrivencompetencyplatform.model.NovaState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,9 +74,8 @@ class VoiceSpeechManager(private val context: Context) {
                     if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                         textToSpeech?.language = Locale.getDefault()
                     }
-                    // Configure natural, warm, friendly AI career companion voice parameters
-                    textToSpeech?.setSpeechRate(0.96f)
-                    textToSpeech?.setPitch(1.08f)
+                    // Select clear female or child voice profile from device locale & apply cute cartoon mascot pitch/rate
+                    applyCartoonMascotVoiceProfile(textToSpeech)
                     isTtsInitialized = true
                     setupTtsListener()
 
@@ -100,6 +100,60 @@ class VoiceSpeechManager(private val context: Context) {
             isTtsInitialized = false
             Log.e("VoiceSpeechManager", "TTS initialization failed", e)
         }
+    }
+
+    /**
+     * Configures the TTS engine to achieve a cute, high-energy, animated cartoon voice:
+     * 1. Inspects and selects a clear, standard female or child voice profile matching the device locale.
+     * 2. Sets speech pitch multiplier to 1.38f (+38% over baseline) for a bright, youthful, cartoon-like tone.
+     * 3. Sets speech rate to 1.18f for energetic, bouncy pacing.
+     */
+    private fun applyCartoonMascotVoiceProfile(tts: TextToSpeech?) {
+        if (tts == null) return
+        try {
+            val targetLocale = tts.voice?.locale ?: Locale.getDefault()
+            val availableVoices = tts.voices
+            if (!availableVoices.isNullOrEmpty()) {
+                // Find matching installed voices for target locale
+                val localeVoices = availableVoices.filter { voice ->
+                    voice.locale.language.equals(targetLocale.language, ignoreCase = true) &&
+                            (voice.features == null || !voice.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))
+                }
+
+                val selectedVoice = localeVoices
+                    .sortedWith(
+                        compareByDescending<Voice> { voice ->
+                            val name = voice.name.lowercase(Locale.ROOT)
+                            var score = 0
+                            // Prioritize female / girl / child voice profiles
+                            if (name.contains("female") || name.contains("#female") || name.contains("-fem-") || name.contains("woman")) score += 15
+                            if (name.contains("child") || name.contains("girl") || name.contains("kid")) score += 20
+                            if (name.contains("sfg") || name.contains("iob") || name.contains("iom") || name.contains("iol")) score += 10
+                            if (voice.quality >= Voice.QUALITY_HIGH) score += 5
+                            if (!voice.isNetworkConnectionRequired) score += 3
+                            score
+                        }
+                    )
+                    .firstOrNull { voice ->
+                        val name = voice.name.lowercase(Locale.ROOT)
+                        name.contains("female") || name.contains("#female") || name.contains("-fem-") ||
+                                name.contains("woman") || name.contains("child") || name.contains("girl") ||
+                                name.contains("kid") || name.contains("sfg") || name.contains("iob") ||
+                                name.contains("iom") || name.contains("iol")
+                    } ?: localeVoices.firstOrNull()
+
+                if (selectedVoice != null) {
+                    tts.voice = selectedVoice
+                    Log.d("VoiceSpeechManager", "Selected base cartoon TTS voice: ${selectedVoice.name}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("VoiceSpeechManager", "Voice profile selection fallback: ${e.message}")
+        }
+
+        // Apply animated cartoon voice acoustic parameters
+        tts.setPitch(1.38f)       // +38% pitch (bright, youthful, cartoon character tone)
+        tts.setSpeechRate(1.18f)   // 1.18x speaking rate (energetic, bouncy inflections)
     }
 
     private fun setupTtsListener() {
@@ -385,8 +439,11 @@ class VoiceSpeechManager(private val context: Context) {
         }
 
         val cleanText = text
-            .replace(Regex("[#*\\-_`]{1,}"), "")
-            .replace(Regex("[•·]"), "")
+            .replace(Regex("\\[[a-zA-Z0-9_\\s]+\\]"), "") // Remove bracketed emotion/action tags like [giggle], [cheer]
+            .replace(Regex("https?://\\S+"), "")         // Remove raw URLs
+            .replace(Regex("[#*_~`]{1,}"), "")           // Remove markdown formatting
+            .replace(Regex("[•·▪▫►▶★☆]"), "")             // Remove bullet glyphs
+            .replace(Regex("\\s+"), " ")                 // Normalize multiple whitespaces
             .trim()
 
         try {
@@ -397,6 +454,9 @@ class VoiceSpeechManager(private val context: Context) {
             if (onDone != null) {
                 utteranceCallbacks[utteranceId] = onDone
             }
+            // Ensure animated cartoon pitch and rate are active for this utterance
+            textToSpeech?.setPitch(1.38f)
+            textToSpeech?.setSpeechRate(1.18f)
             _novaState.value = NovaState.SPEAKING
             textToSpeech?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         } catch (e: Exception) {
@@ -408,8 +468,49 @@ class VoiceSpeechManager(private val context: Context) {
         }
     }
 
+    /**
+     * Plays raw audio data bytes (e.g. MP3 audio returned by Gemini TTS) out loud using MediaPlayer
+     * without creating permanent media files on disk.
+     */
+    fun playRawAudio(
+        audioBytes: ByteArray,
+        onDone: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        if (audioBytes.isEmpty()) {
+            onDone?.invoke()
+            return
+        }
+
+        mainHandler.post {
+            stopSpeaking()
+            _isSpeaking.value = true
+            _novaState.value = NovaState.SPEAKING
+
+            AudioPlayerHelper.playAudioBytes(
+                audioBytes = audioBytes,
+                onCompletion = {
+                    mainHandler.post {
+                        _isSpeaking.value = false
+                        _novaState.value = NovaState.HAPPY
+                        onDone?.invoke()
+                    }
+                },
+                onError = { errorMsg ->
+                    mainHandler.post {
+                        _isSpeaking.value = false
+                        _novaState.value = NovaState.HAPPY
+                        Log.e("VoiceSpeechManager", "Raw audio playback error: $errorMsg")
+                        onError?.invoke(errorMsg)
+                    }
+                }
+            )
+        }
+    }
+
     fun stopSpeaking() {
         try {
+            AudioPlayerHelper.stop()
             textToSpeech?.stop()
         } catch (e: Exception) {
             Log.e("VoiceSpeechManager", "TTS stop failed", e)
@@ -425,6 +526,7 @@ class VoiceSpeechManager(private val context: Context) {
     fun release() {
         stopListening()
         try {
+            AudioPlayerHelper.stop()
             textToSpeech?.stop()
             textToSpeech?.shutdown()
         } catch (e: Exception) {
